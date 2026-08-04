@@ -4,7 +4,15 @@ import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
 import { RefreshCw, ShieldCheck, Clock } from 'lucide-react';
 
-export default function StudentQRPass({ studentId, eventId, studentName, collegeId, eventTitle, hallNumber }) {
+export default function StudentQRPass({
+  studentId,
+  eventId,
+  registrationId,
+  studentName,
+  collegeId,
+  eventTitle,
+  hallNumber,
+}) {
   const [timeLeft, setTimeLeft] = useState(15);
   const [tokenTimestamp, setTokenTimestamp] = useState(Date.now());
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -25,10 +33,12 @@ export default function StudentQRPass({ studentId, eventId, studentName, college
     return () => clearInterval(timer);
   }, []);
 
-  // Generate payload encoding studentId, eventId, timestamp token and security signature
+  // Generate payload encoding registration_id, event_id, user_id, timestamp token and security signature
   const payloadData = {
-    student_id: studentId,
+    registration_id: registrationId || `11111111-9999-9999-9999-${studentId?.slice(-12) || '111111111111'}`,
     event_id: eventId,
+    user_id: studentId,
+    student_id: studentId,
     timestamp: tokenTimestamp,
     refresh_rate_sec: 15,
     signature: `sig-${studentId?.slice(0, 4)}-${tokenTimestamp}`,

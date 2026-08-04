@@ -10,3 +10,8 @@ const supabaseAnonKey =
 export const isMockMode = supabaseUrl.includes('placeholder');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+export const isValidUUID = (id: any): boolean =>
+  typeof id === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+

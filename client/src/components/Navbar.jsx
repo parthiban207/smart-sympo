@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import UserSettingsModal from './UserSettingsModal';
 import RoleSwitchGuardModal from './RoleSwitchGuardModal';
-import { Calendar, UserCheck, ShieldCheck, Wifi, LogOut, Settings } from 'lucide-react';
+import { Calendar, UserCheck, ShieldCheck, Wifi, LogOut, Settings, QrCode } from 'lucide-react';
 
 export default function Navbar() {
   const { currentUser, switchRole, signOutFromSupabase } = useApp();
@@ -139,17 +139,30 @@ export default function Navbar() {
 
             {/* Coordinator Dashboard — GUARDED */}
             {isCoordinatorVisible && (
-              <button
-                onClick={() => handleGuardedNavigation('/coordinator', 'coordinator')}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                  location.pathname.startsWith('/coordinator')
-                    ? 'bg-white text-slate-900 shadow-sm font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                Coordinator Dashboard
-              </button>
+              <>
+                <button
+                  onClick={() => handleGuardedNavigation('/coordinator', 'coordinator')}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                    location.pathname === '/coordinator'
+                      ? 'bg-white text-slate-900 shadow-sm font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  Coordinator Dashboard
+                </button>
+                <button
+                  onClick={() => handleGuardedNavigation('/scanner', 'coordinator')}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                    location.pathname.startsWith('/scanner')
+                      ? 'bg-white text-slate-900 shadow-sm font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+                  QR Scanner
+                </button>
+              </>
             )}
 
             {/* Admin Panel — GUARDED */}

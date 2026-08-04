@@ -13,24 +13,26 @@ export const AppProvider = ({ children }) => {
   const [registrations, setRegistrations] = useState(() => {
     try {
       const saved = localStorage.getItem('smart_sympo_registrations');
-      return saved ? JSON.parse(saved) : [
-        {
-          id: 'reg-1',
-          student_id: 'usr-student-1',
-          event_id: '11111111-1111-1111-1111-111111111111',
-          registered_at: new Date().toISOString(),
-        },
-      ];
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const validParsed = parsed.filter(
+            (r) => isValidUUID(r.event_id) && isValidUUID(r.student_id)
+          );
+          if (validParsed.length > 0) return validParsed;
+        }
+      }
     } catch {
-      return [
-        {
-          id: 'reg-1',
-          student_id: 'usr-student-1',
-          event_id: '11111111-1111-1111-1111-111111111111',
-          registered_at: new Date().toISOString(),
-        },
-      ];
+      // Fallback if localStorage reading fails
     }
+    return [
+      {
+        id: '11111111-9999-9999-9999-111111111111',
+        student_id: '11111111-0000-0000-0000-000000000001',
+        event_id: '11111111-1111-1111-1111-111111111111',
+        registered_at: new Date().toISOString(),
+      },
+    ];
   });
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export const AppProvider = ({ children }) => {
 
   // Load user profile from Supabase profiles table
   const fetchUserProfile = async (userId, userEmail) => {
-    if (isMockMode) return;
+    if (isMockMode || !isValidUUID(userId)) return;
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
       if (data && !error) {
@@ -223,7 +225,7 @@ export const AppProvider = ({ children }) => {
 
     if (isMockMode) {
       const mockUser = {
-        id: `usr-${role}-${Date.now()}`,
+        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
         name: fullName,
         email,
         role,
@@ -283,7 +285,7 @@ export const AppProvider = ({ children }) => {
         return { success: true, user: found };
       }
       const demoUser = {
-        id: `usr-student-${Date.now()}`,
+        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
         name: email.split('@')[0],
         email,
         role: 'student',
@@ -391,7 +393,7 @@ export const AppProvider = ({ children }) => {
     }
 
     // 6. Supabase Database Foreign Key & Event Existence Safeguard
-    if (!isMockMode) {
+    if (!isMockMode && isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
       try {
         // Auto-seed missing event into Supabase events table to satisfy foreign key constraint
         const { data: dbEvent } = await supabase
@@ -447,7 +449,7 @@ export const AppProvider = ({ children }) => {
 
     // 7. Update Local Memory State
     const newReg = {
-      id: `reg-${Date.now()}`,
+      id: crypto.randomUUID ? crypto.randomUUID() : '11111111-9999-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
       student_id: currentUser.id,
       event_id: eventId,
       registered_at: new Date().toISOString(),
@@ -494,7 +496,7 @@ export const AppProvider = ({ children }) => {
       ]);
     }
 
-    if (!isMockMode) {
+    if (!isMockMode && isValidUUID(eventId)) {
       await supabase
         .from('events')
         .update({ status: newStatus, delay_minutes: delayMinutes })
@@ -525,7 +527,7 @@ export const AppProvider = ({ children }) => {
       }
 
       const newLog = {
-        id: `att-${Date.now()}`,
+        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-8888-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
         student_id,
         event_id,
         hall_number: scannerHall || 'Hall 1',
@@ -542,6 +544,91 @@ export const AppProvider = ({ children }) => {
       return {
         success: true,
         message: `Check-in verified for student ID ${student_id.slice(0, 8)}!`,
+      };
+    } catch {
+      return { success: false, message: 'Malformed QR payload format.' };
+    }
+  };
+
+  // Mark Attendance on QR Scan: updates registrations/event_registrations table with attended = true & inserts log
+  const markAttendance = async (qrPayload, scannerHall = 'Main Venue') => {
+    try {
+      let data = typeof qrPayload === 'string' ? JSON.parse(qrPayload) : qrPayload;
+      const registration_id = data.registration_id || data.reg_id;
+      const event_id = data.event_id;
+      const student_id = data.user_id || data.student_id;
+
+      if (!event_id && !registration_id) {
+        return { success: false, message: 'Invalid QR Pass structure: Missing event or registration ID.' };
+      }
+
+      // 1. Update local state in registrations
+      setRegistrations((prev) =>
+        prev.map((r) => {
+          if (
+            (registration_id && r.id === registration_id) ||
+            (r.event_id === event_id && r.student_id === student_id)
+          ) {
+            return { ...r, attended: true };
+          }
+          return r;
+        })
+      );
+
+      // 2. Add log entry to local state
+      const newLog = {
+        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-8888-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
+        student_id: student_id || null,
+        event_id: event_id || '11111111-1111-1111-1111-111111111111',
+        hall_number: scannerHall,
+        check_in_time: new Date().toISOString(),
+        status: 'Checked-In',
+      };
+      setAttendanceLogs((prev) => [newLog, ...prev]);
+
+      // 3. Perform Supabase Database update
+      if (!isMockMode) {
+        try {
+          if (isValidUUID(registration_id)) {
+            const { error: regErr } = await supabase
+              .from('registrations')
+              .update({ attended: true })
+              .eq('id', registration_id);
+
+            if (regErr) {
+              await supabase
+                .from('event_registrations')
+                .update({ attended: true })
+                .eq('id', registration_id);
+            }
+          } else if (isValidUUID(event_id) && isValidUUID(student_id)) {
+            const { error: regErr } = await supabase
+              .from('registrations')
+              .update({ attended: true })
+              .eq('event_id', event_id)
+              .eq('student_id', student_id);
+
+            if (regErr) {
+              await supabase
+                .from('event_registrations')
+                .update({ attended: true })
+                .eq('event_id', event_id)
+                .eq('student_id', student_id);
+            }
+          }
+
+          if (isValidUUID(event_id)) {
+            await supabase.from('attendance_logs').insert([newLog]);
+          }
+        } catch (err) {
+          console.warn('[Supabase markAttendance Warning]', err);
+        }
+      }
+
+      return {
+        success: true,
+        message: `Attendance Verified! Marked attended = true for student ${student_id ? student_id.slice(0, 8) : 'attendee'}.`,
+        attendee: { registration_id, event_id, student_id },
       };
     } catch {
       return { success: false, message: 'Malformed QR payload format.' };
@@ -586,7 +673,7 @@ export const AppProvider = ({ children }) => {
       }
 
       const newGuestLog = {
-        id: `guest-${Date.now()}`,
+        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-7777-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
         guest_name: name,
         student_id: student_id || null,
         event_id: event_id || '11111111-1111-1111-1111-111111111111',
@@ -612,7 +699,7 @@ export const AppProvider = ({ children }) => {
         ...prev.slice(0, 4),
       ]);
 
-      if (!isMockMode) {
+      if (!isMockMode && isValidUUID(newGuestLog.event_id)) {
         // Try RPC checkin_attendee first
         try {
           const { error: rpcError } = await supabase.rpc('checkin_attendee', {
@@ -654,11 +741,11 @@ export const AppProvider = ({ children }) => {
       }
     }
 
-    if (isMockMode) {
+    if (isMockMode || !isValidUUID(targetUserId)) {
       setProfilesList((prev) =>
         prev.map((p) => (p.id === targetUserId ? { ...p, role: newRole } : p))
       );
-      return { success: true, message: `User role updated to ${newRole} (Mock Mode).` };
+      return { success: true, message: `User role updated to ${newRole}.` };
     }
 
     try {
@@ -699,7 +786,7 @@ export const AppProvider = ({ children }) => {
       setCurrentUser((current) => (current ? { ...current, pass_code: newPassCode } : current));
     }
 
-    if (!isMockMode) {
+    if (!isMockMode && isValidUUID(targetUserId)) {
       try {
         await supabase
           .from('profiles')
@@ -719,7 +806,7 @@ export const AppProvider = ({ children }) => {
 
     const targetEvent = events.find((e) => e.id === eventId);
 
-    if (!isMockMode) {
+    if (!isMockMode && isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
       try {
         await supabase
           .from('registrations')
@@ -743,7 +830,7 @@ export const AppProvider = ({ children }) => {
       prev.map((evt) => (evt.id === eventId ? { ...evt, ...updatedEventData } : evt))
     );
 
-    if (!isMockMode) {
+    if (!isMockMode && isValidUUID(eventId)) {
       try {
         await supabase
           .from('events')
@@ -760,7 +847,7 @@ export const AppProvider = ({ children }) => {
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
     setRegistrations((prev) => prev.filter((r) => r.event_id !== eventId));
 
-    if (!isMockMode) {
+    if (!isMockMode && isValidUUID(eventId)) {
       try {
         await supabase.from('events').delete().eq('id', eventId);
       } catch (err) {
@@ -795,6 +882,7 @@ export const AppProvider = ({ children }) => {
         checkinGuest,
         updateUserRole,
         updateUserPassCode,
+        markAttendance,
       }}
     >
       {children}

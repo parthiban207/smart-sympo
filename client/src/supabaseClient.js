@@ -10,7 +10,7 @@ export const isMockMode = supabaseUrl.includes('placeholder');
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const isValidUUID = (id) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[4][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) || 
+  typeof id === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 
@@ -64,7 +64,7 @@ export const initialMockEvents = [
 
 export const initialMockProfiles = [
   {
-    id: 'usr-student-1',
+    id: '11111111-0000-0000-0000-000000000001',
     name: 'Alex Rivera',
     email: 'alex.rivera@college.edu',
     phone: '+1 555-0192',
@@ -72,7 +72,7 @@ export const initialMockProfiles = [
     college_id: 'CS2026-8941',
   },
   {
-    id: 'usr-coordinator-1',
+    id: '11111111-0000-0000-0000-000000000002',
     name: 'Sarah Chen (Coordinator)',
     email: 'sarah.chen@college.edu',
     phone: '+1 555-0144',
@@ -80,7 +80,7 @@ export const initialMockProfiles = [
     college_id: 'FAC-7712',
   },
   {
-    id: 'usr-admin-1',
+    id: '11111111-0000-0000-0000-000000000003',
     name: 'Dr. Marcus Vance (Admin)',
     email: 'marcus.vance@college.edu',
     phone: '+1 555-0100',

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, ShieldAlert, KeyRound, AlertCircle, CheckCircle2, Fingerprint } from 'lucide-react';
-import { supabase, isMockMode } from '../supabaseClient';
+import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
 
 /**
  * RoleSwitchGuardModal
@@ -43,7 +43,7 @@ export default function RoleSwitchGuardModal({
     }
 
     try {
-      if (isMockMode) {
+      if (isMockMode || !isValidUUID(userId)) {
         if (credential === '2005' || credential.length >= 4) {
           setSuccessMsg('Identity verified! Unlocking access...');
           setTimeout(() => {

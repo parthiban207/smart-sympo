@@ -8,6 +8,7 @@ import Chatbot from './components/Chatbot';
 import ProtectedRoute from './components/ProtectedRoute';
 import StudentDashboard from './pages/StudentDashboard';
 import CoordinatorConsole from './pages/CoordinatorConsole';
+import CoordinatorScanner from './pages/CoordinatorScanner';
 import AdminAnalytics from './pages/AdminAnalytics';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
@@ -75,6 +76,14 @@ export default function App() {
                 element={
                   <ProtectedRoute allowedRoles={['coordinator', 'admin']}>
                     <CoordinatorConsole />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/scanner"
+                element={
+                  <ProtectedRoute allowedRoles={['coordinator', 'admin']}>
+                    <CoordinatorScanner />
                   </ProtectedRoute>
                 }
               />

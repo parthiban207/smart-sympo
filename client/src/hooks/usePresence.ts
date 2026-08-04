@@ -22,7 +22,7 @@ export function usePresence() {
       // Mock presence data for demonstration
       setOnlineUsers([
         {
-          user_id: 'usr-student-1',
+          user_id: '11111111-0000-0000-0000-000000000001',
           online_at: new Date().toISOString(),
           username: 'alex_rivera',
           full_name: 'Alex Rivera',
@@ -30,7 +30,7 @@ export function usePresence() {
           email: 'alex.rivera@college.edu',
         },
         {
-          user_id: 'usr-coordinator-1',
+          user_id: '11111111-0000-0000-0000-000000000002',
           online_at: new Date().toISOString(),
           username: 'sarah_chen',
           full_name: 'Sarah Chen (Coordinator)',
@@ -38,7 +38,7 @@ export function usePresence() {
           email: 'sarah.chen@college.edu',
         },
         {
-          user_id: 'usr-admin-1',
+          user_id: '11111111-0000-0000-0000-000000000003',
           online_at: new Date().toISOString(),
           username: 'marcus_vance',
           full_name: 'Dr. Marcus Vance (Admin)',

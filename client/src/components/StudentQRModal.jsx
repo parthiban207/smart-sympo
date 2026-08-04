@@ -2,12 +2,27 @@
 
 import { X, QrCode } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { isValidUUID } from '../supabaseClient';
 import StudentQRPass from './StudentQRPass';
 
 export default function StudentQRModal({ isOpen, onClose, event }) {
-  const { currentUser } = useApp();
+  const { currentUser, registrations } = useApp();
 
   if (!isOpen || !event) return null;
+
+  const validStudentId = isValidUUID(currentUser?.id)
+    ? currentUser.id
+    : '11111111-0000-0000-0000-000000000001';
+  const validEventId = isValidUUID(event?.id)
+    ? event.id
+    : '11111111-1111-1111-1111-111111111111';
+
+  const userReg = registrations.find(
+    (r) => r.student_id === validStudentId && r.event_id === validEventId
+  );
+  const validRegistrationId = isValidUUID(userReg?.id)
+    ? userReg.id
+    : '11111111-9999-9999-9999-111111111111';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
@@ -31,9 +46,10 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
 
         {/* Dynamic Refreshing QR Pass Component */}
         <StudentQRPass
-          studentId={currentUser?.id || 'student-demo-1'}
-          eventId={event.id}
-          studentName={currentUser?.name}
+          studentId={validStudentId}
+          eventId={validEventId}
+          registrationId={validRegistrationId}
+          studentName={currentUser?.name || currentUser?.full_name}
           collegeId={currentUser?.college_id}
           eventTitle={event.title}
           hallNumber={event.hall_number}
