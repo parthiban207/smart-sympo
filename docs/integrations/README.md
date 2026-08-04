@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "tracking adapter switchboard and registry", deps: [CLAUDE.md, docs/integrations/github-projects.md, docs/integrations/jira.md], state: active, last: "sato@2026-02-21" }
+agent-notes: { ctx: "tracking adapter switchboard and registry", deps: [AGENTS.md, docs/integrations/github-projects.md, docs/integrations/jira.md], state: active, last: "sato@2026-02-21" }
 ---
 
 # Tracking Integrations
@@ -8,7 +8,7 @@ This directory contains adapter files that define how the vteam-hybrid methodolo
 
 ## Active Adapter
 
-The active adapter is declared in `CLAUDE.md` via an HTML comment:
+The active adapter is declared in `AGENTS.md` via an HTML comment:
 
 ```html
 <!-- tracking-adapter: github-projects -->
@@ -18,7 +18,7 @@ Agents read this comment to determine which adapter file to consult for board co
 
 ## Switching Adapters
 
-1. Change the `<!-- tracking-adapter: -->` comment in `CLAUDE.md` to the new adapter name.
+1. Change the `<!-- tracking-adapter: -->` comment in `AGENTS.md` to the new adapter name.
 2. Read the corresponding adapter file in this directory for setup prerequisites.
 3. Run the adapter's pre-flight check to verify access.
 

@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "Jira board adapter -- untested draft", deps: [CLAUDE.md, docs/integrations/README.md], state: draft, last: "sato@2026-02-21", key: ["untested -- needs validation on real Jira instance", "covers Jira Cloud REST API v3 and jira CLI", "sprint model uses Jira native sprints not labels"] }
+agent-notes: { ctx: "Jira board adapter -- untested draft", deps: [AGENTS.md, docs/integrations/README.md], state: draft, last: "sato@2026-02-21", key: ["untested -- needs validation on real Jira instance", "covers Jira Cloud REST API v3 and jira CLI", "sprint model uses Jira native sprints not labels"] }
 ---
 
 # Jira Adapter
@@ -24,9 +24,9 @@ Maps vteam-hybrid board operations to Jira Cloud. Covers both the `jira` CLI (At
   export JIRA_API_TOKEN="your-api-token"
   ```
 
-## Setup (CLAUDE.md Config)
+## Setup (AGENTS.md Config)
 
-The following HTML comments in `CLAUDE.md` configure Jira operations:
+The following HTML comments in `AGENTS.md` configure Jira operations:
 
 ```html
 <!-- tracking-adapter: jira -->
@@ -101,7 +101,7 @@ curl -s -u "$JIRA_EMAIL:$JIRA_API_TOKEN" \
   jq '.transitions[] | {id, name}'
 ```
 
-Record these IDs in a session cache or in `CLAUDE.md` comments for reuse:
+Record these IDs in a session cache or in `AGENTS.md` comments for reuse:
 
 ```html
 <!-- jira-transition-in-progress: 21 -->

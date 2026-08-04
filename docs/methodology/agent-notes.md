@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "agent-notes format spec for all file types", deps: [CLAUDE.md], state: canonical, last: "archie@2026-02-12" }
+agent-notes: { ctx: "agent-notes format spec for all file types", deps: [AGENTS.md], state: canonical, last: "archie@2026-02-12" }
 ---
 
 # Agent-Notes Protocol
@@ -8,7 +8,7 @@ Agent-notes are compressed, structured metadata at the top of every file (except
 
 ## Why
 
-Claude Code sessions start cold. Reading every file to understand a codebase is expensive and slow. Agent-notes provide a ~50-word summary that lets an agent decide whether to read the full file, understand its role in the system, and know who last touched it — all before reading line 1.
+Antigravity sessions start cold. Reading every file to understand a codebase is expensive and slow. Agent-notes provide a ~50-word summary that lets an agent decide whether to read the full file, understand its role in the system, and know who last touched it — all before reading line 1.
 
 ## Required Fields
 
@@ -36,7 +36,7 @@ YAML frontmatter with an `agent-notes` key:
 
 ```yaml
 ---
-agent-notes: { ctx: "ADR for TDD workflow", deps: [CLAUDE.md, docs/methodology/personas.md], state: active, last: "archie@2026-02-12" }
+agent-notes: { ctx: "ADR for TDD workflow", deps: [AGENTS.md, docs/methodology/personas.md], state: active, last: "archie@2026-02-12" }
 ---
 
 # Document title here
@@ -106,7 +106,7 @@ Comment after the shebang:
 
 ```bash
 #!/usr/bin/env bash
-# agent-notes: { ctx: "launch parallel agent teams in tmux", deps: [".claude/agents/"], state: active, last: "ines@2026-02-12" }
+# agent-notes: { ctx: "launch parallel agent teams in tmux", deps: [".agents/agents/"], state: active, last: "ines@2026-02-12" }
 ```
 
 ### Dockerfile
@@ -117,7 +117,7 @@ Comment at the top:
 # agent-notes: { ctx: "dev container with Rust + Node + audio libs", deps: [".devcontainer/devcontainer.json"], state: active, last: "ines@2026-02-12" }
 ```
 
-### Agent definition files (.claude/agents/*.md)
+### Agent definition files (.agents/agents/*.md)
 
 HTML comment after the YAML frontmatter closing `---`:
 
@@ -132,7 +132,7 @@ maxTurns: 25
 <!-- agent-notes: { ctx: "principal SDE, TDD green phase", deps: [docs/methodology/personas.md, docs/methodology/phases.md], state: canonical, last: "archie@2026-02-12" } -->
 ```
 
-### Command files (.claude/commands/*.md)
+### Command files (.agents/commands/*.md)
 
 HTML comment at the top of the file (before the first line of content):
 

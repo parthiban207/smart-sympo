@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "AWS service landscape for cloud specialists", deps: [.claude/agents/cloud-architect.md, .claude/agents/cloud-costguard.md, .claude/agents/cloud-netdiag.md], state: active, last: "cloud-architect@2026-02-12" }
+agent-notes: { ctx: "AWS service landscape for cloud specialists", deps: [.agents/agents/cloud-architect.md, .agents/agents/cloud-costguard.md, .agents/agents/cloud-netdiag.md], state: active, last: "cloud-architect@2026-02-12" }
 ---
 
 # AWS Service Landscape

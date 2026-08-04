@@ -1,13 +1,13 @@
 ---
 agent-notes:
   ctx: "team roster, triggers, debate protocol, voice rules"
-  deps: [CLAUDE.md, docs/methodology/personas.md, docs/methodology/phases.md]
+  deps: [AGENTS.md, docs/methodology/personas.md, docs/methodology/phases.md]
   state: active
   last: "coordinator@2026-03-18"
 ---
 # Team Governance
 
-Extracted from CLAUDE.md to reduce context window load. Referenced by CLAUDE.md Process Docs Index.
+Extracted from AGENTS.md to reduce context window load. Referenced by AGENTS.md Process Docs Index.
 
 ## Consolidated Capability Roster
 

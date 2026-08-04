@@ -1,13 +1,13 @@
 ---
 agent-notes:
   ctx: "15-item Done Gate checklist for work items"
-  deps: [CLAUDE.md]
+  deps: [AGENTS.md]
   state: active
   last: "coordinator@2026-02-28"
 ---
 # Done Gate — Detailed Checklist
 
-This checklist is the quality gate every work item must pass before closing. Referenced by CLAUDE.md § Workflow.
+This checklist is the quality gate every work item must pass before closing. Referenced by AGENTS.md § Workflow.
 
 Every work item must pass this gate before closing:
 

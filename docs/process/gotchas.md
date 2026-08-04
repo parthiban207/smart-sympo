@@ -1,13 +1,13 @@
 ---
 agent-notes:
   ctx: "implementation gotchas and established patterns"
-  deps: [CLAUDE.md]
+  deps: [AGENTS.md]
   state: active
   last: "coordinator@2026-03-28"
 ---
 # Known Patterns and Gotchas
 
-Extracted from CLAUDE.md to reduce context window load. Read this when working on implementation or debugging tasks. Projects populate sections as they discover gotchas.
+Extracted from AGENTS.md to reduce context window load. Read this when working on implementation or debugging tasks. Projects populate sections as they discover gotchas.
 
 ## Testing Patterns (Tara)
 
@@ -48,15 +48,15 @@ Extracted from CLAUDE.md to reduce context window load. Read this when working o
 
 ## Adapter / Integration Gotchas
 
-- **execa v9 `stdin: 'pipe'` default hangs subprocesses.** execa v9 changed `stdin` from `'inherit'` to `'pipe'`. CLI tools that check stdin connectivity (e.g., `claude -p`, `gemini`) see a connected pipe and wait for EOF, which never comes — the subprocess hangs until timeout. **Detection signal:** subprocess calls work with `--version` or `--help` (which exit immediately) but hang with actual workload flags. **Fix:** always set `stdin: 'ignore'` unless you explicitly need to write to the subprocess's stdin. Audit all execa/child_process calls to explicitly configure all three stdio channels. ⚠️ *Volatile — verified 2026-03-30, CLI 2.1.87. See `docs/research/claude-cli-invocation-patterns.md` Pattern 1.*
+- **execa v9 `stdin: 'pipe'` default hangs subprocesses.** execa v9 changed `stdin` from `'inherit'` to `'pipe'`. CLI tools that check stdin connectivity (e.g., `antigravity -p`, `gemini`) see a connected pipe and wait for EOF, which never comes — the subprocess hangs until timeout. **Detection signal:** subprocess calls work with `--version` or `--help` (which exit immediately) but hang with actual workload flags. **Fix:** always set `stdin: 'ignore'` unless you explicitly need to write to the subprocess's stdin. Audit all execa/child_process calls to explicitly configure all three stdio channels. ⚠️ *Volatile — verified 2026-03-30, CLI 2.1.87. See `docs/research/antigravity-cli-invocation-patterns.md` Pattern 1.*
 
 - **Health checks that don't exercise the real code path.** A health check like `tool --version` exits immediately without reading stdin, so it succeeds even when the actual call (`tool -p "prompt"`) would hang. **Detection signal:** health check passes but actual tool invocation fails/hangs. **Fix:** health checks should exercise the same flags and stdio configuration as the real invocation, just with minimal input.
 
-- **LLMs wrap JSON in markdown fences.** Even with "respond with valid JSON only" in the prompt, models frequently wrap responses in ` ```json ... ``` ` fences. Parsing the raw response as JSON fails. **Detection signal:** `JSON.parse()` / `json.loads()` throws on LLM output that looks correct when printed. **Fix:** always strip markdown fences from LLM output before parsing. Use a utility like `extractJson()` that handles fenced and unfenced responses. ⚠️ *Volatile — verified 2026-03-30. See `docs/research/claude-cli-invocation-patterns.md` Pattern 3 for a robust extraction function.*
+- **LLMs wrap JSON in markdown fences.** Even with "respond with valid JSON only" in the prompt, models frequently wrap responses in ` ```json ... ``` ` fences. Parsing the raw response as JSON fails. **Detection signal:** `JSON.parse()` / `json.loads()` throws on LLM output that looks correct when printed. **Fix:** always strip markdown fences from LLM output before parsing. Use a utility like `extractJson()` that handles fenced and unfenced responses. ⚠️ *Volatile — verified 2026-03-30. See `docs/research/antigravity-cli-invocation-patterns.md` Pattern 3 for a robust extraction function.*
 
-- **Strip `CLAUDECODE` env var when spawning claude subprocesses.** Claude Code CLI sets `CLAUDECODE=1` in the environment. Spawned `claude --print` processes check for this variable and refuse to run (to prevent recursive spawning). **Detection signal:** subprocess exits immediately with an error about nested invocation. **Fix:** strip the variable before spawning: `delete env.CLAUDECODE` (JS) or `env.pop('CLAUDECODE', None)` (Python). Also strip `ANTHROPIC_API_KEY` if you want the subprocess to use subscription auth instead of per-token billing. ⚠️ *Volatile — verified 2026-03-30, CLI 2.1.87. See `docs/research/claude-cli-invocation-patterns.md` Pattern 5.*
+- **Strip `CLAUDECODE` env var when spawning antigravity subprocesses.** Antigravity CLI sets `CLAUDECODE=1` in the environment. Spawned `antigravity --print` processes check for this variable and refuse to run (to prevent recursive spawning). **Detection signal:** subprocess exits immediately with an error about nested invocation. **Fix:** strip the variable before spawning: `delete env.CLAUDECODE` (JS) or `env.pop('CLAUDECODE', None)` (Python). Also strip `ANTHROPIC_API_KEY` if you want the subprocess to use subscription auth instead of per-token billing. ⚠️ *Volatile — verified 2026-03-30, CLI 2.1.87. See `docs/research/antigravity-cli-invocation-patterns.md` Pattern 5.*
 
-- **Claude CLI invocation has 8 known patterns — read the research doc first.** Two projects independently discovered the same set of patterns for spawning `claude --print` as a subprocess: prompt via `-p` flag (not stdin), no `--bare`/`--output-format json`, extract JSON from plain text, explicit `--model`, env var stripping, input validation, stderr sanitization, and settle guard for timeouts. If your project spawns `claude` as a subprocess, read `docs/research/claude-cli-invocation-patterns.md` before writing any adapter code. ⚠️ *Volatile — verified 2026-03-30, CLI 2.1.87. The Claude CLI is actively evolving; verify each pattern against `claude --help` and current release notes before adopting. Update the research doc's "Reviewed" date after verification.*
+- **Claude CLI invocation has 8 known patterns — read the research doc first.** Two projects independently discovered the same set of patterns for spawning `antigravity --print` as a subprocess: prompt via `-p` flag (not stdin), no `--bare`/`--output-format json`, extract JSON from plain text, explicit `--model`, env var stripping, input validation, stderr sanitization, and settle guard for timeouts. If your project spawns `antigravity` as a subprocess, read `docs/research/antigravity-cli-invocation-patterns.md` before writing any adapter code. ⚠️ *Volatile — verified 2026-03-30, CLI 2.1.87. The Claude CLI is actively evolving; verify each pattern against `antigravity --help` and current release notes before adopting. Update the research doc's "Reviewed" date after verification.*
 
 ## Build and Run
 
@@ -72,7 +72,7 @@ Extracted from CLAUDE.md to reduce context window load. Read this when working o
 
 - **"Invoke the team" means spawn subagents (Solo-Coordinator anti-pattern).** When the human uses language like "invoke the team", "use the team", "have Cam look at this", or names any persona, the coordinator MUST spawn those agents via the Task tool. The coordinator doing the work inline — even if the output is good — violates the explicit human request. **Detection signal:** the human asked for a named persona or "the team" but no Task tool calls with `subagent_type` matching a persona appear in the response. **Fix:** parse the request for persona names or team-level language, then spawn the appropriate agents before doing any work.
 
-- **Use scripts for stable logic, commands for evolving knowledge.** Static scripts are ideal when the rules are well-defined and unlikely to change. But when automation requires understanding things that change externally — evolving formats, shifting best practices, new API conventions — prefer a Claude Code command over a script. Commands bring current understanding (and can web-search) on every run.
+- **Use scripts for stable logic, commands for evolving knowledge.** Static scripts are ideal when the rules are well-defined and unlikely to change. But when automation requires understanding things that change externally — evolving formats, shifting best practices, new API conventions — prefer a Antigravity command over a script. Commands bring current understanding (and can web-search) on every run.
 
 - **Proxy mode is conservative, not permissive.** When the human is unavailable and Pat is acting as proxy, Pat defaults to the safer, more reversible option. The guardrails are strict:
 
@@ -84,7 +84,7 @@ Extracted from CLAUDE.md to reduce context window load. Read this when working o
   | Defer items to next sprint | Merge to main |
   | Apply conservative defaults | Override Pierrot or Tara vetoes |
 
-  When a question falls outside proxy authority, it blocks until the human returns. All proxy decisions are logged in `.claude/handoff.md` under `## Proxy Decisions (Review Required)`.
+  When a question falls outside proxy authority, it blocks until the human returns. All proxy decisions are logged in `.agents/handoff.md` under `## Proxy Decisions (Review Required)`.
 
 - **Product-context is a hypothesis, not ground truth.** `docs/product-context.md` captures Pat's model of the human's product philosophy — it's an educated guess that improves over time. The human can correct it at any time. When the human overrides a product-context-based recommendation, Pat updates the doc and logs the correction in the Correction Log table. Don't treat product-context entries as immutable rules.
 
@@ -135,4 +135,4 @@ Some gotcha entries describe behavior of *external tools* (CLIs, SDKs, cloud API
 **Why not just delete stale entries?** Because "this used to be true and may have changed" is more useful than silence. A developer who hits a CLI hang and finds a volatile gotcha saying "stdin used to cause this" has a strong lead. A developer who finds nothing has to debug from scratch.
 
 **Current volatile entries:**
-- Claude CLI invocation patterns → `docs/research/claude-cli-invocation-patterns.md`
+- Claude CLI invocation patterns → `docs/research/antigravity-cli-invocation-patterns.md`

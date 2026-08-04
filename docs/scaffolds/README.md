@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "explains scaffold stubs, deployed to final paths during setup", deps: [CLAUDE.md], state: canonical, last: "diego@2026-03-11" }
+agent-notes: { ctx: "explains scaffold stubs, deployed to final paths during setup", deps: [AGENTS.md], state: canonical, last: "diego@2026-03-11" }
 ---
 
 # Project Scaffolds

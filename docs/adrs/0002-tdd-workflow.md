@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "ADR mandating TDD red-green-refactor cycle", deps: [CLAUDE.md], state: active, last: "archie@2026-02-12" }
+agent-notes: { ctx: "ADR mandating TDD red-green-refactor cycle", deps: [AGENTS.md], state: active, last: "archie@2026-02-12" }
 ---
 
 # ADR-0002: Test-Driven Development Workflow

@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "low-ceremony project conventions, positive rules", deps: [CLAUDE.md, docs/process/gotchas.md], state: active, last: "archie@2026-03-21" }
+agent-notes: { ctx: "low-ceremony project conventions, positive rules", deps: [AGENTS.md, docs/process/gotchas.md], state: active, last: "archie@2026-03-21" }
 ---
 
 # Team Directives

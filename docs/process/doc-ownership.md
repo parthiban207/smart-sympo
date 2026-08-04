@@ -1,13 +1,13 @@
 ---
 agent-notes:
   ctx: "who owns which docs, update rules"
-  deps: [CLAUDE.md]
+  deps: [AGENTS.md]
   state: active
   last: "coordinator@2026-02-15"
 ---
 # Document Ownership
 
-Extracted from CLAUDE.md to reduce context window load. Referenced by CLAUDE.md Process Docs Index.
+Extracted from AGENTS.md to reduce context window load. Referenced by AGENTS.md Process Docs Index.
 
 ## Ownership Table
 

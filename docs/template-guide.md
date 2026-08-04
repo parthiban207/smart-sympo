@@ -1,14 +1,14 @@
 ---
-agent-notes: { ctx: "persistent template reference, survives scaffolding", deps: [CLAUDE.md, docs/methodology/personas.md, docs/methodology/phases.md], state: canonical, last: "diego@2026-03-20" }
+agent-notes: { ctx: "persistent template reference, survives scaffolding", deps: [AGENTS.md, docs/methodology/personas.md, docs/methodology/phases.md], state: canonical, last: "diego@2026-03-20" }
 ---
 
 # vteam-hybrid Template Guide
 
 ## Why This Exists
 
-Claude Code is powerful, but on a real project it drifts. You ask it to implement a feature and it skips tests. You ask for architecture advice and it writes code instead. Reviews are inconsistent. Context evaporates between sessions.
+Antigravity is powerful, but on a real project it drifts. You ask it to implement a feature and it skips tests. You ask for architecture advice and it writes code instead. Reviews are inconsistent. Context evaporates between sessions.
 
-vteam-hybrid fixes this by giving Claude Code a structured team of specialized agents — each with a defined role, clear boundaries, and rules about when they activate. You talk in natural language. The template handles the discipline.
+vteam-hybrid fixes this by giving Antigravity a structured team of specialized agents — each with a defined role, clear boundaries, and rules about when they activate. You talk in natural language. The template handles the discipline.
 
 ```
 You:  I want to build a CLI tool that converts markdown to PDF
@@ -29,8 +29,8 @@ After discovery, you run `/tdd add-pdf-export` and the system hands off to Tara 
 
 ## Who This Is For
 
-- **Solo developers** using Claude Code who want structured discipline without a team. The agents provide the rigor — TDD, code review, security audit — that a solo dev usually skips.
-- **Small teams (2-3 people)** who want Claude Code to handle the process overhead so humans can focus on product decisions.
+- **Solo developers** using Antigravity who want structured discipline without a team. The agents provide the rigor — TDD, code review, security audit — that a solo dev usually skips.
+- **Small teams (2-3 people)** who want Antigravity to handle the process overhead so humans can focus on product decisions.
 - **Anyone starting a new project** who wants to avoid the blank-canvas problem — the template gives you a working workflow from day one.
 
 ## What's Included
@@ -80,7 +80,7 @@ Use `/tdd <feature>` for each piece of work. The template enforces test-driven d
 
 ## How It Works
 
-You talk to Claude Code normally. The template's CLAUDE.md file teaches Claude when to invoke each agent based on what phase your work is in.
+You talk to Antigravity normally. The template's AGENTS.md file teaches Claude when to invoke each agent based on what phase your work is in.
 
 **The five core agents** (always available):
 
@@ -100,7 +100,7 @@ You talk to Claude Code normally. The template's CLAUDE.md file teaches Claude w
 graph LR
     Human["You"]
 
-    subgraph "Claude Code + vteam-hybrid"
+    subgraph "Antigravity + vteam-hybrid"
         Coord["Coordinator"]
 
         subgraph "Core — always available"
@@ -180,7 +180,7 @@ If you encounter unfamiliar terms in the docs, here's a quick reference:
 
 | Term | What it means |
 |------|---------------|
-| **Agent** | A Claude Code subagent with a specific role and personality (e.g., Tara only writes tests, never implementation code) |
+| **Agent** | A Antigravity subagent with a specific role and personality (e.g., Tara only writes tests, never implementation code) |
 | **TDD (Test-Driven Development)** | Write a failing test first, then write code to make it pass, then refactor. The template enforces this order. |
 | **ADR (Architecture Decision Record)** | A short document explaining why you chose one approach over another. Archie writes these before major implementation work. |
 | **Agent-notes** | Metadata at the top of every file (`ctx`, `deps`, `state`, `last`) so Claude can quickly understand any file without reading the whole thing. |
@@ -191,7 +191,7 @@ If you encounter unfamiliar terms in the docs, here's a quick reference:
 
 | Path | Purpose |
 |------|---------|
-| `CLAUDE.md` | Runtime instructions for Claude Code — the entry point |
+| `AGENTS.md` | Runtime instructions for Antigravity — the entry point |
 | `docs/methodology/` | System docs (phases, personas, agent-notes spec) |
 | `docs/process/` | Governance, done gate, gotchas, tracking protocol, doc ownership |
 | `docs/integrations/` | Tracking adapters (GitHub Projects, Jira) |
@@ -200,15 +200,15 @@ If you encounter unfamiliar terms in the docs, here's a quick reference:
 | `docs/adrs/template/` | Template-specific ADRs (removed during scaffold) |
 | `docs/research/` | Cloud landscape files and research |
 | `docs/media/` | Images and visual assets |
-| `.claude/agents/*.md` | 19 agent definitions (18 personas + 1 composite) |
-| `.claude/commands/*.md` | 27 workflow commands |
+| `.agents/agents/*.md` | 19 agent definitions (18 personas + 1 composite) |
+| `.agents/commands/*.md` | 27 workflow commands |
 | `docs/team-directives.md` | Low-ceremony project conventions |
 
 Directories like `docs/code-reviews/`, `docs/plans/`, `docs/sprints/`, `docs/tracking/`, `docs/sbom/`, `docs/security/`, and `docs/runbooks/` are created automatically by commands when first needed — they don't exist in the template.
 
 ## Command Reference
 
-All commands are invoked as `/<name>` in Claude Code (e.g., `/kickoff`, `/tdd`).
+All commands are invoked as `/<name>` in Antigravity (e.g., `/kickoff`, `/tdd`).
 
 ### Lifecycle
 
@@ -271,7 +271,7 @@ All commands are invoked as `/<name>` in Claude Code (e.g., `/kickoff`, `/tdd`).
 
 ### Adding a New Agent
 
-1. Create `.claude/agents/<name>.md` with proper frontmatter (see existing agents for format)
+1. Create `.agents/agents/<name>.md` with proper frontmatter (see existing agents for format)
 2. Add the agent to `docs/methodology/personas.md`
 3. Update `docs/methodology/phases.md` with the agent's phase participation
 
@@ -281,7 +281,7 @@ Edit the agent file directly. Update `last` in its agent-notes. If the change af
 
 ### Adding a New Command
 
-Create `.claude/commands/<name>.md` with an agent-notes HTML comment as the first line. Commands are auto-discovered by Claude Code.
+Create `.agents/commands/<name>.md` with an agent-notes HTML comment as the first line. Commands are auto-discovered by Antigravity.
 
 ### Switching Tracking Tools
 

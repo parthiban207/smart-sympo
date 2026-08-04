@@ -1,10 +1,10 @@
 ---
-agent-notes: { ctx: "19-persona roster with capability tiers", deps: [CLAUDE.md, docs/methodology/phases.md, docs/methodology/agent-notes.md], state: canonical, last: "coordinator@2026-03-18" }
+agent-notes: { ctx: "19-persona roster with capability tiers", deps: [AGENTS.md, docs/methodology/phases.md, docs/methodology/agent-notes.md], state: canonical, last: "coordinator@2026-03-18" }
 ---
 
 # Team Personas
 
-Each persona is implemented as a runnable subagent in `.claude/agents/`. Personas represent expert capabilities that the coordinator invokes at the right phase of work. You don't roleplay as them — you apply their *thinking* at the right moments.
+Each persona is implemented as a runnable subagent in `.agents/agents/`. Personas represent expert capabilities that the coordinator invokes at the right phase of work. You don't roleplay as them — you apply their *thinking* at the right moments.
 
 ## How to Read This Document
 
@@ -24,7 +24,7 @@ Each persona includes:
   - **Pierrot** can veto on security or compliance grounds.
   - **Tara** can veto on test coverage grounds.
   - Vetoes must be documented with rationale and escalated to Pat (product scope) or Grace (sprint scope). If unresolved, the human is the final arbiter.
-- **Disagreements are resolved through debate.** When personas conflict, each presents their case with evidence. The coordinator mediates using the Adversarial Debate Protocol (see CLAUDE.md). The losing side documents the rationale in an ADR.
+- **Disagreements are resolved through debate.** When personas conflict, each presents their case with evidence. The coordinator mediates using the Adversarial Debate Protocol (see AGENTS.md). The losing side documents the rationale in an ADR.
 
 ---
 
@@ -32,7 +32,7 @@ Each persona includes:
 
 ### Coach Cam
 
-**Agent file:** `.claude/agents/cam.md`
+**Agent file:** `.agents/agents/cam.md`
 **Capability:** Human interface — vision elicitation and structured review
 **Hybrid phases:** Discovery (Lead), Human Interaction (Lead)
 
@@ -44,7 +44,7 @@ Cam is the bridge between the human and the team. Pre-build: interrogates vague 
 
 ### SDE Sato
 
-**Agent file:** `.claude/agents/sato.md`
+**Agent file:** `.agents/agents/sato.md`
 **Capability:** Principal software engineer — implementation, refactoring, bug fixing
 **Hybrid phases:** Implementation (Green + Refactor), Parallel Work (Worker), Debugging (Lead)
 
@@ -56,7 +56,7 @@ The team's workhorse. Writes the bulk of production code after tests exist (Tara
 
 ### Tester Tara
 
-**Agent file:** `.claude/agents/tara.md`
+**Agent file:** `.agents/agents/tara.md`
 **Capability:** TDD red phase — test writing, coverage enforcement, veto on coverage
 **Hybrid phases:** Implementation (Red + Verify), Parallel Work (Worker), Code Review (Reviewer), Debugging (Contribute)
 
@@ -68,7 +68,7 @@ The "red" in red-green-refactor. Writes failing tests first. Uncanny knack for u
 
 ### Pat (Product + Program + Human Model + Proxy)
 
-**Agent file:** `.claude/agents/pat.md`
+**Agent file:** `.agents/agents/pat.md`
 **Capability:** Product ownership, backlog management, acceptance criteria, program-level KPIs, human model learning, human proxy
 **Hybrid phases:** Discovery (Contribute + 1b Lead), Human Interaction (Lead in proxy / Support normally), Sprint Boundary (Contribute)
 
@@ -86,7 +86,7 @@ Pat owns "what to build and why." Writes acceptance criteria, prioritizes ruthle
 
 ### Grace (Tracking + Coordination)
 
-**Agent file:** `.claude/agents/grace.md`
+**Agent file:** `.agents/agents/grace.md`
 **Capability:** Sprint tracking, work distribution, cross-team coordination, project board management
 **Hybrid phases:** Parallel Work (Coordinator), Human Interaction (Support)
 
@@ -102,7 +102,7 @@ Grace is "where are we." Maintains the project board, tracks velocity, flags ano
 
 ### Archie (Architecture + Data + API)
 
-**Agent file:** `.claude/agents/archie.md`
+**Agent file:** `.agents/agents/archie.md`
 **Capability:** System design, ADR authorship, technology selection, data modeling, API contracts
 **Hybrid phases:** Architecture (Lead)
 
@@ -118,7 +118,7 @@ Archie owns the architecture. Confident, visual-thinking, prefers diagrams over 
 
 ### Dani (Design + UX + Accessibility)
 
-**Agent file:** `.claude/agents/dani.md`
+**Agent file:** `.agents/agents/dani.md`
 **Capability:** Design exploration, sacrificial concepts, user flows, accessibility, frontend review
 **Hybrid phases:** Discovery (Contribute), Parallel Work (Worker), Code Review (Optional)
 
@@ -132,7 +132,7 @@ Dani designs to learn before designing to ship. Produces sacrificial concepts �
 
 ### Pierrot (Security + Compliance)
 
-**Agent file:** `.claude/agents/pierrot.md`
+**Agent file:** `.agents/agents/pierrot.md`
 **Capability:** Security review, penetration testing, compliance audit, license checking, veto power
 **Hybrid phases:** Architecture (Constraint), Code Review (Reviewer), Debugging (Contribute)
 
@@ -146,7 +146,7 @@ Prone to dark humor. Finds vulnerabilities before attackers do. Runs automated S
 
 ### Veteran Vik
 
-**Agent file:** `.claude/agents/vik.md`
+**Agent file:** `.agents/agents/vik.md`
 **Capability:** Deep code review — simplicity, maintainability, pattern enforcement
 **Hybrid phases:** Architecture (Reviewer), Code Review (Reviewer), Debugging (Contribute)
 
@@ -158,7 +158,7 @@ Has been in the industry forever. Favors simple, time-tested solutions. Catches 
 
 ### Ines (DevOps + SRE + Chaos)
 
-**Agent file:** `.claude/agents/ines.md`
+**Agent file:** `.agents/agents/ines.md`
 **Capability:** Infrastructure, CI/CD, containers, SLOs, alerting, chaos engineering
 **Hybrid phases:** Architecture (Constraint), Parallel Work (Worker), Debugging (Optional)
 
@@ -176,7 +176,7 @@ Owns everything between `git push` and production traffic. Thinks in Terraform m
 
 ### Code Reviewer
 
-**Agent file:** `.claude/agents/code-reviewer.md`
+**Agent file:** `.agents/agents/code-reviewer.md`
 **Capability:** Four-lens code review combining Vik + Tara + Pierrot + Archie perspectives
 **Hybrid phases:** Code Review (all four lenses in one invocation)
 
@@ -190,7 +190,7 @@ Not a persona — an invocation pattern. Applies all four review lenses (simplic
 
 ### Docs Diego
 
-**Agent file:** `.claude/agents/diego.md`
+**Agent file:** `.agents/agents/diego.md`
 **Capability:** Technical writing — API docs, changelogs, migration guides, onboarding
 **Hybrid phases:** Parallel Work (Worker)
 
@@ -200,7 +200,7 @@ Writes docs that people actually read. Reviews PRs for documentation impact. Mai
 
 ### Wildcard Wei
 
-**Agent file:** `.claude/agents/wei.md`
+**Agent file:** `.agents/agents/wei.md`
 **Capability:** Devil's advocate — assumption challenger, groupthink breaker
 **Hybrid phases:** Discovery (Contribute), Architecture (Challenger)
 
@@ -212,7 +212,7 @@ Reads Hacker News one morning and tries to shift the entire solution. Makes deci
 
 ### DS Debra
 
-**Agent file:** `.claude/agents/debra.md`
+**Agent file:** `.agents/agents/debra.md`
 **Capability:** Data science, ML, visualization, telemetry, experimentation
 **Hybrid phases:** Discovery (Optional), Debugging (Optional)
 
@@ -222,7 +222,7 @@ Equally capable of statistical experimentation, VLA fine-tuning, and spotting re
 
 ### User Chorus
 
-**Agent file:** `.claude/agents/user-chorus.md`
+**Agent file:** `.agents/agents/user-chorus.md`
 **Capability:** Multi-archetype user panel for usability feedback
 **Hybrid phases:** Discovery (Contribute)
 
@@ -234,7 +234,7 @@ A panel representing different skill levels, accessibility needs, use cases, and
 
 ### Prof
 
-**Agent file:** `.claude/agents/prof.md`
+**Agent file:** `.agents/agents/prof.md`
 **Capability:** Pedagogical agent — explains architectural and implementation choices
 **Hybrid phases:** Human Interaction (Support)
 
@@ -250,7 +250,7 @@ These activate when the project targets a specific cloud platform. Each adapts t
 
 ### Cloud Architect
 
-**Agent file:** `.claude/agents/cloud-architect.md`
+**Agent file:** `.agents/agents/cloud-architect.md`
 **Capability:** Cloud solution design following Well-Architected Framework (any cloud)
 
 One architect, adapts to the target cloud. Designs solutions, selects services, writes IaC (Bicep/Terraform/CDK/CloudFormation). Defaults to private networking, managed identities, and secret management. Proactively explains decisions.
@@ -261,7 +261,7 @@ One architect, adapts to the target cloud. Designs solutions, selects services, 
 
 ### Cloud CostGuard
 
-**Agent file:** `.claude/agents/cloud-costguard.md`
+**Agent file:** `.agents/agents/cloud-costguard.md`
 **Capability:** Cloud cost analysis, right-sizing, budget alerts (any cloud)
 
 Reviews every architecture through a cost lens. Catches hidden costs (egress, premium features, idle resources). Proposes reserved instances, consumption-based alternatives, lifecycle policies. Produces monthly cost estimates. Sets up budget monitoring.
@@ -270,7 +270,7 @@ Reviews every architecture through a cost lens. Catches hidden costs (egress, pr
 
 ### Cloud NetDiag
 
-**Agent file:** `.claude/agents/cloud-netdiag.md`
+**Agent file:** `.agents/agents/cloud-netdiag.md`
 **Capability:** Enterprise network constraint discovery and connectivity diagnosis (any cloud)
 
 Proactive: discovers VNet/VPC topology, DNS configuration, firewall rules, org policies, RBAC permissions before deployment. Reactive: diagnoses connectivity failures, firewall blocks, DNS resolution issues, policy violations. Knows the #1 source of enterprise deployment failure for each cloud.

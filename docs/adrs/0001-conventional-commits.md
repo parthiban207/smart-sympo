@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "ADR mandating conventional commit format", deps: [CLAUDE.md], state: active, last: "archie@2026-02-12" }
+agent-notes: { ctx: "ADR mandating conventional commit format", deps: [AGENTS.md], state: active, last: "archie@2026-02-12" }
 ---
 
 # ADR-0001: Use Conventional Commits

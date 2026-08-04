@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "GitHub Projects v2 board adapter with gh CLI recipes", deps: [CLAUDE.md, .claude/agents/grace.md, .claude/commands/kickoff.md], state: canonical, last: "sato@2026-02-21", key: ["definitive gh CLI reference for board ops", "5 statuses required via GraphQL mutation", "per-item transitions only -- never batch"] }
+agent-notes: { ctx: "GitHub Projects v2 board adapter with gh CLI recipes", deps: [AGENTS.md, .agents/agents/grace.md, .agents/commands/kickoff.md], state: canonical, last: "sato@2026-02-21", key: ["definitive gh CLI reference for board ops", "5 statuses required via GraphQL mutation", "per-item transitions only -- never batch"] }
 ---
 
 # GitHub Projects v2 Adapter
@@ -12,9 +12,9 @@ Definitive reference for all GitHub Projects board operations. Agents should con
 - **Auth scopes**: `project`, `repo`, `read:org` (if using org-owned projects). Run `gh auth status` to verify.
 - **Project type**: GitHub Projects v2 (not classic Projects). Classic Projects use a different API and are not supported.
 
-## Setup (CLAUDE.md Config)
+## Setup (AGENTS.md Config)
 
-The following HTML comments in `CLAUDE.md` configure board operations:
+The following HTML comments in `AGENTS.md` configure board operations:
 
 ```html
 <!-- tracking-adapter: github-projects -->
@@ -35,7 +35,7 @@ Run before any session that touches the board. All three must pass.
 # 1. Verify authentication
 gh auth status
 
-# 2. Verify project-number is configured (read from CLAUDE.md)
+# 2. Verify project-number is configured (read from AGENTS.md)
 # If the comment is empty or missing, STOP and run kickoff Phase 5.
 
 # 3. Verify board access and status field
@@ -100,9 +100,9 @@ gh project field-list <NUMBER> --owner <OWNER> --format json
 
 **Do NOT proceed to issue creation until all 5 statuses are confirmed.** If the GraphQL mutation fails, try the GitHub web UI as a fallback.
 
-### Step 3: Record Metadata in CLAUDE.md
+### Step 3: Record Metadata in AGENTS.md
 
-After creation, update `CLAUDE.md` with:
+After creation, update `AGENTS.md` with:
 - `project-number` and `project-owner` comments
 - Status field ID
 - Option IDs for each status (Backlog, Ready, In Progress, In Review, Done)

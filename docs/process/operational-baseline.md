@@ -1,7 +1,7 @@
 ---
 agent-notes:
   ctx: "cross-cutting operational concerns checklist"
-  deps: [CLAUDE.md, docs/process/done-gate.md, docs/process/team-governance.md]
+  deps: [AGENTS.md, docs/process/done-gate.md, docs/process/team-governance.md]
   state: active
   last: "coordinator@2026-02-28"
 ---

@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "ADR template for architectural decisions", deps: [CLAUDE.md], state: canonical, last: "archie@2026-02-12" }
+agent-notes: { ctx: "ADR template for architectural decisions", deps: [AGENTS.md], state: canonical, last: "archie@2026-02-12" }
 ---
 
 # ADR-NNNN: <Title>

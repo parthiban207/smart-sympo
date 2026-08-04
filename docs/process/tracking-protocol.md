@@ -1,5 +1,5 @@
 ---
-agent-notes: { ctx: "artifact-driven phase tracking protocol", deps: [docs/methodology/agent-notes.md, CLAUDE.md], state: active, last: "coordinator@2026-03-11" }
+agent-notes: { ctx: "artifact-driven phase tracking protocol", deps: [docs/methodology/agent-notes.md, AGENTS.md], state: active, last: "coordinator@2026-03-11" }
 ---
 
 # Phase Tracking Artifacts
