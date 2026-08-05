@@ -333,7 +333,10 @@ export const AppProvider = ({ children }) => {
   // Role switcher helper
   const switchRole = (roleName) => {
     const found = initialMockProfiles.find((p) => p.role === roleName);
-    if (found) setCurrentUser(found);
+    if (found) {
+      setCurrentUser(found);
+      setIsAuthenticated(true);
+    }
   };
 
   // Atomic Clash-Detection & Capacity-Gated Registration Engine

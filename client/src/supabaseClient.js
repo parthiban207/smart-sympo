@@ -5,7 +5,8 @@ const supabaseUrl =
 const supabaseAnonKey =
   import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder';
 
-export const isMockMode = supabaseUrl.includes('placeholder');
+export const isMockMode =
+  supabaseUrl.includes('placeholder') || supabaseAnonKey.includes('placeholder');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
