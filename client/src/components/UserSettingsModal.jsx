@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { X, User, KeyRound, Trash2, AlertTriangle, ShieldCheck, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
+import { supabase, isValidUUID } from '../supabaseClient';
 
 export default function UserSettingsModal({ isOpen, onClose }) {
   const { currentUser, signOutFromSupabase } = useApp();
@@ -23,7 +23,7 @@ export default function UserSettingsModal({ isOpen, onClose }) {
     setErrorMsg(null);
 
     try {
-      if (!isMockMode && isValidUUID(currentUser?.id)) {
+      if (isValidUUID(currentUser?.id)) {
         // Call delete_user_account RPC
         const { error } = await supabase.rpc('delete_user_account', {
           p_user_id: currentUser.id,

@@ -1,74 +1,101 @@
-// agent-notes: { ctx: "QR Camera Scanner Modal with guest check-in support and checkin_attendee RPC call", deps: ["html5-qrcode", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-07-31" }
+// agent-notes: { ctx: "QR Camera Scanner with front/back camera selection (preferring back camera) and rich event participation verification feedback", deps: ["html5-qrcode", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-13" }
 
-import { useEffect, useState, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { X, Camera, CheckCircle2, AlertCircle, RefreshCw, ScanLine, User } from 'lucide-react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { Html5Qrcode } from 'html5-qrcode';
+import { X, Camera, CheckCircle2, AlertCircle, RefreshCw, ScanLine, User, SwitchCamera, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestMode = false }) {
   const { verifyQRPass, checkinGuest, registrations } = useApp();
   const [scanResult, setScanResult] = useState(null);
   const [manualPayload, setManualPayload] = useState('');
+  const [facingMode, setFacingMode] = useState('environment');
   const [guestName, setGuestName] = useState('');
   const [guestEvent, setGuestEvent] = useState('');
-  const scannerRef = useRef(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [cameraError, setCameraError] = useState(null);
+
+  const html5QrcodeRef = useRef(null);
+
+  const startScanner = useCallback(async (mode) => {
+    setCameraError(null);
+    try {
+      if (html5QrcodeRef.current && html5QrcodeRef.current.isScanning) {
+        await html5QrcodeRef.current.stop();
+      }
+
+      const qrCodeScanner = new Html5Qrcode('qr-reader-target');
+      html5QrcodeRef.current = qrCodeScanner;
+
+      await qrCodeScanner.start(
+        { facingMode: mode },
+        {
+          fps: 10,
+          qrbox: { width: 240, height: 240 },
+        },
+        async (decodedText) => {
+          let res;
+          if (isGuestMode) {
+            res = await checkinGuest(decodedText, selectedHall);
+          } else {
+            res = await verifyQRPass(decodedText, selectedHall);
+          }
+          setScanResult(res);
+        },
+        () => {
+          // Seeking frame
+        }
+      );
+      setIsScanning(true);
+    } catch (err) {
+      console.warn('[QR Scanner Camera Error]:', err);
+      setIsScanning(false);
+      setCameraError('Camera access restricted or back camera unavailable. Use manual verify below.');
+    }
+  }, [isGuestMode, selectedHall, checkinGuest, verifyQRPass]);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    // Initialize html5-qrcode scanner element
-    const scanner = new Html5QrcodeScanner(
-      'qr-reader-container',
-      { fps: 10, qrbox: { width: 220, height: 220 } },
-      /* verbose= */ false
-    );
-
-    scanner.render(
-      async (decodedText) => {
-        if (isGuestMode) {
-          // Guest mode: call checkinGuest RPC
-          const res = await checkinGuest(decodedText, selectedHall);
-          setScanResult(res);
-        } else {
-          const res = await verifyQRPass(decodedText, selectedHall);
-          setScanResult(res);
-        }
-      },
-      () => {
-        // Silent scan warning while seeking QR code frame
-      }
-    );
-
-    scannerRef.current = scanner;
+    // Small delay for DOM node readiness
+    const timer = setTimeout(() => {
+      startScanner(facingMode);
+    }, 200);
 
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch((err) => console.error(err));
+      clearTimeout(timer);
+      if (html5QrcodeRef.current && html5QrcodeRef.current.isScanning) {
+        html5QrcodeRef.current.stop().catch(() => {});
       }
     };
-  }, [isOpen, selectedHall, verifyQRPass, checkinGuest, isGuestMode]);
+  }, [isOpen, facingMode, startScanner]);
 
   if (!isOpen) return null;
 
-  const handleManualSubmit = async (e) => {
-    e.preventDefault();
-    if (!manualPayload) return;
-
-    if (isGuestMode) {
-      const res = await checkinGuest(manualPayload, selectedHall);
-      setScanResult(res);
-    } else {
-      const res = await verifyQRPass(manualPayload, selectedHall);
-      setScanResult(res);
-    }
+  const toggleCamera = () => {
+    const nextMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(nextMode);
   };
 
-  // Manual guest registration (form-based fallback when QR is unavailable)
+  const handleManualSubmit = async (e) => {
+    e.preventDefault();
+    if (!manualPayload.trim()) return;
+
+    let res;
+    if (isGuestMode) {
+      res = await checkinGuest(manualPayload, selectedHall);
+    } else {
+      res = await verifyQRPass(manualPayload, selectedHall);
+    }
+    setScanResult(res);
+  };
+
   const handleManualGuestCheckin = async () => {
     if (!guestName) return;
+    const targetEventId = guestEvent || events[0]?.id || '';
     const payload = JSON.stringify({
       guest_name: guestName,
-      event_id: guestEvent || '11111111-1111-1111-1111-111111111111',
+      event_id: targetEventId,
       hall_number: selectedHall,
       is_guest: true,
     });
@@ -80,12 +107,11 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
     }
   };
 
-  // Quick test shortcut to simulate scanning a registered student's pass
   const handleQuickDemoScan = async () => {
     if (isGuestMode) {
       const demoPayload = JSON.stringify({
         guest_name: 'Demo Guest',
-        event_id: '11111111-1111-1111-1111-111111111111',
+        event_id: events[0]?.id || '',
         hall_number: selectedHall,
         is_guest: true,
       });
@@ -97,20 +123,28 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
         student_id: sampleReg.student_id,
         event_id: sampleReg.event_id,
         hall_number: selectedHall,
-        exp: Date.now() + 86400000,
       });
       const res = await verifyQRPass(demoPayload, selectedHall);
+      setScanResult(res);
+    } else {
+      const samplePayload = JSON.stringify({
+        student_id: currentUser?.id || '',
+        event_id: events[0]?.id || '',
+        hall_number: selectedHall,
+      });
+      const res = await verifyQRPass(samplePayload, selectedHall);
       setScanResult(res);
     }
   };
 
-  const borderColor = 'border-slate-200';
-  const accentColor = 'text-indigo-600';
-  const accentBg = 'bg-indigo-600';
-  const accentHover = 'hover:bg-indigo-700';
+  const handleWrongScanSim = async () => {
+    const invalidPayload = 'INVALID_QR_CODE_STRING_999';
+    const res = await verifyQRPass(invalidPayload, selectedHall);
+    setScanResult(res);
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
       <div className="bg-white w-full max-w-md rounded-2xl border border-slate-200 p-6 shadow-2xl relative text-center max-h-[90vh] overflow-y-auto text-slate-900">
         {/* Close button */}
         <button
@@ -120,48 +154,91 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
           <X className="w-4 h-4" />
         </button>
 
-        <div className="flex items-center gap-2 mb-3 justify-center">
-          {isGuestMode ? (
-            <ScanLine className={`w-5 h-5 ${accentColor} animate-pulse`} />
-          ) : (
-            <Camera className={`w-5 h-5 ${accentColor} animate-pulse`} />
-          )}
+        <div className="flex items-center gap-2 mb-2 justify-center">
+          <Camera className="w-5 h-5 text-indigo-600 animate-pulse" />
           <h3 className="text-base font-bold text-slate-900">
-            {isGuestMode ? 'Guest QR Check-in Scanner' : 'Live Hall QR Scanner'}
+            {isGuestMode ? 'Guest QR Check-in Scanner' : 'Live Event Attendance Scanner'}
           </h3>
         </div>
-        <p className="text-xs text-slate-500 mb-4">
-          {isGuestMode ? (
-            <>Scanning guest QR codes for live registration at <span className={`${accentColor} font-semibold`}>{selectedHall || 'All Venues'}</span></>
-          ) : (
-            <>Scanning for <span className={`${accentColor} font-semibold`}>{selectedHall || 'All Halls'}</span></>
-          )}
+
+        <p className="text-xs text-slate-500 mb-3">
+          Scanning via <span className="font-bold text-indigo-600">{facingMode === 'environment' ? 'Back Camera (Main)' : 'Front Camera'}</span> at <span className="font-semibold text-slate-800">{selectedHall || 'All Venues'}</span>
         </p>
 
-        {/* Scan Result Feedback Toast */}
+        {/* Camera Switch Controls */}
+        <div className="flex justify-center mb-4">
+          <button
+            onClick={toggleCamera}
+            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-700 hover:text-indigo-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+          >
+            <SwitchCamera className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Switch Camera ({facingMode === 'environment' ? 'Use Front' : 'Use Back (Main)'})</span>
+          </button>
+        </div>
+
+        {/* Scan Result Feedback Toast / Participation Box */}
         {scanResult && (
           <div
-            className={`p-3 rounded-xl mb-4 flex items-center gap-2 text-xs font-semibold ${
+            className={`p-4 rounded-2xl mb-4 text-left border shadow-sm ${
               scanResult.success
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                : 'bg-rose-50 text-rose-800 border border-rose-200'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                : 'bg-rose-50 border-rose-200 text-rose-950'
             }`}
           >
-            {scanResult.success ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-            )}
-            <span className="truncate">{scanResult.message}</span>
+            <div className="flex items-start gap-2.5">
+              {scanResult.success ? (
+                <div className="p-1.5 rounded-xl bg-emerald-600 text-white shrink-0 shadow-2xs">
+                  <CheckCircle2 className="w-5 h-5 text-white" />
+                </div>
+              ) : (
+                <div className="p-1.5 rounded-xl bg-rose-600 text-white shrink-0 shadow-2xs">
+                  <AlertCircle className="w-5 h-5 text-white" />
+                </div>
+              )}
+
+              <div className="space-y-1 text-xs">
+                <h4 className="font-extrabold text-sm flex items-center gap-1.5">
+                  {scanResult.success ? '✅ Successfully Verified!' : '❌ Wrong QR Code!'}
+                </h4>
+                <p className="font-medium text-slate-700">{scanResult.message}</p>
+
+                {scanResult.success && (
+                  <div className="mt-2 pt-2 border-t border-emerald-200/80 space-y-1 font-mono text-[11px] text-emerald-900">
+                    <div className="flex justify-between">
+                      <span className="text-emerald-700">Student:</span>
+                      <span className="font-bold">{scanResult.studentName || 'Registered Student'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-emerald-700">Event:</span>
+                      <span className="font-bold">{scanResult.eventTitle || 'Symposium Session'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-emerald-700">Participation:</span>
+                      <span className="font-bold text-emerald-800 flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        Registered & Attended
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
-        {/* HTML5 QR Camera Container */}
-        <div className="bg-slate-50 rounded-xl p-2 border border-slate-200 overflow-hidden text-slate-900">
-          <div id="qr-reader-container" className="w-full text-slate-800"></div>
+        {/* HTML5 QR Camera Video Target Container */}
+        <div className="bg-slate-900 rounded-2xl p-2 border border-slate-700 overflow-hidden relative min-h-[260px] flex items-center justify-center">
+          <div id="qr-reader-target" className="w-full text-white"></div>
+
+          {cameraError && (
+            <div className="p-4 text-center text-xs text-rose-300 bg-rose-950/80 border border-rose-800 rounded-xl space-y-2 max-w-xs">
+              <AlertCircle className="w-6 h-6 text-rose-400 mx-auto" />
+              <p>{cameraError}</p>
+            </div>
+          )}
         </div>
 
-        {/* Manual Guest Registration (Guest Mode Only) */}
+        {/* Manual Guest Check-in (Guest Mode Only) */}
         {isGuestMode && (
           <div className="mt-4 pt-3 border-t border-slate-200 text-left space-y-2">
             <label className="text-[11px] text-slate-600 block font-semibold flex items-center gap-1">
@@ -177,7 +254,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
             />
             <input
               type="text"
-              placeholder="Event ID (optional, e.g. 11111111-...)"
+              placeholder="Event ID (optional)"
               value={guestEvent}
               onChange={(e) => setGuestEvent(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-900 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all"
@@ -192,9 +269,9 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
           </div>
         )}
 
-        {/* Manual Test Scan Box */}
-        <div className="mt-4 pt-3 border-t border-slate-200 text-left">
-          <label className="text-[11px] text-slate-500 block mb-1.5 font-medium">
+        {/* Manual Code Verification & Scan Simulator */}
+        <div className="mt-4 pt-3 border-t border-slate-200 text-left space-y-2">
+          <label className="text-[11px] text-slate-500 block font-medium">
             Manual Test Scan / Dev Simulator
           </label>
           <div className="flex gap-2">
@@ -207,18 +284,29 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
             />
             <button
               onClick={handleManualSubmit}
-              className={`px-3 py-2 ${accentBg} ${accentHover} text-white font-bold text-xs rounded-xl transition-colors cursor-pointer`}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer"
             >
               Verify
             </button>
           </div>
-          <button
-            onClick={handleQuickDemoScan}
-            className="w-full mt-2 py-2 bg-slate-50 hover:bg-slate-100 text-indigo-700 border border-slate-200 font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            {isGuestMode ? 'Simulate Guest QR Scan' : 'Simulate Valid Scan (Registered Student 1)'}
-          </button>
+
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button
+              onClick={handleQuickDemoScan}
+              className="py-2 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Simulate Correct Code</span>
+            </button>
+
+            <button
+              onClick={handleWrongScanSim}
+              className="py-2 px-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer"
+            >
+              <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+              <span>Simulate Wrong Code</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

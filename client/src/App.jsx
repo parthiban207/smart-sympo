@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Main App container with router navigation, protected routes, and explicit /login and /signup pages", deps: ["src/components/Navbar.jsx", "src/components/LiveAlertBanner.jsx", "src/components/Chatbot.jsx", "src/components/ProtectedRoute.tsx", "src/pages/LoginPage.jsx", "src/pages/SignupPage.jsx", "src/context/AppContext.jsx"], state: "active", last: "antigravity@2026-07-31" }
+// agent-notes: { ctx: "Main App container with router navigation, protected routes, and explicit student and staff login pages", deps: ["src/components/Navbar.jsx", "src/components/LiveAlertBanner.jsx", "src/components/Chatbot.jsx", "src/components/ProtectedRoute.tsx", "src/pages/LoginPage.jsx", "src/pages/StudentLoginPage.jsx", "src/pages/StaffLoginPage.jsx", "src/context/AppContext.jsx"], state: "active", last: "antigravity@2026-08-13" }
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
@@ -11,7 +11,8 @@ import CoordinatorConsole from './pages/CoordinatorConsole';
 import CoordinatorScanner from './pages/CoordinatorScanner';
 import AdminAnalytics from './pages/AdminAnalytics';
 import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
+import StudentLoginPage from './pages/StudentLoginPage';
+import StaffLoginPage from './pages/StaffLoginPage';
 
 function getRoleDestination(role) {
   if (role === 'admin') return '/admin';
@@ -26,17 +27,6 @@ function RootRouteRedirect() {
   return <Navigate to={getRoleDestination(currentUser?.role)} replace />;
 }
 
-function AuthRouteGuard({ children }) {
-  const { isAuthenticated, currentUser } = useApp();
-  const isLoggedIn = isAuthenticated || Boolean(currentUser?.id);
-
-  if (isLoggedIn) {
-    return <Navigate to={getRoleDestination(currentUser?.role)} replace />;
-  }
-
-  return children;
-}
-
 export default function App() {
   return (
     <AppProvider>
@@ -47,22 +37,11 @@ export default function App() {
           <main className="flex-1">
             <Routes>
               <Route path="/" element={<RootRouteRedirect />} />
-              <Route
-                path="/login"
-                element={
-                  <AuthRouteGuard>
-                    <LoginPage />
-                  </AuthRouteGuard>
-                }
-              />
-              <Route
-                path="/signup"
-                element={
-                  <AuthRouteGuard>
-                    <SignupPage />
-                  </AuthRouteGuard>
-                }
-              />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/login/student" element={<StudentLoginPage />} />
+              <Route path="/login/staff" element={<StaffLoginPage />} />
+              <Route path="/signup" element={<StudentLoginPage />} />
+
               <Route
                 path="/student"
                 element={

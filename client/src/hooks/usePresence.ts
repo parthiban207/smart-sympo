@@ -1,7 +1,7 @@
 // agent-notes: { ctx: "Custom hook for Supabase Realtime Presence tracking online users and role statuses", deps: ["src/supabaseClient.ts", "src/hooks/useUserRole.ts"], state: "active", last: "antigravity@2026-07-31" }
 
 import { useEffect, useState } from 'react';
-import { supabase, isMockMode } from '../supabaseClient';
+import { supabase } from '../supabaseClient';
 import { useUserRole } from './useUserRole';
 
 export interface OnlineUserPresence {
@@ -18,36 +18,6 @@ export function usePresence() {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUserPresence[]>([]);
 
   useEffect(() => {
-    if (isMockMode) {
-      // Mock presence data for demonstration
-      setOnlineUsers([
-        {
-          user_id: '11111111-0000-0000-0000-000000000001',
-          online_at: new Date().toISOString(),
-          username: 'alex_rivera',
-          full_name: 'Alex Rivera',
-          role: 'student',
-          email: 'alex.rivera@college.edu',
-        },
-        {
-          user_id: '11111111-0000-0000-0000-000000000002',
-          online_at: new Date().toISOString(),
-          username: 'sarah_chen',
-          full_name: 'Sarah Chen (Coordinator)',
-          role: 'coordinator',
-          email: 'sarah.chen@college.edu',
-        },
-        {
-          user_id: '11111111-0000-0000-0000-000000000003',
-          online_at: new Date().toISOString(),
-          username: 'marcus_vance',
-          full_name: 'Dr. Marcus Vance (Admin)',
-          role: 'admin',
-          email: 'marcus.vance@college.edu',
-        },
-      ]);
-      return;
-    }
 
     if (!user) {
       setOnlineUsers([]);

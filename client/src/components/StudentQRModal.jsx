@@ -10,19 +10,13 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
 
   if (!isOpen || !event) return null;
 
-  const validStudentId = isValidUUID(currentUser?.id)
-    ? currentUser.id
-    : '11111111-0000-0000-0000-000000000001';
-  const validEventId = isValidUUID(event?.id)
-    ? event.id
-    : '11111111-1111-1111-1111-111111111111';
+  const validStudentId = currentUser?.id || '';
+  const validEventId = event?.id || '';
 
   const userReg = registrations.find(
     (r) => r.student_id === validStudentId && r.event_id === validEventId
   );
-  const validRegistrationId = isValidUUID(userReg?.id)
-    ? userReg.id
-    : '11111111-9999-9999-9999-111111111111';
+  const validRegistrationId = userReg?.id || '';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">

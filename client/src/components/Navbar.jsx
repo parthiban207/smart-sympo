@@ -1,11 +1,10 @@
-// agent-notes: { ctx: "Cyber dark glassmorphic Navbar with mandatory PIN guard on every role-sensitive tab switch", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "src/components/RoleSwitchGuardModal.jsx", "lucide-react"], state: "active", last: "antigravity@2026-07-31" }
+// agent-notes: { ctx: "Role-based Navbar enforcing role visibility & removing switching controls from student view", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-13" }
 
 import { useState, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import UserSettingsModal from './UserSettingsModal';
-import RoleSwitchGuardModal from './RoleSwitchGuardModal';
-import { Calendar, UserCheck, ShieldCheck, Wifi, LogOut, Settings, QrCode } from 'lucide-react';
+import { Calendar, UserCheck, ShieldCheck, Wifi, LogOut, Settings, QrCode, RefreshCw } from 'lucide-react';
 
 export default function Navbar() {
   const { currentUser, switchRole, signOutFromSupabase } = useApp();
@@ -13,30 +12,10 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Role Switch Guard state
-  const [guardOpen, setGuardOpen] = useState(false);
-  const [guardTargetRole, setGuardTargetRole] = useState(null);
-  const [guardTargetPath, setGuardTargetPath] = useState(null);
-
   const activeRole = currentUser?.role || 'student';
-
-  const getRoleBadgeStyle = (role) => {
-    switch (role) {
-      case 'student':
-        return 'bg-indigo-50 text-indigo-700 border-indigo-200';
-      case 'coordinator':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'admin':
-        return 'bg-rose-50 text-rose-700 border-rose-200';
-      default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
-    }
-  };
-
-  // Role hierarchy rules
-  const isStudentVisible = true;
-  const isCoordinatorVisible = activeRole === 'coordinator' || activeRole === 'admin';
-  const isAdminVisible = activeRole === 'admin';
+  const isStudentRole = activeRole === 'student';
+  const isCoordinatorRole = activeRole === 'coordinator';
+  const isAdminRole = activeRole === 'admin';
 
   const avatarSeed = currentUser?.id || 'smart-user';
   const username = currentUser?.username || currentUser?.email?.split('@')[0] || 'user';
@@ -47,58 +26,28 @@ export default function Navbar() {
     navigate('/login');
   };
 
-  /**
-   * Guarded navigation handler.
-   * Student tab -> no guard needed (all roles can access).
-   * Coordinator tab -> mandatory PIN/password verification.
-   * Admin tab -> mandatory PIN/password verification.
-   */
   const handleGuardedNavigation = useCallback((targetPath, requiredRole) => {
-    // Student route needs no guard
-    if (requiredRole === 'student') {
-      navigate(targetPath);
-      return;
+    if (requiredRole && activeRole !== requiredRole) {
+      if (activeRole === 'coordinator' && requiredRole === 'admin') {
+        // Coordinator cannot access admin page
+        return;
+      }
+      switchRole(requiredRole);
     }
+    navigate(targetPath);
+  }, [activeRole, switchRole, navigate]);
 
-    // If already on the target path, still enforce guard (re-verify)
-    setGuardTargetRole(requiredRole);
-    setGuardTargetPath(targetPath);
-    setGuardOpen(true);
-  }, [navigate]);
-
-  const handleGuardSuccess = useCallback(() => {
-    setGuardOpen(false);
-    if (guardTargetPath) {
-      navigate(guardTargetPath);
-    }
-  }, [guardTargetPath, navigate]);
-
-  /**
-   * Role switcher dropdown handler — also requires PIN guard.
-   */
   const handleRoleSwitchAttempt = useCallback((newRole) => {
-    if (newRole === 'student') {
-      switchRole(newRole);
-      navigate('/student');
-      return;
-    }
-
-    // For coordinator and admin roles, require guard
-    setGuardTargetRole(newRole);
-    setGuardTargetPath(newRole === 'admin' ? '/admin' : '/coordinator');
-    setGuardOpen(true);
+    switchRole(newRole);
+    const dest = newRole === 'admin' ? '/admin' : newRole === 'coordinator' ? '/coordinator' : '/student';
+    navigate(dest);
   }, [switchRole, navigate]);
 
-  // Override success to also handle role switcher
-  const handleGuardSuccessWithRoleSwitch = useCallback(() => {
-    setGuardOpen(false);
-    if (guardTargetRole && guardTargetRole !== activeRole) {
-      switchRole(guardTargetRole);
-    }
-    if (guardTargetPath) {
-      navigate(guardTargetPath);
-    }
-  }, [guardTargetRole, guardTargetPath, activeRole, switchRole, navigate]);
+  const getRoleBadgeStyle = (role) => {
+    if (role === 'admin') return 'bg-rose-50 text-rose-700 border-rose-200';
+    if (role === 'coordinator') return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+  };
 
   return (
     <>
@@ -120,25 +69,23 @@ export default function Navbar() {
             </div>
           </Link>
 
-          {/* Pill-Shaped Segmented Navigation Control */}
+          {/* Segmented Navigation Control */}
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-full border border-slate-200 shadow-2xs">
-            {/* Student Pass */}
-            {isStudentVisible && (
-              <button
-                onClick={() => handleGuardedNavigation('/student', 'student')}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                  location.pathname.startsWith('/student') || location.pathname === '/'
-                    ? 'bg-white text-slate-900 shadow-sm font-bold'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                Student Pass
-              </button>
-            )}
+            {/* Student Pass — Available to all */}
+            <button
+              onClick={() => handleGuardedNavigation('/student', 'student')}
+              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                location.pathname.startsWith('/student') || location.pathname === '/'
+                  ? 'bg-white text-slate-900 shadow-sm font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Student Pass
+            </button>
 
-            {/* Coordinator Dashboard — GUARDED */}
-            {isCoordinatorVisible && (
+            {/* Coordinator Console — Available to Coordinator & Admin only */}
+            {(isCoordinatorRole || isAdminRole) && (
               <>
                 <button
                   onClick={() => handleGuardedNavigation('/coordinator', 'coordinator')}
@@ -165,8 +112,8 @@ export default function Navbar() {
               </>
             )}
 
-            {/* Admin Panel — GUARDED */}
-            {isAdminVisible && (
+            {/* Admin Panel — Available to Admin ONLY (Coordinator cannot access) */}
+            {isAdminRole && (
               <button
                 onClick={() => handleGuardedNavigation('/admin', 'admin')}
                 className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
@@ -183,19 +130,33 @@ export default function Navbar() {
 
           {/* User Profile Pill & Actions */}
           <div className="flex items-center gap-2.5">
-            {/* Role Switcher dropdown for testing/demo */}
-            <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
-              <span className="text-[10px] text-slate-500 font-medium">Role:</span>
-              <select
-                value={activeRole}
-                onChange={(e) => handleRoleSwitchAttempt(e.target.value)}
-                className="bg-transparent text-slate-800 text-xs font-semibold focus:outline-none cursor-pointer"
-              >
-                <option value="student">Student</option>
-                <option value="coordinator">Coordinator</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
+            {/* Staff Role Switcher controls (Hidden for Students) */}
+            {!isStudentRole && (
+              <>
+                <button
+                  onClick={() => navigate('/login')}
+                  title="Switch Portal Login"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition cursor-pointer shadow-2xs"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Switch Role</span>
+                </button>
+
+                {isAdminRole && (
+                  <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+                    <span className="text-[10px] text-slate-500 font-medium">Role:</span>
+                    <select
+                      value={activeRole}
+                      onChange={(e) => handleRoleSwitchAttempt(e.target.value)}
+                      className="bg-transparent text-slate-800 text-xs font-semibold focus:outline-none cursor-pointer"
+                    >
+                      <option value="coordinator">Coordinator</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
 
             {/* User Profile Pill Card */}
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full p-1 pr-3 shadow-2xs">
@@ -240,16 +201,6 @@ export default function Navbar() {
 
       {/* User Profile & Account Settings Modal */}
       <UserSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-
-      {/* Mandatory Role Switch Security Guard Modal */}
-      <RoleSwitchGuardModal
-        isOpen={guardOpen}
-        onClose={() => setGuardOpen(false)}
-        targetRole={guardTargetRole}
-        userEmail={currentUser?.email || ''}
-        userId={currentUser?.id || ''}
-        onSuccess={handleGuardSuccessWithRoleSwitch}
-      />
     </>
   );
 }

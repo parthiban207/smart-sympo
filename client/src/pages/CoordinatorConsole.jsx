@@ -6,6 +6,7 @@ import QRScannerModal from '../components/QRScannerModal';
 import PassCodeGuardModal from '../components/PassCodeGuardModal';
 import StudentQRModal from '../components/StudentQRModal';
 import ViewRegisteredStudentsModal from '../components/ViewRegisteredStudentsModal';
+import EmergencyBroadcastModal from '../components/EmergencyBroadcastModal';
 import {
   Play,
   Clock,
@@ -47,6 +48,7 @@ export default function CoordinatorConsole() {
   const [targetStudentForPass, setTargetStudentForPass] = useState(null);
   const [isGuardOpen, setIsGuardOpen] = useState(false);
   const [isPassModalOpen, setIsPassModalOpen] = useState(false);
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -191,8 +193,15 @@ export default function CoordinatorConsole() {
           </p>
         </div>
 
-        {/* Hall Selector & Create Event Button */}
+        {/* Hall Selector & Create Event & Emergency Broadcast Button */}
         <div className="w-full md:w-auto flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            onClick={() => setShowEmergencyModal(true)}
+            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 animate-pulse border border-rose-500"
+          >
+            <Radio className="w-4 h-4 text-white" />
+            <span>Emergency Broadcast</span>
+          </button>
           <button
             onClick={() => setShowAddModal(true)}
             className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
@@ -732,6 +741,11 @@ export default function CoordinatorConsole() {
         event={selectedRosterEvent}
         registrations={registrations}
         profilesList={profilesList}
+      />
+      {/* Emergency Broadcast Modal */}
+      <EmergencyBroadcastModal
+        isOpen={showEmergencyModal}
+        onClose={() => setShowEmergencyModal(false)}
       />
     </div>
   );

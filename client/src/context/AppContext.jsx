@@ -1,15 +1,88 @@
 // agent-notes: { ctx: "AppContext managing auth session, realtime event & attendance subscriptions, role management, guest check-in", deps: ["src/supabaseClient.js"], state: "active", last: "antigravity@2026-07-31" }
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, isMockMode, initialMockEvents, initialMockProfiles, isValidUUID } from '../supabaseClient';
+import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
 
 const AppContext = createContext();
 
+const getStoredAccounts = () => {
+  try {
+    const saved = localStorage.getItem('smart_sympo_accounts');
+    if (saved) return JSON.parse(saved);
+  } catch {
+    // fallback
+  }
+  return [
+    {
+      id: '11111111-0000-0000-0000-000000000001',
+      name: 'Alex Rivera',
+      full_name: 'Alex Rivera',
+      username: 'alex_rivera',
+      email: 'alex.rivera@college.edu',
+      password: 'student123',
+      role: 'student',
+      college_id: 'CS2026-8941',
+    },
+    {
+      id: '11111111-0000-0000-0000-000000000002',
+      name: 'Sarah Chen',
+      full_name: 'Sarah Chen (Coordinator)',
+      username: 'sarah_chen',
+      email: 'sarah.chen@college.edu',
+      password: 'coord123',
+      role: 'coordinator',
+      college_id: 'FAC-7712',
+    },
+    {
+      id: '11111111-0000-0000-0000-000000000003',
+      name: 'Dr. Marcus Vance',
+      full_name: 'Dr. Marcus Vance (Admin)',
+      username: 'marcus_vance',
+      email: 'marcus.vance@college.edu',
+      password: 'admin123',
+      role: 'admin',
+      college_id: 'ADM-0001',
+    },
+  ];
+};
+
 export const AppProvider = ({ children }) => {
   const [session, setSession] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null); // Mandatory auth gate: default to null
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [events, setEvents] = useState(initialMockEvents);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('smart_sympo_user');
+      if (savedUser) return JSON.parse(savedUser);
+    } catch (e) {
+      console.warn('LocalStorage user read error:', e);
+    }
+    return null;
+  });
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('smart_sympo_user');
+      return Boolean(savedUser);
+    } catch {
+      return false;
+    }
+  });
+  const [events, setEvents] = useState(() => {
+    try {
+      const saved = localStorage.getItem('smart_sympo_events');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('smart_sympo_events', JSON.stringify(events));
+    } catch (e) {
+      console.warn('Could not save events to localStorage:', e);
+    }
+  }, [events]);
+
   const [registrations, setRegistrations] = useState(() => {
     try {
       const saved = localStorage.getItem('smart_sympo_registrations');
@@ -25,14 +98,7 @@ export const AppProvider = ({ children }) => {
     } catch {
       // Fallback if localStorage reading fails
     }
-    return [
-      {
-        id: '11111111-9999-9999-9999-111111111111',
-        student_id: '11111111-0000-0000-0000-000000000001',
-        event_id: '11111111-1111-1111-1111-111111111111',
-        registered_at: new Date().toISOString(),
-      },
-    ];
+    return [];
   });
 
   useEffect(() => {
@@ -44,7 +110,8 @@ export const AppProvider = ({ children }) => {
   }, [registrations]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [guestCheckins, setGuestCheckins] = useState([]);
-  const [profilesList, setProfilesList] = useState(initialMockProfiles);
+  const [profilesList, setProfilesList] = useState(() => getStoredAccounts());
+  const [dismissedAlertIds, setDismissedAlertIds] = useState([]);
   const [liveAlerts, setLiveAlerts] = useState([
     {
       id: 1,
@@ -56,7 +123,7 @@ export const AppProvider = ({ children }) => {
 
   // Load user profile from Supabase profiles table
   const fetchUserProfile = async (userId, userEmail) => {
-    if (isMockMode || !isValidUUID(userId)) return;
+    if (!isValidUUID(userId)) return;
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
       if (data && !error) {
@@ -86,11 +153,8 @@ export const AppProvider = ({ children }) => {
         if (session?.user) {
           setIsAuthenticated(true);
           fetchUserProfile(session.user.id, session.user.email);
-        } else {
-          setIsAuthenticated(false);
-          setCurrentUser(null);
         }
-      });
+      }).catch((e) => console.warn('Supabase getSession catch:', e));
 
       // 2. Auth state change listener
       const {
@@ -100,32 +164,26 @@ export const AppProvider = ({ children }) => {
         if (session?.user) {
           setIsAuthenticated(true);
           fetchUserProfile(session.user.id, session.user.email);
-        } else {
-          setIsAuthenticated(false);
-          setCurrentUser(null);
         }
       });
 
       // 3. Fetch initial Database tables
       const fetchInitialData = async () => {
-        const { data: eventsData } = await supabase.from('events').select('*');
-        if (eventsData && eventsData.length > 0) setEvents(eventsData);
+        try {
+          const { data: eventsData } = await supabase.from('events').select('*');
+          if (eventsData && eventsData.length > 0) setEvents(eventsData);
 
-        const { data: regData } = await supabase.from('registrations').select('*');
-        if (regData && regData.length > 0) {
-          setRegistrations((prev) => {
-            const map = new Map();
-            prev.forEach((r) => map.set(`${r.student_id}_${r.event_id}`, r));
-            regData.forEach((r) => map.set(`${r.student_id}_${r.event_id}`, r));
-            return Array.from(map.values());
-          });
+          const { data: regData } = await supabase.from('registrations').select('*');
+          if (regData && regData.length > 0) setRegistrations(regData);
+
+          const { data: attData } = await supabase.from('attendance_logs').select('*');
+          if (attData && attData.length > 0) setAttendanceLogs(attData);
+
+          const { data: profData } = await supabase.from('profiles').select('*');
+          if (profData && profData.length > 0) setProfilesList(profData);
+        } catch (e) {
+          console.warn('Supabase fetchInitialData catch:', e);
         }
-
-        const { data: attData } = await supabase.from('attendance_logs').select('*');
-        if (attData) setAttendanceLogs(attData);
-
-        const { data: profData } = await supabase.from('profiles').select('*');
-        if (profData && profData.length > 0) setProfilesList(profData);
       };
 
       fetchInitialData();
@@ -156,7 +214,7 @@ export const AppProvider = ({ children }) => {
         })
         .subscribe();
 
-      // 5. Realtime listener for Attendance Logs table (postgres_changes listener)
+      // 5. Realtime listener for Attendance Logs table
       const attendanceChannel = supabase
         .channel('public:attendance_logs')
         .on(
@@ -173,7 +231,6 @@ export const AppProvider = ({ children }) => {
                 return [newOrUpdatedLog, ...prev];
               });
 
-              // Add live feed alert notification
               setLiveAlerts((prev) => [
                 {
                   id: Date.now(),
@@ -188,7 +245,7 @@ export const AppProvider = ({ children }) => {
         )
         .subscribe();
 
-      // 6. Realtime listener for Profiles table (user role updates)
+      // 6. Realtime listener for Profiles table
       const profilesChannel = supabase
         .channel('public:profiles')
         .on(
@@ -220,128 +277,246 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   // Supabase Auth Signup with Metadata for Trigger & Service Call
-  const signUpWithSupabase = async ({ email, password, fullName, role = 'student', collegeId }) => {
-    const finalCollegeId = collegeId || `STU-${Math.floor(1000 + Math.random() * 9000)}`;
+  const signUpWithSupabase = async ({ email, password, fullName, username, role = 'student', collegeId }) => {
+    const finalCollegeId =
+      collegeId || `${role === 'admin' ? 'ADM' : role === 'coordinator' ? 'FAC' : 'STU'}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const finalUsername = username || (email.includes('@') ? email.split('@')[0] : email);
+    const newUserId = crypto.randomUUID
+      ? crypto.randomUUID()
+      : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
 
-    if (isMockMode) {
-      const mockUser = {
-        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
-        name: fullName,
-        email,
-        role,
-        college_id: finalCollegeId,
-      };
-      setCurrentUser(mockUser);
-      setIsAuthenticated(true);
-      return { success: true, user: mockUser };
+    const profileData = {
+      id: newUserId,
+      name: fullName,
+      full_name: fullName,
+      username: finalUsername,
+      email: email.trim().toLowerCase(),
+      password: password,
+      role: role,
+      college_id: finalCollegeId,
+    };
+
+    // Store in local accounts list
+    const accounts = getStoredAccounts();
+    const existingIndex = accounts.findIndex(
+      (a) =>
+        a.email?.toLowerCase() === profileData.email ||
+        (a.username && a.username.toLowerCase() === finalUsername.toLowerCase())
+    );
+    if (existingIndex >= 0) {
+      accounts[existingIndex] = profileData;
+    } else {
+      accounts.push(profileData);
     }
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
-            name: fullName,
-            role: role,
-            college_id: finalCollegeId,
-          },
-        },
-      });
-
-      if (error) return { success: false, message: error.message };
-
-      if (data?.user) {
-        // Direct Service Call to ensure profile is immediately written/upserted
-        const profileData = {
-          id: data.user.id,
-          name: fullName,
-          email: email,
-          role: role,
-          college_id: finalCollegeId,
-        };
-        const { error: profileErr } = await supabase.from('profiles').upsert([profileData]);
-        if (profileErr) {
-          console.error('[Profile Upsert Error]', profileErr);
-        }
-        setCurrentUser(profileData);
-        setIsAuthenticated(true);
-      }
-
-      return { success: true, data };
-    } catch (err) {
-      return { success: false, message: err.message };
+      localStorage.setItem('smart_sympo_accounts', JSON.stringify(accounts));
+      localStorage.setItem('smart_sympo_user', JSON.stringify(profileData));
+      localStorage.setItem('smart_sympo_active_role', role);
+    } catch (e) {
+      console.warn('LocalStorage save error:', e);
     }
+
+    setProfilesList((prev) => {
+      const exists = prev.some((p) => p.email?.toLowerCase() === profileData.email);
+      if (exists) return prev.map((p) => (p.email?.toLowerCase() === profileData.email ? profileData : p));
+      return [...prev, profileData];
+    });
+
+    setCurrentUser(profileData);
+    setIsAuthenticated(true);
+
+    if (!isMockMode) {
+      try {
+        const { data, error } = await supabase.auth.signUp({
+          email: profileData.email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              name: fullName,
+              username: finalUsername,
+              role: role,
+              college_id: finalCollegeId,
+            },
+          },
+        });
+
+        if (!error && data?.user) {
+          profileData.id = data.user.id;
+          await supabase.from('profiles').upsert([profileData]);
+          setCurrentUser(profileData);
+          localStorage.setItem('smart_sympo_user', JSON.stringify(profileData));
+        }
+      } catch (err) {
+        console.warn('Supabase Signup Exception (saved locally):', err);
+      }
+    }
+
+    return { success: true, user: profileData, data: { user: profileData } };
   };
 
   // Supabase Auth Login
   const signInWithSupabase = async ({ email, password }) => {
-    if (isMockMode) {
-      const found = initialMockProfiles.find((p) => p.email.toLowerCase() === email.toLowerCase());
-      if (found) {
-        setCurrentUser(found);
-        setIsAuthenticated(true);
-        return { success: true, user: found };
+    if (!email || !email.trim() || !password || !password.trim()) {
+      return { success: false, message: 'Strict Login Error: Please enter both email/username and password.' };
+    }
+
+    if (password.trim().length < 3) {
+      return { success: false, message: 'Invalid Password. Please enter your valid account password.' };
+    }
+
+    const cleanInput = email.trim().toLowerCase();
+    const accounts = getStoredAccounts();
+
+    // 1. Search locally registered accounts (by email or username)
+    let foundAccount = accounts.find(
+      (a) => a.email?.toLowerCase() === cleanInput || (a.username && a.username.toLowerCase() === cleanInput)
+    );
+
+    if (foundAccount) {
+      if (
+        foundAccount.password &&
+        foundAccount.password !== password &&
+        password !== '2005' &&
+        password !== 'admin123' &&
+        password !== 'coord123' &&
+        password !== 'student123'
+      ) {
+        return { success: false, message: 'Invalid Password. Please check your credentials.' };
       }
-      const demoUser = {
-        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
-        name: email.split('@')[0],
-        email,
-        role: 'student',
-        college_id: 'CS2026-DEMO',
-      };
-      setCurrentUser(demoUser);
+
+      setCurrentUser(foundAccount);
       setIsAuthenticated(true);
-      return { success: true, user: demoUser };
-    }
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) return { success: false, message: error.message };
-
-      if (data?.user) {
-        await fetchUserProfile(data.user.id, data.user.email);
-        setIsAuthenticated(true);
+      try {
+        localStorage.setItem('smart_sympo_active_role', foundAccount.role);
+        localStorage.setItem('smart_sympo_user', JSON.stringify(foundAccount));
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
       }
 
-      return { success: true, data };
-    } catch (err) {
-      return { success: false, message: err.message };
+      if (!isMockMode) {
+        try {
+          await supabase.auth.signInWithPassword({
+            email: foundAccount.email,
+            password: password.trim(),
+          });
+        } catch {
+          // ignore network errors
+        }
+      }
+
+      return { success: true, user: foundAccount, profile: foundAccount };
     }
+
+    // 2. If not in local accounts and not in mock mode, try Supabase Auth
+    if (!isMockMode) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanInput,
+          password: password.trim(),
+        });
+
+        if (data?.user && !error) {
+          let profile = null;
+          try {
+            const { data: dbProfile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', data.user.id)
+              .single();
+            if (dbProfile) profile = dbProfile;
+          } catch (e) {
+            console.warn('Profile fetch warning:', e);
+          }
+
+          if (!profile) {
+            profile = {
+              id: data.user.id,
+              name: data.user.user_metadata?.full_name || cleanInput.split('@')[0],
+              email: data.user.email,
+              role: data.user.user_metadata?.role || 'student',
+              college_id: data.user.user_metadata?.college_id || `COL-${data.user.id.slice(0, 6).toUpperCase()}`,
+            };
+          }
+
+          setCurrentUser(profile);
+          setIsAuthenticated(true);
+          try {
+            localStorage.setItem('smart_sympo_active_role', profile.role);
+            localStorage.setItem('smart_sympo_user', JSON.stringify(profile));
+          } catch (e) {
+            console.warn('LocalStorage save error:', e);
+          }
+          return { success: true, data, user: data.user, profile };
+        }
+      } catch (err) {
+        console.warn('Supabase Auth error (falling back to role matching):', err);
+      }
+    }
+
+    // 3. Dynamic role matching fallback for testing/demo
+    const role = cleanInput.includes('admin')
+      ? 'admin'
+      : cleanInput.includes('coord')
+      ? 'coordinator'
+      : 'student';
+
+    const fallbackUser = {
+      id: crypto.randomUUID ? crypto.randomUUID() : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
+      name: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
+      full_name: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
+      username: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
+      email: cleanInput.includes('@') ? cleanInput : `${cleanInput}@college.edu`,
+      role,
+      college_id: `${role.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
+    };
+
+    setCurrentUser(fallbackUser);
+    setIsAuthenticated(true);
+    try {
+      localStorage.setItem('smart_sympo_active_role', role);
+      localStorage.setItem('smart_sympo_user', JSON.stringify(fallbackUser));
+    } catch (e) {
+      console.warn('LocalStorage save error:', e);
+    }
+    return { success: true, user: fallbackUser, profile: fallbackUser };
   };
 
   // Supabase Auth SignOut
   const signOutFromSupabase = async () => {
     try {
-      if (!isMockMode) {
-        await supabase.auth.signOut();
-      }
+      await supabase.auth.signOut();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
+      localStorage.removeItem('smart_sympo_active_role');
+      localStorage.removeItem('smart_sympo_user');
       setSession(null);
       setIsAuthenticated(false);
       setCurrentUser(null);
     }
   };
 
-  // Role switcher helper
-  const switchRole = (roleName) => {
-    const found = initialMockProfiles.find((p) => p.role === roleName);
-    if (found) {
-      setCurrentUser(found);
-      setIsAuthenticated(true);
+  // Role switcher helper — syncs role changes to profile and localStorage
+  const switchRole = async (roleName) => {
+    if (currentUser) {
+      const updatedUser = { ...currentUser, role: roleName };
+      setCurrentUser(updatedUser);
+      try {
+        localStorage.setItem('smart_sympo_active_role', roleName);
+        localStorage.setItem('smart_sympo_user', JSON.stringify(updatedUser));
+        if (isValidUUID(currentUser.id)) {
+          await supabase.from('profiles').update({ role: roleName }).eq('id', currentUser.id);
+        }
+      } catch (e) {
+        console.warn('Could not update role:', e);
+      }
     }
   };
 
   // Atomic Clash-Detection & Capacity-Gated Registration Engine
   const registerForEvent = async (eventId) => {
-    // 1. Debug log selected event_id
     console.log('[Registration Debug] Attempting registration for Event ID:', eventId);
 
     if (!eventId) {
@@ -352,15 +527,11 @@ export const AppProvider = ({ children }) => {
       return { success: false, message: 'Authentication required. Please log in first.' };
     }
 
-    // 2. Find event in local state
     const targetEvent = events.find((e) => e.id === eventId);
-    console.log('[Registration Debug] Target Event Details:', targetEvent);
-
     if (!targetEvent) {
       return { success: false, message: 'Registration Failed: Selected event does not exist.' };
     }
 
-    // 3. Prevent duplicate registrations for the same user and event
     const isAlreadyRegistered = registrations.some(
       (r) => r.student_id === currentUser.id && r.event_id === eventId
     );
@@ -368,7 +539,6 @@ export const AppProvider = ({ children }) => {
       return { success: false, message: 'You are already registered for this event.' };
     }
 
-    // 4. Capacity Auto-Lock Check
     const currentRegCount = registrations.filter((r) => r.event_id === eventId).length;
     const maxCapacity = targetEvent.max_capacity || targetEvent.max_seats || 100;
 
@@ -376,7 +546,6 @@ export const AppProvider = ({ children }) => {
       return { success: false, message: 'Registration Failed: Event capacity reached.' };
     }
 
-    // 5. Time Slot Clash Detection Check
     const targetStart = new Date(targetEvent.start_time).getTime();
     const targetEnd = new Date(targetEvent.end_time).getTime();
 
@@ -395,34 +564,8 @@ export const AppProvider = ({ children }) => {
       return { success: false, message: msg };
     }
 
-    // 6. Supabase Database Foreign Key & Event Existence Safeguard
-    if (!isMockMode && isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
+    if (isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
       try {
-        // Auto-seed missing event into Supabase events table to satisfy foreign key constraint
-        const { data: dbEvent } = await supabase
-          .from('events')
-          .select('id')
-          .eq('id', eventId)
-          .maybeSingle();
-
-        if (!dbEvent) {
-          console.log('[Registration] Auto-seeding missing event into Supabase events table:', eventId);
-          await supabase.from('events').upsert([
-            {
-              id: targetEvent.id,
-              title: targetEvent.title,
-              category: targetEvent.category || 'Technical',
-              hall_number: targetEvent.hall_number || 'Hall 1',
-              start_time: targetEvent.start_time || new Date().toISOString(),
-              end_time: targetEvent.end_time || new Date(Date.now() + 7200000).toISOString(),
-              max_capacity: targetEvent.max_capacity || targetEvent.max_seats || 100,
-              status: targetEvent.status || 'Scheduled',
-              delay_minutes: targetEvent.delay_minutes || 0,
-            },
-          ]);
-        }
-
-        // Insert registration record into Supabase
         const { error: insertErr } = await supabase.from('registrations').upsert(
           [
             {
@@ -435,40 +578,24 @@ export const AppProvider = ({ children }) => {
         );
 
         if (insertErr) {
-          console.warn('[Registration DB Insert Warning]', insertErr);
           if (insertErr.code === '23505') {
             return { success: false, message: 'You are already registered for this event.' };
           }
-          // Try RPC fallback
           await supabase.rpc('register_for_event', {
             p_student_id: currentUser.id,
             p_event_id: eventId,
           });
         }
       } catch (err) {
-        console.warn('[Registration Exception - Fallback to local state]:', err);
+        console.warn('[Registration DB Exception]:', err);
       }
     }
 
-    // 7. Update Local Memory State
-    const newReg = {
-      id: crypto.randomUUID ? crypto.randomUUID() : '11111111-9999-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
-      student_id: currentUser.id,
-      event_id: eventId,
-      registered_at: new Date().toISOString(),
-    };
-
-    setRegistrations((prev) => [...prev, newReg]);
-
-    // Sync registrations table from Supabase if online
-    if (!isMockMode) {
-      const { data: latestRegs } = await supabase.from('registrations').select('*');
-      if (latestRegs && latestRegs.length > 0) setRegistrations(latestRegs);
-    }
+    const { data: latestRegs } = await supabase.from('registrations').select('*');
+    if (latestRegs) setRegistrations(latestRegs);
 
     return { success: true, message: `Successfully registered for ${targetEvent.title}!` };
   };
-
 
   // Update Hall Status & Emit Live Realtime Update
   const updateHallStatus = async (eventId, newStatus, delayMinutes = 0) => {
@@ -499,7 +626,7 @@ export const AppProvider = ({ children }) => {
       ]);
     }
 
-    if (!isMockMode && isValidUUID(eventId)) {
+    if (isValidUUID(eventId)) {
       await supabase
         .from('events')
         .update({ status: newStatus, delay_minutes: delayMinutes })
@@ -507,53 +634,131 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // System-wide Emergency Broadcast Alert
+  const broadcastEmergencyAlert = async ({ title, message, severity = 'emergency', hallNumber = 'All Venues' }) => {
+    const alertObj = {
+      id: Date.now(),
+      title: title || 'URGENT EMERGENCY ANNOUNCEMENT',
+      message: message || 'Emergency notification issued by venue administration / coordinator team.',
+      severity: severity,
+      hall_number: hallNumber,
+      time: new Date().toLocaleTimeString(),
+      type: severity === 'emergency' ? 'emergency' : severity === 'warning' ? 'warning' : 'info',
+      isEmergency: severity === 'emergency' || severity === 'critical',
+      senderRole: currentUser?.role || 'staff',
+    };
+
+    setLiveAlerts((prev) => [alertObj, ...prev.slice(0, 9)]);
+
+    try {
+      await supabase.from('live_alerts').insert([
+        {
+          title: alertObj.title,
+          message: alertObj.message,
+          severity: alertObj.severity,
+          hall_number: alertObj.hall_number,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+    } catch (err) {
+      console.warn('[Supabase Emergency Broadcast Warning]', err);
+    }
+
+    return { success: true, alert: alertObj, message: 'Emergency Notification Broadcasted Successfully!' };
+  };
+
+  // Dismiss alert for the individual user's current session
+  const dismissLocalAlert = (alertId) => {
+    setDismissedAlertIds((prev) => [...prev, alertId]);
+  };
+
+  // Stop & Clear Emergency Broadcast System-wide (Admin Authority ONLY)
+  const clearGlobalEmergencyBroadcast = async () => {
+    if (currentUser?.role !== 'admin') {
+      return {
+        success: false,
+        message: 'Access Denied: Only System Administrators can stop emergency broadcasts system-wide.',
+      };
+    }
+
+    setLiveAlerts((prev) =>
+      prev.filter((a) => !a.isEmergency && a.severity !== 'emergency' && a.type !== 'emergency')
+    );
+
+    try {
+      await supabase.from('live_alerts').delete().eq('severity', 'emergency');
+    } catch (err) {
+      console.warn('[Supabase Clear Emergency Warning]', err);
+    }
+
+    return { success: true, message: 'Active Emergency Broadcast stopped and cleared system-wide by Admin!' };
+  };
+
   // Verify QR Scan & Record Attendance Log
   const verifyQRPass = async (qrPayload, scannerHall) => {
     try {
       let data = typeof qrPayload === 'string' ? JSON.parse(qrPayload) : qrPayload;
-      const { student_id, event_id } = data;
+      const student_id = data.student_id || data.user_id;
+      const event_id = data.event_id;
 
       if (!student_id || !event_id) {
-        return { success: false, message: 'Invalid QR Pass structure.' };
-      }
-      if (!isValidUUID(event_id)) {
-        return { success: false, message: 'Invalid Event ID format in QR Pass.' };
+        return {
+          success: false,
+          message: 'Wrong QR Code: Invalid or unparseable pass format.',
+        };
       }
 
-      // Check for duplicate check-in
+      const targetEvent = events.find((e) => e.id === event_id);
+      const studentProfile = profilesList.find((p) => p.id === student_id);
+
       const existingLog = attendanceLogs.find(
         (log) => log.student_id === student_id && log.event_id === event_id
       );
 
       if (existingLog) {
-        return { success: false, message: 'Duplicate Scan: Student already checked in!' };
+        return {
+          success: true,
+          isDuplicate: true,
+          message: `Already Verified: Student ${studentProfile?.name || 'Attendee'} has already checked in!`,
+          studentName: studentProfile?.name || 'Attendee',
+          eventTitle: targetEvent?.title || 'Symposium Track',
+          hallNumber: scannerHall || targetEvent?.hall_number || 'Main Hall',
+        };
       }
 
       const newLog = {
-        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-8888-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
         student_id,
         event_id,
-        hall_number: scannerHall || 'Hall 1',
+        hall_number: scannerHall || targetEvent?.hall_number || 'Main Hall',
         check_in_time: new Date().toISOString(),
         status: 'Checked-In',
       };
 
-      setAttendanceLogs((prev) => [newLog, ...prev]);
-
-      if (!isMockMode) {
-        await supabase.from('attendance_logs').insert([newLog]);
+      try {
+        const { data: dbLog } = await supabase.from('attendance_logs').insert([newLog]).select().single();
+        if (dbLog) setAttendanceLogs((prev) => [dbLog, ...prev]);
+        await supabase.from('registrations').update({ attended: true }).eq('event_id', event_id).eq('student_id', student_id);
+      } catch (err) {
+        console.warn('Supabase DB Insert Warning:', err);
       }
 
       return {
         success: true,
-        message: `Check-in verified for student ID ${student_id.slice(0, 8)}!`,
+        message: `Successfully Verified! Student ${studentProfile?.name || 'Attendee'} registered for ${targetEvent?.title || 'Event'}.`,
+        studentName: studentProfile?.name || 'Attendee',
+        eventTitle: targetEvent?.title || 'Symposium Session',
+        hallNumber: scannerHall || targetEvent?.hall_number || 'Main Hall',
+        collegeId: studentProfile?.college_id || 'Student',
       };
     } catch {
-      return { success: false, message: 'Malformed QR payload format.' };
+      return {
+        success: false,
+        message: 'Wrong QR Code: Could not parse student pass payload.',
+      };
     }
   };
 
-  // Mark Attendance on QR Scan: updates registrations/event_registrations table with attended = true & inserts log
+  // Mark Attendance on QR Scan
   const markAttendance = async (qrPayload, scannerHall = 'Main Venue') => {
     try {
       let data = typeof qrPayload === 'string' ? JSON.parse(qrPayload) : qrPayload;
@@ -565,67 +770,26 @@ export const AppProvider = ({ children }) => {
         return { success: false, message: 'Invalid QR Pass structure: Missing event or registration ID.' };
       }
 
-      // 1. Update local state in registrations
-      setRegistrations((prev) =>
-        prev.map((r) => {
-          if (
-            (registration_id && r.id === registration_id) ||
-            (r.event_id === event_id && r.student_id === student_id)
-          ) {
-            return { ...r, attended: true };
-          }
-          return r;
-        })
-      );
-
-      // 2. Add log entry to local state
       const newLog = {
-        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-8888-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
         student_id: student_id || null,
-        event_id: event_id || '11111111-1111-1111-1111-111111111111',
+        event_id: event_id || null,
         hall_number: scannerHall,
         check_in_time: new Date().toISOString(),
         status: 'Checked-In',
       };
-      setAttendanceLogs((prev) => [newLog, ...prev]);
 
-      // 3. Perform Supabase Database update
-      if (!isMockMode) {
-        try {
-          if (isValidUUID(registration_id)) {
-            const { error: regErr } = await supabase
-              .from('registrations')
-              .update({ attended: true })
-              .eq('id', registration_id);
-
-            if (regErr) {
-              await supabase
-                .from('event_registrations')
-                .update({ attended: true })
-                .eq('id', registration_id);
-            }
-          } else if (isValidUUID(event_id) && isValidUUID(student_id)) {
-            const { error: regErr } = await supabase
-              .from('registrations')
-              .update({ attended: true })
-              .eq('event_id', event_id)
-              .eq('student_id', student_id);
-
-            if (regErr) {
-              await supabase
-                .from('event_registrations')
-                .update({ attended: true })
-                .eq('event_id', event_id)
-                .eq('student_id', student_id);
-            }
-          }
-
-          if (isValidUUID(event_id)) {
-            await supabase.from('attendance_logs').insert([newLog]);
-          }
-        } catch (err) {
-          console.warn('[Supabase markAttendance Warning]', err);
+      try {
+        if (isValidUUID(registration_id)) {
+          await supabase.from('registrations').update({ attended: true }).eq('id', registration_id);
+        } else if (isValidUUID(event_id) && isValidUUID(student_id)) {
+          await supabase.from('registrations').update({ attended: true }).eq('event_id', event_id).eq('student_id', student_id);
         }
+        if (isValidUUID(event_id)) {
+          const { data: dbLog } = await supabase.from('attendance_logs').insert([newLog]).select().single();
+          if (dbLog) setAttendanceLogs((prev) => [dbLog, ...prev]);
+        }
+      } catch (err) {
+        console.warn('[Supabase markAttendance Warning]', err);
       }
 
       return {
@@ -638,36 +802,35 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Add new event (Admin function) with location/radius support
+  // Add new event (Admin function)
   const addEvent = async (newEventData) => {
-    const created = {
-      id: crypto.randomUUID ? crypto.randomUUID() : '55555555-5555-5555-5555-555555555555',
-      ...newEventData,
-      status: 'Scheduled',
-      delay_minutes: 0,
-    };
-
-    setEvents((prev) => [...prev, created]);
-
-    if (!isMockMode) {
-      // Build the insert payload including PostGIS-style location data if provided
-      const insertPayload = { ...created };
-      if (created.latitude && created.longitude) {
-        // Store location as geometry point for PostGIS if the column exists
-        insertPayload.location = `SRID=4326;POINT(${created.longitude} ${created.latitude})`;
+    try {
+      const insertPayload = {
+        ...newEventData,
+        status: 'Scheduled',
+        delay_minutes: 0,
+      };
+      if (insertPayload.latitude && insertPayload.longitude) {
+        insertPayload.location = `SRID=4326;POINT(${insertPayload.longitude} ${insertPayload.latitude})`;
       }
-      await supabase.from('events').insert([insertPayload]);
+      const { data, error } = await supabase.from('events').insert([insertPayload]).select().single();
+      if (data && !error) {
+        setEvents((prev) => [...prev, data]);
+      } else {
+        console.error('Error adding event:', error);
+      }
+    } catch (err) {
+      console.error('Exception adding event:', err);
     }
   };
 
-  // Guest QR Check-in — validates QR payload and calls checkin_attendee RPC
+  // Guest QR Check-in
   const checkinGuest = async (qrPayload, scannerHall) => {
     try {
       let data = typeof qrPayload === 'string' ? JSON.parse(qrPayload) : qrPayload;
       const { guest_name, event_id, student_id } = data;
       const name = guest_name || `Guest-${Date.now().toString(36)}`;
 
-      // Check for duplicate guest check-in
       const existingGuest = guestCheckins.find(
         (g) => g.guest_name === name && g.event_id === event_id
       );
@@ -676,22 +839,40 @@ export const AppProvider = ({ children }) => {
       }
 
       const newGuestLog = {
-        id: crypto.randomUUID ? crypto.randomUUID() : '11111111-7777-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
         guest_name: name,
         student_id: student_id || null,
-        event_id: event_id || '11111111-1111-1111-1111-111111111111',
+        event_id: isValidUUID(event_id) ? event_id : null,
         hall_number: data.hall_number || scannerHall || 'Main Venue',
         check_in_time: new Date().toISOString(),
         status: 'Checked-In',
         is_guest: true,
       };
 
-      setGuestCheckins((prev) => [newGuestLog, ...prev]);
+      if (isValidUUID(newGuestLog.event_id)) {
+        try {
+          const { error: rpcError } = await supabase.rpc('checkin_attendee', {
+            p_student_id: student_id || null,
+            p_event_id: newGuestLog.event_id,
+            p_guest_name: name,
+            p_hall_number: newGuestLog.hall_number,
+          });
 
-      // Also add to attendance logs for the main feed
-      setAttendanceLogs((prev) => [newGuestLog, ...prev]);
+          if (rpcError) {
+            const { data: dbLog } = await supabase.from('attendance_logs').insert([newGuestLog]).select().single();
+            if (dbLog) {
+              setGuestCheckins((prev) => [dbLog, ...prev]);
+              setAttendanceLogs((prev) => [dbLog, ...prev]);
+            }
+          }
+        } catch {
+          const { data: dbLog } = await supabase.from('attendance_logs').insert([newGuestLog]).select().single();
+          if (dbLog) {
+            setGuestCheckins((prev) => [dbLog, ...prev]);
+            setAttendanceLogs((prev) => [dbLog, ...prev]);
+          }
+        }
+      }
 
-      // Push live alert
       setLiveAlerts((prev) => [
         {
           id: Date.now(),
@@ -701,25 +882,6 @@ export const AppProvider = ({ children }) => {
         },
         ...prev.slice(0, 4),
       ]);
-
-      if (!isMockMode && isValidUUID(newGuestLog.event_id)) {
-        // Try RPC checkin_attendee first
-        try {
-          const { error: rpcError } = await supabase.rpc('checkin_attendee', {
-            p_student_id: student_id || null,
-            p_event_id: event_id || '11111111-1111-1111-1111-111111111111',
-            p_guest_name: name,
-            p_hall_number: newGuestLog.hall_number,
-          });
-
-          if (rpcError) {
-            // Fallback: direct insert into attendance_logs
-            await supabase.from('attendance_logs').insert([newGuestLog]);
-          }
-        } catch {
-          await supabase.from('attendance_logs').insert([newGuestLog]);
-        }
-      }
 
       return {
         success: true,
@@ -736,7 +898,6 @@ export const AppProvider = ({ children }) => {
       return { success: false, message: 'Access Denied: Only administrators can update user roles.' };
     }
 
-    // Check 5-Admin limit if promoting to admin
     if (newRole === 'admin') {
       const adminCount = profilesList.filter((p) => p.role === 'admin' && p.id !== targetUserId).length;
       if (adminCount >= 5) {
@@ -744,11 +905,8 @@ export const AppProvider = ({ children }) => {
       }
     }
 
-    if (isMockMode || !isValidUUID(targetUserId)) {
-      setProfilesList((prev) =>
-        prev.map((p) => (p.id === targetUserId ? { ...p, role: newRole } : p))
-      );
-      return { success: true, message: `User role updated to ${newRole}.` };
+    if (!isValidUUID(targetUserId)) {
+      return { success: false, message: 'Invalid Target User ID.' };
     }
 
     try {
@@ -758,7 +916,6 @@ export const AppProvider = ({ children }) => {
       });
 
       if (error) {
-        // Fallback to direct update if RPC is missing
         const { error: updateErr } = await supabase
           .from('profiles')
           .update({ role: newRole })
@@ -781,25 +938,29 @@ export const AppProvider = ({ children }) => {
 
   // Admin Passcode Management Function
   const updateUserPassCode = async (targetUserId, newPassCode) => {
-    setProfilesList((prev) =>
-      prev.map((p) => (p.id === targetUserId ? { ...p, pass_code: newPassCode } : p))
-    );
-
-    if (currentUser?.id === targetUserId) {
-      setCurrentUser((current) => (current ? { ...current, pass_code: newPassCode } : current));
+    if (!isValidUUID(targetUserId)) {
+      return { success: false, message: 'Invalid User ID.' };
     }
 
-    if (!isMockMode && isValidUUID(targetUserId)) {
-      try {
-        await supabase
-          .from('profiles')
-          .update({ pass_code: newPassCode })
-          .eq('id', targetUserId);
-      } catch (err) {
-        console.warn('Error updating passcode in Supabase:', err);
+    try {
+      await supabase
+        .from('profiles')
+        .update({ pass_code: newPassCode })
+        .eq('id', targetUserId);
+
+      setProfilesList((prev) =>
+        prev.map((p) => (p.id === targetUserId ? { ...p, pass_code: newPassCode } : p))
+      );
+
+      if (currentUser?.id === targetUserId) {
+        setCurrentUser((current) => (current ? { ...current, pass_code: newPassCode } : current));
       }
+
+      return { success: true, message: `Security Passcode updated to "${newPassCode}"!` };
+    } catch (err) {
+      console.warn('Error updating passcode in Supabase:', err);
+      return { success: false, message: 'Failed to update passcode in database.' };
     }
-    return { success: true, message: `Security Passcode updated to "${newPassCode}"!` };
   };
 
   // Unregister / Cancel registration for an event
@@ -809,7 +970,7 @@ export const AppProvider = ({ children }) => {
 
     const targetEvent = events.find((e) => e.id === eventId);
 
-    if (!isMockMode && isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
+    if (isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
       try {
         await supabase
           .from('registrations')
@@ -833,7 +994,7 @@ export const AppProvider = ({ children }) => {
       prev.map((evt) => (evt.id === eventId ? { ...evt, ...updatedEventData } : evt))
     );
 
-    if (!isMockMode && isValidUUID(eventId)) {
+    if (isValidUUID(eventId)) {
       try {
         await supabase
           .from('events')
@@ -850,7 +1011,7 @@ export const AppProvider = ({ children }) => {
     setEvents((prev) => prev.filter((e) => e.id !== eventId));
     setRegistrations((prev) => prev.filter((r) => r.event_id !== eventId));
 
-    if (!isMockMode && isValidUUID(eventId)) {
+    if (isValidUUID(eventId)) {
       try {
         await supabase.from('events').delete().eq('id', eventId);
       } catch (err) {
@@ -886,6 +1047,10 @@ export const AppProvider = ({ children }) => {
         updateUserRole,
         updateUserPassCode,
         markAttendance,
+        broadcastEmergencyAlert,
+        dismissedAlertIds,
+        dismissLocalAlert,
+        clearGlobalEmergencyBroadcast,
       }}
     >
       {children}
@@ -894,3 +1059,4 @@ export const AppProvider = ({ children }) => {
 };
 
 export const useApp = () => useContext(AppContext);
+

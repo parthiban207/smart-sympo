@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext';
 import { usePresence } from '../hooks/usePresence';
 import QRScannerModal from '../components/QRScannerModal';
 import ViewRegisteredStudentsModal from '../components/ViewRegisteredStudentsModal';
+import EmergencyBroadcastModal from '../components/EmergencyBroadcastModal';
 import {
   ShieldCheck, PlusCircle, MapPin, Activity, Radio, UserCheck, Users, Signal,
   Globe, Crosshair, Ruler, FileText, ScanLine, Clock, Hash, CheckCircle2, AlertCircle,
@@ -25,6 +26,7 @@ export default function AdminAnalytics() {
   const [selectedRosterEvent, setSelectedRosterEvent] = useState(null);
 
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [updatingUser, setUpdatingUser] = useState(null);
   const [roleFeedback, setRoleFeedback] = useState(null);
@@ -210,7 +212,14 @@ export default function AdminAnalytics() {
           </p>
         </div>
 
-        <div className="flex gap-2 w-full md:w-auto">
+        <div className="flex gap-2 w-full md:w-auto flex-wrap sm:flex-nowrap">
+          <button
+            onClick={() => setShowEmergencyModal(true)}
+            className="flex-1 md:flex-none px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer border border-rose-500 animate-pulse"
+          >
+            <Radio className="w-4 h-4 text-white" />
+            Emergency Broadcast
+          </button>
           <button
             onClick={() => setIsScannerOpen(true)}
             className="flex-1 md:flex-none px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
@@ -1031,6 +1040,11 @@ export default function AdminAnalytics() {
         event={selectedRosterEvent}
         registrations={registrations}
         profilesList={profilesList}
+      />
+      {/* Emergency Broadcast Modal */}
+      <EmergencyBroadcastModal
+        isOpen={showEmergencyModal}
+        onClose={() => setShowEmergencyModal(false)}
       />
     </div>
   );

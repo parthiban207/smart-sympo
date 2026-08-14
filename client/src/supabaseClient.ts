@@ -8,7 +8,10 @@ const supabaseAnonKey =
   import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder';
 
 export const isMockMode =
-  supabaseUrl.includes('placeholder') || supabaseAnonKey.includes('placeholder');
+  !import.meta.env.VITE_SUPABASE_URL ||
+  import.meta.env.VITE_SUPABASE_URL.includes('placeholder') ||
+  !import.meta.env.VITE_SUPABASE_ANON_KEY ||
+  import.meta.env.VITE_SUPABASE_ANON_KEY.includes('placeholder');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 

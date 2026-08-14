@@ -1,7 +1,7 @@
 // agent-notes: { ctx: "Custom hook to fetch and return logged-in user role from profiles table", deps: ["src/supabaseClient.ts"], state: "active", last: "antigravity@2026-07-31" }
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
+import { supabase, isValidUUID } from '../supabaseClient';
 
 export type UserRole = 'student' | 'coordinator' | 'admin';
 
@@ -25,15 +25,7 @@ export function useUserRole() {
   const fetchRoleAndProfile = useCallback(async (userId: string, userEmail?: string) => {
     setLoading(true);
     try {
-      if (isMockMode || !isValidUUID(userId)) {
-        setRole('student');
-        setProfile({
-          id: isValidUUID(userId) ? userId : '11111111-0000-0000-0000-000000000001',
-          full_name: 'Alex Rivera',
-          email: userEmail || 'alex.rivera@college.edu',
-          role: 'student',
-          college_id: 'CS2026-8941',
-        });
+      if (!isValidUUID(userId)) {
         setLoading(false);
         return;
       }

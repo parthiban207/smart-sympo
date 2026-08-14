@@ -35,7 +35,7 @@ export default function StudentQRPass({
 
   // Generate payload encoding registration_id, event_id, user_id, timestamp token and security signature
   const payloadData = {
-    registration_id: registrationId || `11111111-9999-9999-9999-${studentId?.slice(-12) || '111111111111'}`,
+    registration_id: registrationId || (studentId ? `reg-${studentId.slice(0, 8)}` : ''),
     event_id: eventId,
     user_id: studentId,
     student_id: studentId,

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { X, Lock, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
+import { supabase, isValidUUID } from '../supabaseClient';
 
 export default function PassCodeGuardModal({ isOpen, onClose, studentId, studentName, onSuccess }) {
   const [passCode, setPassCode] = useState('');
@@ -25,8 +25,7 @@ export default function PassCodeGuardModal({ isOpen, onClose, studentId, student
     }
 
     try {
-      if (isMockMode || !isValidUUID(studentId)) {
-        // Default demo PIN is 2005
+      if (!isValidUUID(studentId)) {
         if (passCode === '2005' || passCode.length >= 4) {
           setSuccessMsg('Pass code verified!');
           setTimeout(() => {
