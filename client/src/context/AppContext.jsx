@@ -564,14 +564,32 @@ export const AppProvider = ({ children }) => {
       return { success: false, message: msg };
     }
 
-    if (isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
+    const newReg = {
+      id: crypto.randomUUID ? crypto.randomUUID() : 'reg-' + Date.now().toString(16),
+      student_id: currentUser.id,
+      event_id: eventId,
+      registered_at: new Date().toISOString(),
+      attended: false,
+    };
+
+    setRegistrations((prev) => {
+      const updated = [...prev, newReg];
+      try {
+        localStorage.setItem('smart_sympo_registrations', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('LocalStorage registrations save error:', e);
+      }
+      return updated;
+    });
+
+    if (!isMockMode && isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
       try {
         const { error: insertErr } = await supabase.from('registrations').upsert(
           [
             {
               student_id: currentUser.id,
               event_id: eventId,
-              registered_at: new Date().toISOString(),
+              registered_at: newReg.registered_at,
             },
           ],
           { onConflict: 'student_id,event_id' }
@@ -587,12 +605,9 @@ export const AppProvider = ({ children }) => {
           });
         }
       } catch (err) {
-        console.warn('[Registration DB Exception]:', err);
+        console.warn('[Registration DB Exception - saved locally]:', err);
       }
     }
-
-    const { data: latestRegs } = await supabase.from('registrations').select('*');
-    if (latestRegs) setRegistrations(latestRegs);
 
     return { success: true, message: `Successfully registered for ${targetEvent.title}!` };
   };
@@ -802,26 +817,76 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Add new event (Admin function)
+  // Add new event (Admin & Coordinator function)
   const addEvent = async (newEventData) => {
-    try {
-      const insertPayload = {
-        ...newEventData,
-        status: 'Scheduled',
-        delay_minutes: 0,
-      };
-      if (insertPayload.latitude && insertPayload.longitude) {
-        insertPayload.location = `SRID=4326;POINT(${insertPayload.longitude} ${insertPayload.latitude})`;
+    const newEventId = crypto.randomUUID
+      ? crypto.randomUUID()
+      : '11111111-2222-4000-8000-' + Date.now().toString(16).padStart(12, '0');
+
+    const eventRecord = {
+      id: newEventId,
+      title: newEventData.title,
+      description: newEventData.description || '',
+      category: newEventData.category || 'Technical',
+      hall_number: newEventData.hall_number || 'Hall 1 (Main Auditorium)',
+      start_time: newEventData.start_time || new Date().toISOString(),
+      end_time: newEventData.end_time || new Date(Date.now() + 7200000).toISOString(),
+      max_capacity: Number(newEventData.max_capacity || newEventData.max_seats || 100),
+      max_seats: Number(newEventData.max_capacity || newEventData.max_seats || 100),
+      status: newEventData.status || 'Scheduled',
+      delay_minutes: Number(newEventData.delay_minutes || 0),
+      latitude: newEventData.latitude ? parseFloat(newEventData.latitude) : null,
+      longitude: newEventData.longitude ? parseFloat(newEventData.longitude) : null,
+      allowed_radius: Number(newEventData.allowed_radius || 200),
+    };
+
+    setEvents((prev) => {
+      const updated = [eventRecord, ...prev];
+      try {
+        localStorage.setItem('smart_sympo_events', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
       }
-      const { data, error } = await supabase.from('events').insert([insertPayload]).select().single();
-      if (data && !error) {
-        setEvents((prev) => [...prev, data]);
-      } else {
-        console.error('Error adding event:', error);
+      return updated;
+    });
+
+    setLiveAlerts((prev) => [
+      {
+        id: Date.now(),
+        message: `New Event Added: ${eventRecord.title} at ${eventRecord.hall_number}`,
+        time: new Date().toLocaleTimeString(),
+        type: 'info',
+      },
+      ...prev.slice(0, 4),
+    ]);
+
+    if (!isMockMode) {
+      try {
+        const insertPayload = {
+          id: eventRecord.id,
+          title: eventRecord.title,
+          description: eventRecord.description,
+          category: eventRecord.category,
+          hall_number: eventRecord.hall_number,
+          start_time: eventRecord.start_time,
+          end_time: eventRecord.end_time,
+          max_capacity: eventRecord.max_capacity,
+          status: eventRecord.status,
+          delay_minutes: eventRecord.delay_minutes,
+        };
+        if (eventRecord.latitude && eventRecord.longitude) {
+          insertPayload.location = `SRID=4326;POINT(${eventRecord.longitude} ${eventRecord.latitude})`;
+        }
+        const { data, error } = await supabase.from('events').insert([insertPayload]).select().single();
+        if (data && !error) {
+          setEvents((prev) => prev.map((e) => (e.id === newEventId ? data : e)));
+        }
+      } catch (err) {
+        console.warn('Supabase addEvent warning (saved locally):', err);
       }
-    } catch (err) {
-      console.error('Exception adding event:', err);
     }
+
+    return { success: true, event: eventRecord };
   };
 
   // Guest QR Check-in
@@ -970,7 +1035,17 @@ export const AppProvider = ({ children }) => {
 
     const targetEvent = events.find((e) => e.id === eventId);
 
-    if (isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
+    setRegistrations((prev) => {
+      const updated = prev.filter((r) => !(r.student_id === currentUser.id && r.event_id === eventId));
+      try {
+        localStorage.setItem('smart_sympo_registrations', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
+      }
+      return updated;
+    });
+
+    if (!isMockMode && isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
       try {
         await supabase
           .from('registrations')
@@ -982,9 +1057,6 @@ export const AppProvider = ({ children }) => {
       }
     }
 
-    setRegistrations((prev) =>
-      prev.filter((r) => !(r.student_id === currentUser.id && r.event_id === eventId))
-    );
     return { success: true, message: `Successfully unregistered from ${targetEvent?.title || 'the event'}.` };
   };
 

@@ -124,8 +124,9 @@ export default function AdminAnalytics() {
     e.preventDefault();
     if (!formData.title || !formData.start_time || !formData.end_time) return;
 
-    if (currentUser?.role !== 'admin') {
-      alert('Access Denied: Only admins can create events.');
+    const userRole = (currentUser?.role || localStorage.getItem('smart_sympo_active_role') || '').toLowerCase();
+    if (userRole !== 'admin' && userRole !== 'coordinator') {
+      alert('Access Denied: Only admins or coordinators can create events.');
       return;
     }
 

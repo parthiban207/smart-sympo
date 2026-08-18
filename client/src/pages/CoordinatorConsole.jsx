@@ -104,8 +104,11 @@ export default function CoordinatorConsole() {
     if (!formData.title || !formData.start_time || !formData.end_time) return;
     await addEvent({
       ...formData,
-      hall_number: selectedHall,
-      max_seats: formData.max_capacity,
+      start_time: new Date(formData.start_time).toISOString(),
+      end_time: new Date(formData.end_time).toISOString(),
+      hall_number: formData.hall_number || selectedHall,
+      max_capacity: Number(formData.max_capacity) || 100,
+      max_seats: Number(formData.max_capacity) || 100,
     });
     setShowAddModal(false);
     setFormData({
