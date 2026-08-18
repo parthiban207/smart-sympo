@@ -15,7 +15,8 @@ import {
 export default function AdminAnalytics() {
   const {
     events, registrations, attendanceLogs, addEvent, updateEvent, deleteEvent,
-    guestCheckins, currentUser, profilesList, updateUserRole, updateUserPassCode
+    guestCheckins, currentUser, profilesList, updateUserRole, updateUserPassCode,
+    deleteUserAccount, clearAllAccounts
   } = useApp();
   const { onlineUsers, onlineCount } = usePresence();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -112,6 +113,22 @@ export default function AdminAnalytics() {
     });
     setShowEditModal(false);
     setEditingEvent(null);
+  };
+
+  const handleDeleteAccount = async (userId, userName) => {
+    if (window.confirm(`Are you sure you want to permanently delete account "${userName || 'User'}"?`)) {
+      const res = await deleteUserAccount(userId);
+      setRoleFeedback({ text: res.message || 'Account deleted successfully!', type: 'success' });
+      setTimeout(() => setRoleFeedback(null), 3000);
+    }
+  };
+
+  const handleClearAllAccounts = async () => {
+    if (window.confirm('⚠️ Are you sure you want to delete ALL accounts? This will wipe the accounts list so you can create new accounts.')) {
+      const res = await clearAllAccounts();
+      setRoleFeedback({ text: res.message || 'All accounts deleted!', type: 'success' });
+      setTimeout(() => setRoleFeedback(null), 3000);
+    }
   };
 
   const handleDeleteClick = async (evt) => {
@@ -336,6 +353,14 @@ export default function AdminAnalytics() {
             <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
               Students: <strong>{studentCount}</strong>
             </span>
+            <button
+              onClick={handleClearAllAccounts}
+              className="px-3 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
+              title="Delete all accounts to start fresh"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Clear All Accounts
+            </button>
           </div>
         </div>
 
@@ -480,6 +505,14 @@ export default function AdminAnalytics() {
                               Demote to Student
                             </button>
                           )}
+                          <button
+                            onClick={() => handleDeleteAccount(user.id, user.full_name || user.name || user.email)}
+                            disabled={updatingUser === user.id}
+                            title="Delete Account"
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>

@@ -12,38 +12,7 @@ const getStoredAccounts = () => {
   } catch {
     // fallback
   }
-  return [
-    {
-      id: '11111111-0000-0000-0000-000000000001',
-      name: 'Alex Rivera',
-      full_name: 'Alex Rivera',
-      username: 'alex_rivera',
-      email: 'alex.rivera@college.edu',
-      password: 'student123',
-      role: 'student',
-      college_id: 'CS2026-8941',
-    },
-    {
-      id: '11111111-0000-0000-0000-000000000002',
-      name: 'Sarah Chen',
-      full_name: 'Sarah Chen (Coordinator)',
-      username: 'sarah_chen',
-      email: 'sarah.chen@college.edu',
-      password: 'coord123',
-      role: 'coordinator',
-      college_id: 'FAC-7712',
-    },
-    {
-      id: '11111111-0000-0000-0000-000000000003',
-      name: 'Dr. Marcus Vance',
-      full_name: 'Dr. Marcus Vance (Admin)',
-      username: 'marcus_vance',
-      email: 'marcus.vance@college.edu',
-      password: 'admin123',
-      role: 'admin',
-      college_id: 'ADM-0001',
-    },
-  ];
+  return [];
 };
 
 export const AppProvider = ({ children }) => {
@@ -1092,6 +1061,56 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  // Delete user account permanently
+  const deleteUserAccount = async (userId) => {
+    setProfilesList((prev) => {
+      const updated = prev.filter((p) => p.id !== userId);
+      try {
+        localStorage.setItem('smart_sympo_accounts', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
+      }
+      return updated;
+    });
+
+    if (currentUser?.id === userId) {
+      signOutFromSupabase();
+    }
+
+    if (!isMockMode && isValidUUID(userId)) {
+      try {
+        await supabase.from('profiles').delete().eq('id', userId);
+      } catch (err) {
+        console.warn('Supabase delete profile error:', err);
+      }
+    }
+
+    return { success: true, message: 'Account deleted successfully!' };
+  };
+
+  // Clear all accounts
+  const clearAllAccounts = async () => {
+    setProfilesList([]);
+    try {
+      localStorage.removeItem('smart_sympo_accounts');
+      localStorage.removeItem('smart_sympo_user');
+      localStorage.removeItem('smart_sympo_active_role');
+    } catch (e) {
+      console.warn('LocalStorage clear error:', e);
+    }
+
+    if (!isMockMode) {
+      try {
+        await supabase.from('profiles').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      } catch (err) {
+        console.warn('Supabase clear profiles error:', err);
+      }
+    }
+
+    signOutFromSupabase();
+    return { success: true, message: 'All accounts cleared successfully!' };
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -1118,6 +1137,8 @@ export const AppProvider = ({ children }) => {
         checkinGuest,
         updateUserRole,
         updateUserPassCode,
+        deleteUserAccount,
+        clearAllAccounts,
         markAttendance,
         broadcastEmergencyAlert,
         dismissedAlertIds,
