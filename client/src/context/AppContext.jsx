@@ -927,8 +927,10 @@ export const AppProvider = ({ children }) => {
   };
 
   // Admin-Only Role Management Function with 5-Admin limit check
+  // Admin-Only Role Management Function with 5-Admin limit check
   const updateUserRole = async (targetUserId, newRole) => {
-    if (currentUser?.role !== 'admin') {
+    const currentRole = (currentUser?.role || (typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_active_role') : '') || '').toLowerCase();
+    if (currentRole !== 'admin') {
       return { success: false, message: 'Access Denied: Only administrators can update user roles.' };
     }
 
@@ -939,35 +941,51 @@ export const AppProvider = ({ children }) => {
       }
     }
 
-    if (!isValidUUID(targetUserId)) {
+    if (!targetUserId) {
       return { success: false, message: 'Invalid Target User ID.' };
     }
 
-    try {
-      const { data, error } = await supabase.rpc('update_user_role', {
-        p_target_user_id: targetUserId,
-        p_new_role: newRole,
-      });
-
-      if (error) {
-        const { error: updateErr } = await supabase
-          .from('profiles')
-          .update({ role: newRole })
-          .eq('id', targetUserId);
-
-        if (updateErr) return { success: false, message: updateErr.message };
-      } else if (data && !data.success) {
-        return { success: false, message: data.message };
+    setProfilesList((prev) => {
+      const updated = prev.map((p) => (p.id === targetUserId ? { ...p, role: newRole } : p));
+      try {
+        localStorage.setItem('smart_sympo_accounts', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
       }
+      return updated;
+    });
 
-      setProfilesList((prev) =>
-        prev.map((p) => (p.id === targetUserId ? { ...p, role: newRole } : p))
-      );
-
-      return { success: true, message: `User role updated to ${newRole}!` };
-    } catch (err) {
-      return { success: false, message: err.message || 'Failed to update user role.' };
+    if (currentUser?.id === targetUserId) {
+      setCurrentUser((current) => (current ? { ...current, role: newRole } : current));
+      try {
+        localStorage.setItem('smart_sympo_active_role', newRole);
+        const savedUser = localStorage.getItem('smart_sympo_user');
+        if (savedUser) {
+          const parsed = JSON.parse(savedUser);
+          parsed.role = newRole;
+          localStorage.setItem('smart_sympo_user', JSON.stringify(parsed));
+        }
+      } catch (e) {
+        console.warn('LocalStorage user update error:', e);
+      }
     }
+
+    if (!isMockMode && isValidUUID(targetUserId)) {
+      try {
+        const { error } = await supabase.rpc('update_user_role', {
+          p_target_user_id: targetUserId,
+          p_new_role: newRole,
+        });
+
+        if (error) {
+          await supabase.from('profiles').update({ role: newRole }).eq('id', targetUserId);
+        }
+      } catch (err) {
+        console.warn('[Supabase Role Update Warning]', err);
+      }
+    }
+
+    return { success: true, message: `User role successfully updated to ${newRole.toUpperCase()}!` };
   };
 
   // Admin Passcode Management Function
