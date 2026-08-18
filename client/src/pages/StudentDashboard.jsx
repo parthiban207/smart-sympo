@@ -25,7 +25,12 @@ export default function StudentDashboard() {
 
   // Get event details for student's registered events
   const studentRegIds = registrations
-    .filter((r) => r.student_id === currentUser.id)
+    .filter(
+      (r) =>
+        r.student_id === currentUser.id ||
+        (r.student_email && currentUser.email && r.student_email.toLowerCase() === currentUser.email.toLowerCase()) ||
+        (r.student_username && currentUser.username && r.student_username.toLowerCase() === currentUser.username.toLowerCase())
+    )
     .map((r) => r.event_id);
 
   const registeredEvents = events

@@ -88,12 +88,7 @@ export const AppProvider = ({ children }) => {
       const saved = localStorage.getItem('smart_sympo_registrations');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          const validParsed = parsed.filter(
-            (r) => isValidUUID(r.event_id) && isValidUUID(r.student_id)
-          );
-          if (validParsed.length > 0) return validParsed;
-        }
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // Fallback if localStorage reading fails
@@ -468,18 +463,23 @@ export const AppProvider = ({ children }) => {
       full_name: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
       username: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
       email: cleanInput.includes('@') ? cleanInput : `${cleanInput}@college.edu`,
+      password: password,
       role,
       college_id: `${role.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
     };
 
-    setCurrentUser(fallbackUser);
-    setIsAuthenticated(true);
+    accounts.push(fallbackUser);
     try {
+      localStorage.setItem('smart_sympo_accounts', JSON.stringify(accounts));
       localStorage.setItem('smart_sympo_active_role', role);
       localStorage.setItem('smart_sympo_user', JSON.stringify(fallbackUser));
     } catch (e) {
       console.warn('LocalStorage save error:', e);
     }
+
+    setProfilesList((prev) => [...prev, fallbackUser]);
+    setCurrentUser(fallbackUser);
+    setIsAuthenticated(true);
     return { success: true, user: fallbackUser, profile: fallbackUser };
   };
 

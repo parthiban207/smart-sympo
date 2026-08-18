@@ -16,8 +16,10 @@ export default function ProtectedRoute({ allowedRoles, children }: ProtectedRout
   const location = useLocation();
   const [deniedMsg, setDeniedMsg] = useState<string | null>(null);
 
-  const activeRole: UserRole = (currentUser?.role as UserRole) || 'student';
-  const isLoggedIn = isAuthenticated || Boolean(currentUser?.id);
+  const savedRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_active_role') : null) as UserRole | null;
+  const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_user') : null;
+  const activeRole: UserRole = (currentUser?.role as UserRole) || savedRole || 'student';
+  const isLoggedIn = isAuthenticated || Boolean(currentUser?.id) || Boolean(savedUserStr);
 
   useEffect(() => {
     if (isLoggedIn && !allowedRoles.includes(activeRole)) {
