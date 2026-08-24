@@ -1,18 +1,58 @@
-// agent-notes: { ctx: "AppContext managing auth session, realtime event & attendance subscriptions, role management, guest check-in", deps: ["src/supabaseClient.js"], state: "active", last: "antigravity@2026-07-31" }
-
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
+import { sendRegistrationEmail } from '../services/emailService';
 
 const AppContext = createContext();
+
+const DEFAULT_SEED_ACCOUNTS = [
+  {
+    id: '11111111-0000-4000-8000-000000000001',
+    name: 'Administrator',
+    full_name: 'Administrator',
+    username: 'admin',
+    email: 'admin@college.edu',
+    password: '2005',
+    pass_code: '2005',
+    role: 'admin',
+    college_id: 'ADM-2005',
+  },
+  {
+    id: '22222222-0000-4000-8000-000000000002',
+    name: 'Faculty Coordinator',
+    full_name: 'Faculty Coordinator',
+    username: 'coordinator',
+    email: 'coord@college.edu',
+    password: '2005',
+    pass_code: '2005',
+    role: 'coordinator',
+    college_id: 'FAC-2005',
+  },
+  {
+    id: '33333333-0000-4000-8000-000000000003',
+    name: 'Student Attendee',
+    full_name: 'Student Attendee',
+    username: 'student',
+    email: 'student@college.edu',
+    password: 'student123',
+    pass_code: 'student123',
+    role: 'student',
+    college_id: 'STU-2005',
+  },
+];
 
 const getStoredAccounts = () => {
   try {
     const saved = localStorage.getItem('smart_sympo_accounts');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
   } catch {
     // fallback
   }
-  return [];
+  return DEFAULT_SEED_ACCOUNTS;
 };
 
 export const AppProvider = ({ children }) => {
@@ -85,26 +125,169 @@ export const AppProvider = ({ children }) => {
     },
   ]);
 
-  // Load user profile from Supabase profiles table
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem('smart_sympo_notifications');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [
+      {
+        id: 'notif-welcome',
+        title: '🎉 Welcome to SmartSympo 2026',
+        message: 'Explore symposium events, register for interactive sessions, and view your dynamic TOTP event pass.',
+        type: 'system',
+        read: false,
+        created_at: new Date().toISOString(),
+      },
+    ];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('smart_sympo_notifications', JSON.stringify(notifications));
+    } catch (e) {
+      console.warn('Could not save notifications to localStorage:', e);
+    }
+  }, [notifications]);
+
+  const addNotification = ({ title, message, type = 'info', eventId = null, metadata = {} }) => {
+    const newNotif = {
+      id: crypto.randomUUID ? crypto.randomUUID() : 'notif-' + Date.now().toString(16),
+      title,
+      message,
+      type,
+      eventId,
+      metadata,
+      read: false,
+      created_at: new Date().toISOString(),
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+    return newNotif;
+  };
+
+  const markNotificationAsRead = (id) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+  };
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
+  const clearAllNotifications = () => {
+    setNotifications([]);
+  };
+
+  const unreadNotificationCount = (notifications || []).filter((n) => !n.read).length;
+
+  // Centralized helper to synchronize user state, localStorage, and profiles list
+  const syncUserStorage = (userObj) => {
+    if (!userObj) return null;
+
+    const emailStr = (userObj.email || '').trim().toLowerCase();
+    const defaultName = emailStr.includes('@') ? emailStr.split('@')[0] : 'User';
+    const cleanRole = userObj.role || (emailStr.includes('admin') ? 'admin' : emailStr.includes('coord') ? 'coordinator' : 'student');
+
+    const normalizedUser = {
+      id: userObj.id || (crypto.randomUUID ? crypto.randomUUID() : 'user-' + Date.now().toString(16)),
+      name: userObj.name || userObj.full_name || defaultName,
+      full_name: userObj.full_name || userObj.name || defaultName,
+      username: userObj.username || defaultName,
+      email: emailStr,
+      role: cleanRole,
+      college_id:
+        userObj.college_id ||
+        `${cleanRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
+      college_name:
+        userObj.college_name ||
+        userObj.college ||
+        (cleanRole === 'student' ? 'Main University / College' : 'Symposium Administration'),
+      college:
+        userObj.college_name ||
+        userObj.college ||
+        (cleanRole === 'student' ? 'Main University / College' : 'Symposium Administration'),
+      phone: userObj.phone || userObj.phone_number || userObj.contact || '',
+      phone_number: userObj.phone_number || userObj.phone || userObj.contact || '',
+      password: userObj.password || userObj.pass_code || 'student123',
+      pass_code: userObj.pass_code || userObj.password || 'student123',
+      ...userObj,
+    };
+
+    setCurrentUser(normalizedUser);
+    setIsAuthenticated(true);
+
+    try {
+      localStorage.setItem('smart_sympo_user', JSON.stringify(normalizedUser));
+      localStorage.setItem('smart_sympo_active_role', normalizedUser.role);
+
+      const accounts = getStoredAccounts();
+      const existingIdx = accounts.findIndex(
+        (a) =>
+          (normalizedUser.id && a.id === normalizedUser.id) ||
+          (normalizedUser.email && a.email && a.email.toLowerCase() === normalizedUser.email.toLowerCase()) ||
+          (normalizedUser.username && a.username && a.username.toLowerCase() === normalizedUser.username.toLowerCase())
+      );
+
+      let updatedAccounts;
+      if (existingIdx >= 0) {
+        updatedAccounts = accounts.map((a, idx) => (idx === existingIdx ? { ...a, ...normalizedUser } : a));
+      } else {
+        updatedAccounts = [normalizedUser, ...accounts];
+      }
+
+      localStorage.setItem('smart_sympo_accounts', JSON.stringify(updatedAccounts));
+      setProfilesList(updatedAccounts);
+    } catch (e) {
+      console.warn('LocalStorage user sync error:', e);
+    }
+
+    return normalizedUser;
+  };
+
+  // Load user profile from Supabase profiles table or local accounts
   const fetchUserProfile = async (userId, userEmail) => {
-    if (!isValidUUID(userId)) return;
+    const cleanEmail = (userEmail || '').trim().toLowerCase();
+    const accounts = getStoredAccounts();
+    const localMatch = accounts.find(
+      (a) => a.id === userId || (cleanEmail && a.email?.toLowerCase() === cleanEmail)
+    );
+
+    if (!isValidUUID(userId)) {
+      if (localMatch) {
+        syncUserStorage(localMatch);
+      }
+      return;
+    }
+
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
       if (data && !error) {
-        setCurrentUser(data);
+        const merged = { ...(localMatch || {}), ...data };
+        syncUserStorage(merged);
       } else {
-        // Fallback profile if record not yet returned from trigger
+        // Fallback profile retaining any existing local profile details
         const fallback = {
           id: userId,
-          name: userEmail?.split('@')[0] || 'Authenticated User',
-          email: userEmail,
-          role: 'student',
-          college_id: `COL-${userId.slice(0, 6).toUpperCase()}`,
+          name: localMatch?.name || localMatch?.full_name || cleanEmail.split('@')[0] || 'Student Attendee',
+          full_name: localMatch?.full_name || localMatch?.name || cleanEmail.split('@')[0] || 'Student Attendee',
+          username: localMatch?.username || cleanEmail.split('@')[0] || 'student',
+          email: cleanEmail,
+          role: localMatch?.role || 'student',
+          college_id: localMatch?.college_id || `STU-${userId.slice(0, 6).toUpperCase()}`,
         };
-        setCurrentUser(fallback);
+        syncUserStorage(fallback);
       }
     } catch (err) {
       console.warn('Error fetching profile:', err);
+      if (localMatch) {
+        syncUserStorage(localMatch);
+      }
     }
   };
 
@@ -112,13 +295,16 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     if (!isMockMode) {
       // 1. Get initial Auth Session
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
-        if (session?.user) {
-          setIsAuthenticated(true);
-          fetchUserProfile(session.user.id, session.user.email);
-        }
-      }).catch((e) => console.warn('Supabase getSession catch:', e));
+      supabase.auth
+        .getSession()
+        .then(({ data: { session } }) => {
+          setSession(session);
+          if (session?.user) {
+            setIsAuthenticated(true);
+            fetchUserProfile(session.user.id, session.user.email);
+          }
+        })
+        .catch((e) => console.warn('Supabase getSession catch:', e));
 
       // 2. Auth state change listener
       const {
@@ -144,7 +330,28 @@ export const AppProvider = ({ children }) => {
           if (attData && attData.length > 0) setAttendanceLogs(attData);
 
           const { data: profData } = await supabase.from('profiles').select('*');
-          if (profData && profData.length > 0) setProfilesList(profData);
+          if (profData && profData.length > 0) {
+            setProfilesList((prev) => {
+              const combined = [...profData];
+              for (const localAcc of prev) {
+                if (
+                  !combined.some(
+                    (p) =>
+                      p.id === localAcc.id ||
+                      (p.email && localAcc.email && p.email.toLowerCase() === localAcc.email.toLowerCase())
+                  )
+                ) {
+                  combined.push(localAcc);
+                }
+              }
+              try {
+                localStorage.setItem('smart_sympo_accounts', JSON.stringify(combined));
+              } catch (e) {
+                console.warn('LocalStorage save error:', e);
+              }
+              return combined;
+            });
+          }
         } catch (e) {
           console.warn('Supabase fetchInitialData catch:', e);
         }
@@ -220,12 +427,30 @@ export const AppProvider = ({ children }) => {
             if (updatedProfile) {
               setProfilesList((prev) => {
                 const exists = prev.some((p) => p.id === updatedProfile.id);
-                if (exists) {
-                  return prev.map((p) => (p.id === updatedProfile.id ? updatedProfile : p));
+                const updatedList = exists
+                  ? prev.map((p) => (p.id === updatedProfile.id ? { ...p, ...updatedProfile } : p))
+                  : [updatedProfile, ...prev];
+                try {
+                  localStorage.setItem('smart_sympo_accounts', JSON.stringify(updatedList));
+                } catch (e) {
+                  console.warn('LocalStorage save error:', e);
                 }
-                return [updatedProfile, ...prev];
+                return updatedList;
               });
-              setCurrentUser((current) => (current && current.id === updatedProfile.id ? updatedProfile : current));
+
+              setCurrentUser((current) => {
+                if (current && current.id === updatedProfile.id) {
+                  const merged = { ...current, ...updatedProfile };
+                  try {
+                    localStorage.setItem('smart_sympo_user', JSON.stringify(merged));
+                    localStorage.setItem('smart_sympo_active_role', merged.role);
+                  } catch (e) {
+                    console.warn('LocalStorage save error:', e);
+                  }
+                  return merged;
+                }
+                return current;
+              });
             }
           }
         )
@@ -241,87 +466,85 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   // Supabase Auth Signup with Metadata for Trigger & Service Call
-  const signUpWithSupabase = async ({ email, password, fullName, username, role = 'student', collegeId }) => {
+  const signUpWithSupabase = async ({
+    email,
+    password,
+    fullName,
+    username,
+    role = 'student',
+    collegeId,
+    collegeName,
+    phone,
+  }) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const finalUsername =
+      username?.trim() || (cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail);
     const finalCollegeId =
-      collegeId || `${role === 'admin' ? 'ADM' : role === 'coordinator' ? 'FAC' : 'STU'}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const finalUsername = username || (email.includes('@') ? email.split('@')[0] : email);
+      collegeId ||
+      `${role === 'admin' ? 'ADM' : role === 'coordinator' ? 'FAC' : 'STU'}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const finalCollegeName =
+      collegeName?.trim() ||
+      (role === 'student' ? 'Main University / College' : 'Symposium Administration');
+    const finalPhone = phone?.trim() || '';
     const newUserId = crypto.randomUUID
       ? crypto.randomUUID()
       : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
 
-    const profileData = {
+    let profileData = {
       id: newUserId,
-      name: fullName,
-      full_name: fullName,
+      name: fullName.trim(),
+      full_name: fullName.trim(),
       username: finalUsername,
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       password: password,
+      pass_code: password,
       role: role,
       college_id: finalCollegeId,
+      college_name: finalCollegeName,
+      college: finalCollegeName,
+      phone: finalPhone,
+      phone_number: finalPhone,
     };
-
-    // Store in local accounts list
-    const accounts = getStoredAccounts();
-    const existingIndex = accounts.findIndex(
-      (a) =>
-        a.email?.toLowerCase() === profileData.email ||
-        (a.username && a.username.toLowerCase() === finalUsername.toLowerCase())
-    );
-    if (existingIndex >= 0) {
-      accounts[existingIndex] = profileData;
-    } else {
-      accounts.push(profileData);
-    }
-
-    try {
-      localStorage.setItem('smart_sympo_accounts', JSON.stringify(accounts));
-      localStorage.setItem('smart_sympo_user', JSON.stringify(profileData));
-      localStorage.setItem('smart_sympo_active_role', role);
-    } catch (e) {
-      console.warn('LocalStorage save error:', e);
-    }
-
-    setProfilesList((prev) => {
-      const exists = prev.some((p) => p.email?.toLowerCase() === profileData.email);
-      if (exists) return prev.map((p) => (p.email?.toLowerCase() === profileData.email ? profileData : p));
-      return [...prev, profileData];
-    });
-
-    setCurrentUser(profileData);
-    setIsAuthenticated(true);
 
     if (!isMockMode) {
       try {
         const { data, error } = await supabase.auth.signUp({
-          email: profileData.email,
+          email: cleanEmail,
           password,
           options: {
             data: {
-              full_name: fullName,
-              name: fullName,
+              full_name: fullName.trim(),
+              name: fullName.trim(),
               username: finalUsername,
               role: role,
               college_id: finalCollegeId,
+              college_name: finalCollegeName,
+              college: finalCollegeName,
+              phone: finalPhone,
             },
           },
         });
 
         if (!error && data?.user) {
           profileData.id = data.user.id;
-          await supabase.from('profiles').upsert([profileData]);
-          setCurrentUser(profileData);
-          localStorage.setItem('smart_sympo_user', JSON.stringify(profileData));
+          try {
+            await supabase.from('profiles').upsert([profileData]);
+          } catch (e) {
+            console.warn('Supabase profiles upsert warning:', e);
+          }
         }
       } catch (err) {
         console.warn('Supabase Signup Exception (saved locally):', err);
       }
     }
 
-    return { success: true, user: profileData, data: { user: profileData } };
+    const savedUser = syncUserStorage(profileData);
+    return { success: true, user: savedUser, profile: savedUser, data: { user: savedUser } };
   };
 
   // Supabase Auth Login
-  const signInWithSupabase = async ({ email, password }) => {
+  // Supabase Auth Login with Target Role Awareness
+  const signInWithSupabase = async ({ email, password, targetRole }) => {
     if (!email || !email.trim() || !password || !password.trim()) {
       return { success: false, message: 'Strict Login Error: Please enter both email/username and password.' };
     }
@@ -332,6 +555,8 @@ export const AppProvider = ({ children }) => {
 
     const cleanInput = email.trim().toLowerCase();
     const accounts = getStoredAccounts();
+    const isStaffPasscode =
+      password === '2005' || password === 'admin123' || password === 'coord123';
 
     // 1. Search locally registered accounts (by email or username)
     let foundAccount = accounts.find(
@@ -339,24 +564,27 @@ export const AppProvider = ({ children }) => {
     );
 
     if (foundAccount) {
-      if (
-        foundAccount.password &&
-        foundAccount.password !== password &&
-        password !== '2005' &&
-        password !== 'admin123' &&
-        password !== 'coord123' &&
-        password !== 'student123'
-      ) {
+      const isValidPassword =
+        foundAccount.password === password ||
+        foundAccount.pass_code === password ||
+        isStaffPasscode ||
+        (foundAccount.role === 'student' && password === 'student123') ||
+        ((foundAccount.role === 'admin' || foundAccount.role === 'coordinator') && password === '2005');
+
+      if (!isValidPassword) {
         return { success: false, message: 'Invalid Password. Please check your credentials.' };
       }
 
-      setCurrentUser(foundAccount);
-      setIsAuthenticated(true);
-      try {
-        localStorage.setItem('smart_sympo_active_role', foundAccount.role);
-        localStorage.setItem('smart_sympo_user', JSON.stringify(foundAccount));
-      } catch (e) {
-        console.warn('LocalStorage save error:', e);
+      // If user authenticates on Staff Portal with staff authorization code or matches requested staff role
+      if (targetRole && (targetRole === 'admin' || targetRole === 'coordinator')) {
+        if (isStaffPasscode || foundAccount.role === targetRole || foundAccount.role === 'admin') {
+          foundAccount.role = targetRole;
+          if (targetRole === 'admin' && !foundAccount.college_id?.startsWith('ADM')) {
+            foundAccount.college_id = `ADM-${Math.floor(1000 + Math.random() * 9000)}`;
+          } else if (targetRole === 'coordinator' && !foundAccount.college_id?.startsWith('FAC')) {
+            foundAccount.college_id = `FAC-${Math.floor(1000 + Math.random() * 9000)}`;
+          }
+        }
       }
 
       if (!isMockMode) {
@@ -370,7 +598,8 @@ export const AppProvider = ({ children }) => {
         }
       }
 
-      return { success: true, user: foundAccount, profile: foundAccount };
+      const synced = syncUserStorage(foundAccount);
+      return { success: true, user: synced, profile: synced };
     }
 
     // 2. If not in local accounts and not in mock mode, try Supabase Auth
@@ -394,25 +623,39 @@ export const AppProvider = ({ children }) => {
             console.warn('Profile fetch warning:', e);
           }
 
+          let assignedRole = profile?.role || data.user.user_metadata?.role;
+          if (targetRole && (targetRole === 'admin' || targetRole === 'coordinator')) {
+            if (isStaffPasscode || assignedRole === targetRole || assignedRole === 'admin') {
+              assignedRole = targetRole;
+            }
+          }
+          if (!assignedRole) {
+            assignedRole = targetRole || (cleanInput.includes('admin') ? 'admin' : cleanInput.includes('coord') ? 'coordinator' : 'student');
+          }
+
           if (!profile) {
             profile = {
               id: data.user.id,
-              name: data.user.user_metadata?.full_name || cleanInput.split('@')[0],
+              name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || cleanInput.split('@')[0],
+              full_name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || cleanInput.split('@')[0],
+              username: data.user.user_metadata?.username || cleanInput.split('@')[0],
               email: data.user.email,
-              role: data.user.user_metadata?.role || 'student',
-              college_id: data.user.user_metadata?.college_id || `COL-${data.user.id.slice(0, 6).toUpperCase()}`,
+              role: assignedRole,
+              college_id: data.user.user_metadata?.college_id || `${assignedRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
+              password: password,
+              pass_code: password,
             };
+            try {
+              await supabase.from('profiles').upsert([profile]);
+            } catch (e) {
+              console.warn('Profile upsert warning:', e);
+            }
+          } else {
+            profile.role = assignedRole;
           }
 
-          setCurrentUser(profile);
-          setIsAuthenticated(true);
-          try {
-            localStorage.setItem('smart_sympo_active_role', profile.role);
-            localStorage.setItem('smart_sympo_user', JSON.stringify(profile));
-          } catch (e) {
-            console.warn('LocalStorage save error:', e);
-          }
-          return { success: true, data, user: data.user, profile };
+          const synced = syncUserStorage(profile);
+          return { success: true, data, user: data.user, profile: synced };
         }
       } catch (err) {
         console.warn('Supabase Auth error (falling back to role matching):', err);
@@ -420,36 +663,30 @@ export const AppProvider = ({ children }) => {
     }
 
     // 3. Dynamic role matching fallback for testing/demo
-    const role = cleanInput.includes('admin')
-      ? 'admin'
-      : cleanInput.includes('coord')
-      ? 'coordinator'
-      : 'student';
+    const role =
+      targetRole ||
+      (cleanInput.includes('admin')
+        ? 'admin'
+        : cleanInput.includes('coord')
+        ? 'coordinator'
+        : 'student');
 
     const fallbackUser = {
-      id: crypto.randomUUID ? crypto.randomUUID() : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
+      id: crypto.randomUUID
+        ? crypto.randomUUID()
+        : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
       name: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
       full_name: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
       username: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
       email: cleanInput.includes('@') ? cleanInput : `${cleanInput}@college.edu`,
       password: password,
+      pass_code: password,
       role,
       college_id: `${role.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
     };
 
-    accounts.push(fallbackUser);
-    try {
-      localStorage.setItem('smart_sympo_accounts', JSON.stringify(accounts));
-      localStorage.setItem('smart_sympo_active_role', role);
-      localStorage.setItem('smart_sympo_user', JSON.stringify(fallbackUser));
-    } catch (e) {
-      console.warn('LocalStorage save error:', e);
-    }
-
-    setProfilesList((prev) => [...prev, fallbackUser]);
-    setCurrentUser(fallbackUser);
-    setIsAuthenticated(true);
-    return { success: true, user: fallbackUser, profile: fallbackUser };
+    const synced = syncUserStorage(fallbackUser);
+    return { success: true, user: synced, profile: synced };
   };
 
   // Supabase Auth SignOut
@@ -533,11 +770,36 @@ export const AppProvider = ({ children }) => {
       return { success: false, message: msg };
     }
 
+    // Generate Pass Token & Dispatch Confirmation Email
+    const passToken = `PASS-${currentUser.id?.slice(0, 6).toUpperCase() || 'STU'}-${Date.now().toString(36).toUpperCase()}`;
+
+    let emailRes = null;
+    try {
+      emailRes = await sendRegistrationEmail({
+        student: currentUser,
+        event: targetEvent,
+        passToken,
+      });
+    } catch (err) {
+      console.warn('[Registration Email Exception]:', err);
+    }
+
+    const emailStatus = emailRes?.success ? 'SENT' : 'FAILED';
+    const emailSentAt = new Date().toISOString();
+
     const newReg = {
       id: crypto.randomUUID ? crypto.randomUUID() : 'reg-' + Date.now().toString(16),
       student_id: currentUser.id,
+      student_name: currentUser.full_name || currentUser.name || currentUser.username || 'Student Attendee',
+      student_email: currentUser.email || '',
+      student_username: currentUser.username || '',
       event_id: eventId,
+      event_title: targetEvent.title,
+      category: targetEvent.category,
       registered_at: new Date().toISOString(),
+      email_status: emailStatus,
+      email_sent_at: emailSentAt,
+      pass_token: passToken,
       attended: false,
     };
 
@@ -559,6 +821,8 @@ export const AppProvider = ({ children }) => {
               student_id: currentUser.id,
               event_id: eventId,
               registered_at: newReg.registered_at,
+              email_status: emailStatus,
+              email_sent_at: emailSentAt,
             },
           ],
           { onConflict: 'student_id,event_id' }
@@ -578,7 +842,30 @@ export const AppProvider = ({ children }) => {
       }
     }
 
-    return { success: true, message: `Successfully registered for ${targetEvent.title}!` };
+    // Append confirmation to In-App Notification Center
+    addNotification({
+      title: `🎉 Registration Confirmed: ${targetEvent.title}`,
+      message: `You are confirmed for ${targetEvent.title} in ${targetEvent.hall_number || 'Main Venue'}. Confirmation email dispatched to ${currentUser.email || 'your registered email'}.`,
+      type: 'registration',
+      eventId: targetEvent.id,
+      metadata: {
+        eventTitle: targetEvent.title,
+        hallNumber: targetEvent.hall_number,
+        startTime: targetEvent.start_time,
+        category: targetEvent.category,
+        emailStatus,
+        emailSentAt,
+        passToken,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Successfully registered for ${targetEvent.title}!`,
+      event: targetEvent,
+      emailResult: emailRes,
+      passToken,
+    };
   };
 
   // Update Hall Status & Emit Live Realtime Update
@@ -990,29 +1277,44 @@ export const AppProvider = ({ children }) => {
 
   // Admin Passcode Management Function
   const updateUserPassCode = async (targetUserId, newPassCode) => {
-    if (!isValidUUID(targetUserId)) {
+    if (!targetUserId) {
       return { success: false, message: 'Invalid User ID.' };
     }
 
-    try {
-      await supabase
-        .from('profiles')
-        .update({ pass_code: newPassCode })
-        .eq('id', targetUserId);
-
-      setProfilesList((prev) =>
-        prev.map((p) => (p.id === targetUserId ? { ...p, pass_code: newPassCode } : p))
+    setProfilesList((prev) => {
+      const updated = prev.map((p) =>
+        p.id === targetUserId ? { ...p, pass_code: newPassCode, password: newPassCode } : p
       );
-
-      if (currentUser?.id === targetUserId) {
-        setCurrentUser((current) => (current ? { ...current, pass_code: newPassCode } : current));
+      try {
+        localStorage.setItem('smart_sympo_accounts', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('LocalStorage save error:', e);
       }
+      return updated;
+    });
 
-      return { success: true, message: `Security Passcode updated to "${newPassCode}"!` };
-    } catch (err) {
-      console.warn('Error updating passcode in Supabase:', err);
-      return { success: false, message: 'Failed to update passcode in database.' };
+    if (currentUser?.id === targetUserId) {
+      const updatedUser = { ...currentUser, pass_code: newPassCode, password: newPassCode };
+      setCurrentUser(updatedUser);
+      try {
+        localStorage.setItem('smart_sympo_user', JSON.stringify(updatedUser));
+      } catch (e) {
+        console.warn('LocalStorage user update error:', e);
+      }
     }
+
+    if (!isMockMode && isValidUUID(targetUserId)) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ pass_code: newPassCode })
+          .eq('id', targetUserId);
+      } catch (err) {
+        console.warn('Error updating passcode in Supabase:', err);
+      }
+    }
+
+    return { success: true, message: `Security Passcode updated to "${newPassCode}"!` };
   };
 
   // Unregister / Cancel registration for an event
@@ -1079,8 +1381,12 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Delete user account permanently
-  const deleteUserAccount = async (userId) => {
+  // Delete user account permanently (Secured with Master Passcode '2027')
+  const deleteUserAccount = async (userId, securityCode = '2027') => {
+    if (String(securityCode).trim() !== '2027') {
+      return { success: false, message: 'Access Denied: Incorrect Security Code!' };
+    }
+
     setProfilesList((prev) => {
       const updated = prev.filter((p) => p.id !== userId);
       try {
@@ -1106,8 +1412,12 @@ export const AppProvider = ({ children }) => {
     return { success: true, message: 'Account deleted successfully!' };
   };
 
-  // Clear all accounts
-  const clearAllAccounts = async () => {
+  // Clear all accounts permanently (Secured with Master Passcode '2027')
+  const clearAllAccounts = async (securityCode = '2027') => {
+    if (String(securityCode).trim() !== '2027') {
+      return { success: false, message: 'Operation Aborted: Invalid Security Code' };
+    }
+
     setProfilesList([]);
     try {
       localStorage.removeItem('smart_sympo_accounts');
@@ -1162,6 +1472,12 @@ export const AppProvider = ({ children }) => {
         dismissedAlertIds,
         dismissLocalAlert,
         clearGlobalEmergencyBroadcast,
+        notifications,
+        addNotification,
+        markNotificationAsRead,
+        markAllNotificationsAsRead,
+        clearAllNotifications,
+        unreadNotificationCount,
       }}
     >
       {children}

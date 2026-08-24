@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Strict Supabase Auth with DB role vs target UI role matching check to prevent role bypass vulnerability", deps: ["src/supabaseClient.js", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-13" }
+// agent-notes: { ctx: "Strict Supabase Auth with DB role vs target UI role matching check to prevent role bypass vulnerability", deps: ["src/supabaseClient.js", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-24" }
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -24,6 +24,9 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
+  const [collegeName, setCollegeName] = useState('');
+  const [collegeIdInput, setCollegeIdInput] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -108,9 +111,11 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           fullName,
           username,
           role: assignedRole,
-          collegeId: isStaffMode
+          collegeName: collegeName.trim() || (isStaffMode ? 'Symposium Faculty Department' : 'University College Campus'),
+          collegeId: collegeIdInput.trim() || (isStaffMode
             ? `${assignedRole === 'admin' ? 'ADM' : 'FAC'}-${Math.floor(1000 + Math.random() * 9000)}`
-            : `STU-${Math.floor(1000 + Math.random() * 9000)}`,
+            : `STU-${Math.floor(1000 + Math.random() * 9000)}`),
+          phone: phoneNumber.trim(),
         });
 
         if (!result.success) {
@@ -144,8 +149,10 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           return;
         }
 
+        const expectedRole = isStaffMode ? selectedStaffRole.toLowerCase() : 'student';
+
         // 1. Authenticate Email & Password using Supabase Auth (signInWithPassword)
-        const res = await signInWithSupabase({ email, password });
+        const res = await signInWithSupabase({ email, password, targetRole: expectedRole });
 
         if (!res || !res.success || (!res.user && !res.profile)) {
           const nextFailed = failedAttempts + 1;
@@ -156,7 +163,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
             setLockoutSeconds(30);
             setErrorMsg('Too many failed login attempts! Account temporarily locked for 30 seconds. Please wait before trying again.');
           } else {
-            setErrorMsg('Invalid Email or Password!');
+            setErrorMsg(res?.message || 'Invalid Email or Password!');
           }
 
           setLoading(false);
@@ -166,7 +173,6 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         // 2. Extract Fetched Database Role & Determine Currently Selected UI Tab Role
         const fetchedProfile = res.profile || res.user;
         const userRole = (fetchedProfile.role || 'student').toLowerCase();
-        const expectedRole = isStaffMode ? selectedStaffRole.toLowerCase() : 'student';
 
         // 3. Strict Role Matching Check
         // Compare DB role with selected tab role (e.g. 'student', 'coordinator', 'admin')
@@ -354,6 +360,49 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">
+                  {isStaffMode ? 'Department / Institution' : 'College / University Name'}
+                </label>
+                <div className="relative">
+                  <GraduationCap className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    required
+                    placeholder={isStaffMode ? 'e.g. Dept. of Computer Science & Engineering' : 'e.g. Anna University / Oxford Institute'}
+                    value={collegeName}
+                    onChange={(e) => setCollegeName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-700 font-semibold block mb-1">
+                    {isStaffMode ? 'Staff ID (Optional)' : 'College Roll / Student ID'}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={isStaffMode ? 'e.g. FAC-2024' : 'e.g. 2024-CS-101'}
+                    value={collegeIdInput}
+                    onChange={(e) => setCollegeIdInput(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-slate-700 font-semibold block mb-1">Phone Number (Optional)</label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. +91 9876543210"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono"
                   />
                 </div>
               </div>

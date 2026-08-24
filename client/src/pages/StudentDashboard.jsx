@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { isValidUUID } from '../supabaseClient';
 import StudentQRModal from '../components/StudentQRModal';
+import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
 
 import {
   Calendar,
@@ -19,6 +20,7 @@ export default function StudentDashboard() {
   const { currentUser, events, registrations, registerForEvent, unregisterForEvent } = useApp();
   const [selectedPassEvent, setSelectedPassEvent] = useState(null);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  const [successModalData, setSuccessModalData] = useState(null);
   const [feedback, setFeedback] = useState(null);
 
   if (!currentUser) return null;
@@ -42,6 +44,13 @@ export default function StudentDashboard() {
   const handleRegister = async (eventId) => {
     const res = await registerForEvent(eventId);
     setFeedback(res);
+    if (res?.success) {
+      setSuccessModalData({
+        event: res.event || events.find((e) => e.id === eventId),
+        emailResult: res.emailResult,
+        passToken: res.passToken,
+      });
+    }
     setTimeout(() => setFeedback(null), 4000);
   };
 
@@ -304,6 +313,16 @@ export default function StudentDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Registration Success Interactive Modal */}
+      <RegistrationSuccessModal
+        isOpen={Boolean(successModalData)}
+        onClose={() => setSuccessModalData(null)}
+        event={successModalData?.event}
+        student={currentUser}
+        emailResult={successModalData?.emailResult}
+        onOpenQRPass={handleOpenQRPass}
+      />
 
       {/* QR Pass Modal */}
       <StudentQRModal

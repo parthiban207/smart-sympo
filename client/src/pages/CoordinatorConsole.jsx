@@ -26,12 +26,14 @@ import {
   FileText,
   Hash,
   Globe,
+  StopCircle,
 } from 'lucide-react';
 
 export default function CoordinatorConsole() {
   const {
     events, registrations, attendanceLogs, updateHallStatus,
-    addEvent, updateEvent, deleteEvent, profilesList
+    addEvent, updateEvent, deleteEvent, profilesList,
+    liveAlerts, clearGlobalEmergencyBroadcast
   } = useApp();
   const [selectedHall, setSelectedHall] = useState('Hall 1 (Main Auditorium)');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
@@ -198,9 +200,21 @@ export default function CoordinatorConsole() {
 
         {/* Hall Selector & Create Event & Emergency Broadcast Button */}
         <div className="w-full md:w-auto flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          {(liveAlerts || []).some((a) => a.isEmergency || a.severity === 'emergency' || a.type === 'emergency') && (
+            <button
+              onClick={async () => {
+                await clearGlobalEmergencyBroadcast();
+              }}
+              className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-amber-500 animate-bounce"
+              title="Stop emergency broadcast & silence alarms system-wide"
+            >
+              <StopCircle className="w-4 h-4 text-rose-700" />
+              <span>🛑 Stop Emergency</span>
+            </button>
+          )}
           <button
             onClick={() => setShowEmergencyModal(true)}
-            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 animate-pulse border border-rose-500"
+            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 border border-rose-500"
           >
             <Radio className="w-4 h-4 text-white" />
             <span>Emergency Broadcast</span>

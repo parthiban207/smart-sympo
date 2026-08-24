@@ -1,16 +1,16 @@
-// agent-notes: { ctx: "Role-based Navbar enforcing role visibility & removing switching controls from student view", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-13" }
-
 import { useState, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import UserSettingsModal from './UserSettingsModal';
-import { Calendar, UserCheck, ShieldCheck, Wifi, LogOut, Settings, QrCode, RefreshCw } from 'lucide-react';
+import NotificationCenter from './NotificationCenter';
+import { Calendar, UserCheck, ShieldCheck, Wifi, LogOut, Settings, QrCode, RefreshCw, Bell } from 'lucide-react';
 
 export default function Navbar() {
-  const { currentUser, switchRole, signOutFromSupabase } = useApp();
+  const { currentUser, switchRole, signOutFromSupabase, unreadNotificationCount } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   const activeRole = currentUser?.role || 'student';
   const isStudentRole = activeRole === 'student';
@@ -186,6 +186,20 @@ export default function Navbar() {
               </button>
             </div>
 
+            {/* In-App Notification Center Bell Trigger */}
+            <button
+              onClick={() => setIsNotifOpen(true)}
+              title="Notification Center & Activity Feed"
+              className="relative p-2 rounded-full bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-600 transition cursor-pointer shadow-2xs"
+            >
+              <Bell className="w-4 h-4" />
+              {unreadNotificationCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse border-2 border-white shadow-xs">
+                  {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                </span>
+              )}
+            </button>
+
             {/* Styled Logout Button */}
             <button
               onClick={handleLogout}
@@ -201,6 +215,12 @@ export default function Navbar() {
 
       {/* User Profile & Account Settings Modal */}
       <UserSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+
+      {/* In-App Notification Center & Activity Feed Drawer */}
+      <NotificationCenter
+        isOpen={isNotifOpen}
+        onClose={() => setIsNotifOpen(false)}
+      />
     </>
   );
 }
