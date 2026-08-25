@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "description": "SmartSympo - Real-Time Multi-Venue Event Management & Student Routing Platform",
   "private": true,
+  "type": "module",
   "workspaces": [
     "client"
   ],
   "scripts": {
     "dev": "npm run dev --prefix client",
+    "server": "node server/index.js",
     "build": "npm run build --prefix client",
     "preview": "npm run preview --prefix client",
     "lint": "npm run lint --prefix client",
@@ -24,5 +26,13 @@
     "qr-code"
   ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^4.22.2",
+    "file-saver": "^2.0.5",
+    "nodemailer": "^9.0.5",
+    "xlsx": "^0.18.5"
+  }
 }

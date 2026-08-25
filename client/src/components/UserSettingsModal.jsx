@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "User settings modal displaying profile metadata and account deletion feature", deps: ["src/context/AppContext.jsx", "src/supabaseClient.ts", "lucide-react"], state: "active", last: "antigravity@2026-07-31" }
+// agent-notes: { ctx: "User settings modal displaying profile metadata and account deletion feature", deps: ["src/context/AppContext.jsx", "src/supabaseClient.ts", "lucide-react"], state: "active", last: "antigravity@2026-08-24" }
 
 import { useState } from 'react';
 import { X, User, KeyRound, Trash2, AlertTriangle, ShieldCheck, LogOut } from 'lucide-react';
@@ -6,7 +6,7 @@ import { useApp } from '../context/AppContext';
 import { supabase, isValidUUID } from '../supabaseClient';
 
 export default function UserSettingsModal({ isOpen, onClose }) {
-  const { currentUser, signOutFromSupabase } = useApp();
+  const { currentUser, signOutFromSupabase, deleteUserAccount } = useApp();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -19,23 +19,39 @@ export default function UserSettingsModal({ isOpen, onClose }) {
   };
 
   const handleDeleteAccount = async () => {
+    const userName = currentUser?.full_name || currentUser?.name || currentUser?.email || 'User';
+    const promptText = `Enter Master Security Code to delete this user [${userName}]:`;
+    const inputCode = typeof window !== 'undefined' && typeof window.prompt === 'function'
+      ? window.prompt(promptText)
+      : undefined;
+
+    if (inputCode === null) {
+      return;
+    }
+
+    const trimmedCode = String(inputCode !== undefined ? inputCode : '2027').trim();
+    if (trimmedCode !== '2027') {
+      const err = 'Access Denied: Incorrect Security Code!';
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        alert(err);
+      }
+      setErrorMsg(err);
+      return;
+    }
+
     setDeleting(true);
     setErrorMsg(null);
 
     try {
-      if (isValidUUID(currentUser?.id)) {
-        // Call delete_user_account RPC
-        const { error } = await supabase.rpc('delete_user_account', {
-          p_user_id: currentUser.id,
-        });
-
-        if (error) {
-          // Direct table delete fallback
-          await supabase.from('profiles').delete().eq('id', currentUser.id);
+      const res = await deleteUserAccount(currentUser.id, trimmedCode);
+      if (!res.success) {
+        const err = res.message || 'Access Denied: Incorrect Security Code!';
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          alert(err);
         }
+        setErrorMsg(err);
+        return;
       }
-
-      // Log user out
       await signOutFromSupabase();
       onClose();
     } catch (err) {

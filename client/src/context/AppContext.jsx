@@ -1,6 +1,9 @@
+// agent-notes: { ctx: "Global React AppContext provider for events, profiles, and authentication with 2027 passcode confirmation", deps: ["src/supabaseClient.ts", "src/services/emailService.js", "src/services/backendEmailService.js"], state: "active", last: "antigravity@2026-08-25" }
+
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
 import { sendRegistrationEmail } from '../services/emailService';
+import { sendLoginAlertApi, sendEventConfirmationApi } from '../services/backendEmailService';
 
 const AppContext = createContext();
 
@@ -599,6 +602,15 @@ export const AppProvider = ({ children }) => {
       }
 
       const synced = syncUserStorage(foundAccount);
+
+      // Async non-blocking login alert via Express Nodemailer Backend
+      sendLoginAlertApi({
+        email: synced.email,
+        name: synced.full_name || synced.name || synced.username || 'User',
+        role: synced.role || 'student',
+        timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
+      }).catch((err) => console.warn('[Login Alert Email Error]:', err));
+
       return { success: true, user: synced, profile: synced };
     }
 
@@ -655,6 +667,15 @@ export const AppProvider = ({ children }) => {
           }
 
           const synced = syncUserStorage(profile);
+
+          // Async non-blocking login alert via Express Nodemailer Backend
+          sendLoginAlertApi({
+            email: synced.email,
+            name: synced.full_name || synced.name || synced.username || 'User',
+            role: synced.role || 'student',
+            timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
+          }).catch((err) => console.warn('[Login Alert Email Error]:', err));
+
           return { success: true, data, user: data.user, profile: synced };
         }
       } catch (err) {
@@ -686,6 +707,15 @@ export const AppProvider = ({ children }) => {
     };
 
     const synced = syncUserStorage(fallbackUser);
+
+    // Async non-blocking login alert via Express Nodemailer Backend
+    sendLoginAlertApi({
+      email: synced.email,
+      name: synced.full_name || synced.name || synced.username || 'User',
+      role: synced.role || 'student',
+      timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
+    }).catch((err) => console.warn('[Login Alert Email Error]:', err));
+
     return { success: true, user: synced, profile: synced };
   };
 
@@ -841,6 +871,18 @@ export const AppProvider = ({ children }) => {
         console.warn('[Registration DB Exception - saved locally]:', err);
       }
     }
+
+    // Dispatch Nodemailer Backend Email Service event confirmation (non-blocking)
+    sendEventConfirmationApi({
+      email: currentUser.email || newReg.student_email,
+      name: currentUser.full_name || currentUser.name || newReg.student_name,
+      eventName: targetEvent.title,
+      category: targetEvent.category || 'General Session',
+      venue: targetEvent.hall_number || targetEvent.venue || 'Main Auditorium',
+      timeSlot: targetEvent.start_time
+        ? `${new Date(targetEvent.start_time).toLocaleDateString()} at ${new Date(targetEvent.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        : 'Scheduled Time Slot',
+    }).catch((err) => console.warn('[Event Confirmation Email Error]:', err));
 
     // Append confirmation to In-App Notification Center
     addNotification({
@@ -1382,7 +1424,7 @@ export const AppProvider = ({ children }) => {
   };
 
   // Delete user account permanently (Secured with Master Passcode '2027')
-  const deleteUserAccount = async (userId, securityCode = '2027') => {
+  const deleteUserAccount = async (userId, securityCode = '') => {
     if (String(securityCode).trim() !== '2027') {
       return { success: false, message: 'Access Denied: Incorrect Security Code!' };
     }
@@ -1413,7 +1455,7 @@ export const AppProvider = ({ children }) => {
   };
 
   // Clear all accounts permanently (Secured with Master Passcode '2027')
-  const clearAllAccounts = async (securityCode = '2027') => {
+  const clearAllAccounts = async (securityCode = '') => {
     if (String(securityCode).trim() !== '2027') {
       return { success: false, message: 'Operation Aborted: Invalid Security Code' };
     }

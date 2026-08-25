@@ -141,22 +141,97 @@ export default function AdminAnalytics() {
     setEditingEvent(null);
   };
 
-  // 1. Single User Deletion - Trigger Master Security Code Confirmation
-  const handleDeleteAccount = (userId, userName) => {
+  // 1. Single User Deletion - Trigger Master Security Code Confirmation ("2027")
+  const handleDeleteAccount = async (userId, userName) => {
+    const formattedName = userName || 'User';
     setSecurityModalError(null);
     setEnteredPasscode('');
+
+    const promptText = `Enter Master Security Code to delete this user [${formattedName}]:`;
+    const inputCode = typeof window !== 'undefined' && typeof window.prompt === 'function'
+      ? window.prompt(promptText)
+      : undefined;
+
+    if (inputCode !== undefined) {
+      if (inputCode === null) {
+        // User cancelled prompt
+        return;
+      }
+      const trimmedCode = String(inputCode).trim();
+      if (trimmedCode !== '2027') {
+        const errorText = 'Access Denied: Incorrect Security Code!';
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          alert(errorText);
+        }
+        setRoleFeedback({ text: errorText, type: 'error' });
+        setTimeout(() => setRoleFeedback(null), 4000);
+        return;
+      }
+
+      const res = await deleteUserAccount(userId, trimmedCode);
+      if (res.success) {
+        setRoleFeedback({ text: `Account "${formattedName}" deleted successfully!`, type: 'success' });
+        setTimeout(() => setRoleFeedback(null), 3000);
+      } else {
+        const errorText = res.message || 'Access Denied: Incorrect Security Code!';
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          alert(errorText);
+        }
+        setRoleFeedback({ text: errorText, type: 'error' });
+        setTimeout(() => setRoleFeedback(null), 4000);
+      }
+      return;
+    }
+
     setSecurityModalState({
       isOpen: true,
       actionType: 'single',
       targetUserId: userId,
-      targetUserName: userName || 'User',
+      targetUserName: formattedName,
     });
   };
 
-  // 2. Bulk Clear Accounts - Trigger Master Security Code Confirmation
-  const handleClearAllAccounts = () => {
+  // 2. Bulk Clear Accounts - Trigger Master Security Code Confirmation ("2027")
+  const handleClearAllAccounts = async () => {
     setSecurityModalError(null);
     setEnteredPasscode('');
+
+    const promptText = 'Enter Master Security Code to confirm clearing ALL accounts:';
+    const inputCode = typeof window !== 'undefined' && typeof window.prompt === 'function'
+      ? window.prompt(promptText)
+      : undefined;
+
+    if (inputCode !== undefined) {
+      if (inputCode === null) {
+        // User cancelled prompt
+        return;
+      }
+      const trimmedCode = String(inputCode).trim();
+      if (trimmedCode !== '2027') {
+        const errorText = 'Operation Aborted: Invalid Security Code';
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          alert(errorText);
+        }
+        setRoleFeedback({ text: errorText, type: 'error' });
+        setTimeout(() => setRoleFeedback(null), 4000);
+        return;
+      }
+
+      const res = await clearAllAccounts(trimmedCode);
+      if (res.success) {
+        setRoleFeedback({ text: 'All accounts deleted successfully!', type: 'success' });
+        setTimeout(() => setRoleFeedback(null), 3000);
+      } else {
+        const errorText = res.message || 'Operation Aborted: Invalid Security Code';
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          alert(errorText);
+        }
+        setRoleFeedback({ text: errorText, type: 'error' });
+        setTimeout(() => setRoleFeedback(null), 4000);
+      }
+      return;
+    }
+
     setSecurityModalState({
       isOpen: true,
       actionType: 'bulk',
@@ -177,6 +252,9 @@ export default function AdminAnalytics() {
         const errorText = 'Access Denied: Incorrect Security Code!';
         setSecurityModalError(errorText);
         setRoleFeedback({ text: errorText, type: 'error' });
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          alert(errorText);
+        }
         setTimeout(() => setRoleFeedback(null), 4000);
         return;
       }
@@ -187,13 +265,20 @@ export default function AdminAnalytics() {
         setRoleFeedback({ text: `Account "${securityModalState.targetUserName}" deleted successfully!`, type: 'success' });
         setTimeout(() => setRoleFeedback(null), 3000);
       } else {
-        setSecurityModalError(res.message || 'Access Denied: Incorrect Security Code!');
+        const errorText = res.message || 'Access Denied: Incorrect Security Code!';
+        setSecurityModalError(errorText);
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          alert(errorText);
+        }
       }
     } else if (securityModalState.actionType === 'bulk') {
       if (trimmedCode !== '2027') {
         const errorText = 'Operation Aborted: Invalid Security Code';
         setSecurityModalError(errorText);
         setRoleFeedback({ text: errorText, type: 'error' });
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          alert(errorText);
+        }
         setTimeout(() => setRoleFeedback(null), 4000);
         return;
       }
@@ -204,7 +289,11 @@ export default function AdminAnalytics() {
         setRoleFeedback({ text: 'All accounts deleted successfully!', type: 'success' });
         setTimeout(() => setRoleFeedback(null), 3000);
       } else {
-        setSecurityModalError(res.message || 'Operation Aborted: Invalid Security Code');
+        const errorText = res.message || 'Operation Aborted: Invalid Security Code';
+        setSecurityModalError(errorText);
+        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+          alert(errorText);
+        }
       }
     }
   };
