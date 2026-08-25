@@ -1,6 +1,6 @@
 // agent-notes: { ctx: "Coordinator touch console with live attendance feed, student passcode guard and hall controls", deps: ["src/context/AppContext.jsx", "src/components/QRScannerModal.jsx", "src/components/PassCodeGuardModal.jsx", "src/components/StudentQRModal.jsx", "lucide-react"], state: "active", last: "antigravity@2026-07-31" }
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import QRScannerModal from '../components/QRScannerModal';
 import PassCodeGuardModal from '../components/PassCodeGuardModal';
@@ -31,13 +31,17 @@ import {
 
 export default function CoordinatorConsole() {
   const {
-    events, registrations, attendanceLogs, updateHallStatus,
+    events, fetchEvents, registrations, attendanceLogs, updateHallStatus,
     addEvent, updateEvent, deleteEvent, profilesList,
     liveAlerts, clearGlobalEmergencyBroadcast
   } = useApp();
   const [selectedHall, setSelectedHall] = useState('Hall 1 (Main Auditorium)');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [nudgeStatus, setNudgeStatus] = useState(null);
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -104,7 +108,7 @@ export default function CoordinatorConsole() {
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     if (!formData.title || !formData.start_time || !formData.end_time) return;
-    await addEvent({
+    const result = await addEvent({
       ...formData,
       start_time: new Date(formData.start_time).toISOString(),
       end_time: new Date(formData.end_time).toISOString(),
@@ -112,16 +116,20 @@ export default function CoordinatorConsole() {
       max_capacity: Number(formData.max_capacity) || 100,
       max_seats: Number(formData.max_capacity) || 100,
     });
-    setShowAddModal(false);
-    setFormData({
-      title: '',
-      description: '',
-      category: 'Technical',
-      hall_number: selectedHall,
-      start_time: '',
-      end_time: '',
-      max_capacity: 100,
-    });
+    if (result && result.success) {
+      setShowAddModal(false);
+      setFormData({
+        title: '',
+        description: '',
+        category: 'Technical',
+        hall_number: selectedHall,
+        start_time: '',
+        end_time: '',
+        max_capacity: 100,
+      });
+    } else {
+      alert(`Event creation failed: ${result?.error?.message || 'Database insert error'}`);
+    }
   };
 
   const handleEditClick = (evt) => {

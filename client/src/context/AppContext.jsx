@@ -77,23 +77,7 @@ export const AppProvider = ({ children }) => {
       return false;
     }
   });
-  const [events, setEvents] = useState(() => {
-    try {
-      const saved = localStorage.getItem('smart_sympo_events');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return [];
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('smart_sympo_events', JSON.stringify(events));
-    } catch (e) {
-      console.warn('Could not save events to localStorage:', e);
-    }
-  }, [events]);
+  const [events, setEvents] = useState([]);
 
   const [registrations, setRegistrations] = useState(() => {
     try {
@@ -320,11 +304,43 @@ export const AppProvider = ({ children }) => {
         }
       });
 
-      // 3. Fetch initial Database tables
+      // 3. Centralized Global Event Fetching directly from Supabase
+      const fetchEvents = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('events')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (error) {
+            console.error('Error fetching events from Supabase:', error);
+            alert(`Error loading events: ${error.message}`);
+            setLiveAlerts((prev) => [
+              {
+                id: Date.now(),
+                message: `Failed to load events: ${error.message}`,
+                time: new Date().toLocaleTimeString(),
+                type: 'warning',
+              },
+              ...prev.slice(0, 4),
+            ]);
+            return { data: null, error };
+          }
+
+          if (data) {
+            setEvents(data);
+          }
+          return { data, error: null };
+        } catch (err) {
+          console.error('Unexpected error fetching events:', err);
+          alert(`Unexpected error fetching events: ${err.message || err}`);
+          return { data: null, error: err };
+        }
+      };
+
       const fetchInitialData = async () => {
         try {
-          const { data: eventsData } = await supabase.from('events').select('*');
-          if (eventsData && eventsData.length > 0) setEvents(eventsData);
+          await fetchEvents();
 
           const { data: regData } = await supabase.from('registrations').select('*');
           if (regData && regData.length > 0) setRegistrations(regData);
@@ -362,29 +378,48 @@ export const AppProvider = ({ children }) => {
 
       fetchInitialData();
 
-      // 4. Realtime listener for Events table
+      // 4. Realtime listener for Events table (INSERT, UPDATE, DELETE)
       const eventsChannel = supabase
         .channel('public:events')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'events' }, (payload) => {
-          const updatedEvent = payload.new;
-          setEvents((prevEvents) =>
-            prevEvents.map((evt) => (evt.id === updatedEvent.id ? updatedEvent : evt))
-          );
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newEvent = payload.new;
+            setEvents((prev) => [newEvent, ...prev.filter((e) => e.id !== newEvent.id)]);
+            setLiveAlerts((prev) => [
+              {
+                id: Date.now(),
+                message: `New Event Live: ${newEvent.title} in ${newEvent.hall_number}`,
+                time: new Date().toLocaleTimeString(),
+                type: 'info',
+              },
+              ...prev.slice(0, 4),
+            ]);
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedEvent = payload.new;
+            setEvents((prevEvents) =>
+              prevEvents.map((evt) => (evt.id === updatedEvent.id ? updatedEvent : evt))
+            );
 
-          const alertMsg =
-            updatedEvent.delay_minutes > 0
-              ? `Attention: ${updatedEvent.title} in ${updatedEvent.hall_number} delayed by ${updatedEvent.delay_minutes} mins.`
-              : `Status Update: ${updatedEvent.title} in ${updatedEvent.hall_number} is now ${updatedEvent.status}.`;
+            const alertMsg =
+              updatedEvent.delay_minutes > 0
+                ? `Attention: ${updatedEvent.title} in ${updatedEvent.hall_number} delayed by ${updatedEvent.delay_minutes} mins.`
+                : `Status Update: ${updatedEvent.title} in ${updatedEvent.hall_number} is now ${updatedEvent.status}.`;
 
-          setLiveAlerts((prev) => [
-            {
-              id: Date.now(),
-              message: alertMsg,
-              time: new Date().toLocaleTimeString(),
-              type: 'warning',
-            },
-            ...prev.slice(0, 4),
-          ]);
+            setLiveAlerts((prev) => [
+              {
+                id: Date.now(),
+                message: alertMsg,
+                time: new Date().toLocaleTimeString(),
+                type: 'warning',
+              },
+              ...prev.slice(0, 4),
+            ]);
+          } else if (payload.eventType === 'DELETE') {
+            const oldId = payload.old?.id;
+            if (oldId) {
+              setEvents((prev) => prev.filter((e) => e.id !== oldId));
+            }
+          }
         })
         .subscribe();
 
@@ -468,7 +503,7 @@ export const AppProvider = ({ children }) => {
     }
   }, []);
 
-  // Supabase Auth Signup with Metadata for Trigger & Service Call
+  // Supabase Auth Signup with complete validation & explicit profiles table insertion
   const signUpWithSupabase = async ({
     email,
     password,
@@ -479,129 +514,148 @@ export const AppProvider = ({ children }) => {
     collegeName,
     phone,
   }) => {
+    if (!email || !email.trim() || !password || !password.trim()) {
+      return { success: false, message: 'Please provide a valid email and password.' };
+    }
+    if (!fullName || !fullName.trim()) {
+      return { success: false, message: 'Please enter your Full Name.' };
+    }
+    if (password.trim().length < 6) {
+      return { success: false, message: 'Password must be at least 6 characters long.' };
+    }
+
     const cleanEmail = email.trim().toLowerCase();
     const finalUsername =
       username?.trim() || (cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail);
     const finalCollegeId =
-      collegeId ||
+      collegeId?.trim() ||
       `${role === 'admin' ? 'ADM' : role === 'coordinator' ? 'FAC' : 'STU'}-${Math.floor(1000 + Math.random() * 9000)}`;
     const finalCollegeName =
       collegeName?.trim() ||
       (role === 'student' ? 'Main University / College' : 'Symposium Administration');
     const finalPhone = phone?.trim() || '';
-    const newUserId = crypto.randomUUID
-      ? crypto.randomUUID()
-      : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0');
 
-    let profileData = {
-      id: newUserId,
-      name: fullName.trim(),
-      full_name: fullName.trim(),
-      username: finalUsername,
-      email: cleanEmail,
-      password: password,
-      pass_code: password,
-      role: role,
-      college_id: finalCollegeId,
-      college_name: finalCollegeName,
-      college: finalCollegeName,
-      phone: finalPhone,
-      phone_number: finalPhone,
-    };
-
-    if (!isMockMode) {
-      try {
-        const { data, error } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: {
-            data: {
-              full_name: fullName.trim(),
-              name: fullName.trim(),
-              username: finalUsername,
-              role: role,
-              college_id: finalCollegeId,
-              college_name: finalCollegeName,
-              college: finalCollegeName,
-              phone: finalPhone,
-            },
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: password.trim(),
+        options: {
+          data: {
+            full_name: fullName.trim(),
+            name: fullName.trim(),
+            username: finalUsername,
+            role: role,
+            college: finalCollegeName,
+            college_name: finalCollegeName,
+            college_id: finalCollegeId,
+            phone: finalPhone,
+            phone_number: finalPhone,
           },
-        });
+        },
+      });
 
-        if (!error && data?.user) {
-          profileData.id = data.user.id;
-          try {
-            await supabase.from('profiles').upsert([profileData]);
-          } catch (e) {
-            console.warn('Supabase profiles upsert warning:', e);
-          }
-        }
-      } catch (err) {
-        console.warn('Supabase Signup Exception (saved locally):', err);
+      if (error) {
+        return { success: false, message: error.message || 'Signup failed' };
       }
-    }
 
-    const savedUser = syncUserStorage(profileData);
-    return { success: true, user: savedUser, profile: savedUser, data: { user: savedUser } };
+      if (!data?.user) {
+        return { success: false, message: 'User registration could not be completed.' };
+      }
+
+      const profileData = {
+        id: data.user.id,
+        name: fullName.trim(),
+        full_name: fullName.trim(),
+        username: finalUsername,
+        email: cleanEmail,
+        role: role,
+        college_id: finalCollegeId,
+        college_name: finalCollegeName,
+        college: finalCollegeName,
+        phone: finalPhone,
+        phone_number: finalPhone,
+        pass_code: password.trim(),
+      };
+
+      // Explicitly insert into public.profiles table
+      const { error: profileError } = await supabase.from('profiles').upsert([profileData]);
+      if (profileError) {
+        console.warn('Supabase profiles upsert warning:', profileError);
+      }
+
+      const savedUser = syncUserStorage(profileData);
+      setIsAuthenticated(true);
+      setSession(data.session || null);
+
+      return { success: true, user: savedUser, profile: savedUser, role: savedUser.role };
+    } catch (err) {
+      console.error('Supabase Signup Exception:', err);
+      return { success: false, message: err.message || 'An unexpected error occurred during signup.' };
+    }
   };
 
-  // Supabase Auth Login
-  // Supabase Auth Login with Target Role Awareness
+  // Strict Supabase Auth Sign In Flow (signInWithPassword only)
   const signInWithSupabase = async ({ email, password, targetRole }) => {
     if (!email || !email.trim() || !password || !password.trim()) {
-      return { success: false, message: 'Strict Login Error: Please enter both email/username and password.' };
+      return {
+        success: false,
+        message: 'Invalid credentials. If you are a new user, please Sign Up first.',
+      };
     }
 
-    if (password.trim().length < 3) {
-      return { success: false, message: 'Invalid Password. Please enter your valid account password.' };
-    }
+    const cleanEmail = email.trim().toLowerCase();
 
-    const cleanInput = email.trim().toLowerCase();
-    const accounts = getStoredAccounts();
-    const isStaffPasscode =
-      password === '2005' || password === 'admin123' || password === 'coord123';
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password.trim(),
+      });
 
-    // 1. Search locally registered accounts (by email or username)
-    let foundAccount = accounts.find(
-      (a) => a.email?.toLowerCase() === cleanInput || (a.username && a.username.toLowerCase() === cleanInput)
-    );
-
-    if (foundAccount) {
-      const isValidPassword =
-        foundAccount.password === password ||
-        foundAccount.pass_code === password ||
-        isStaffPasscode ||
-        (foundAccount.role === 'student' && password === 'student123') ||
-        ((foundAccount.role === 'admin' || foundAccount.role === 'coordinator') && password === '2005');
-
-      if (!isValidPassword) {
-        return { success: false, message: 'Invalid Password. Please check your credentials.' };
+      if (error || !data?.user) {
+        return {
+          success: false,
+          message: 'Invalid credentials. If you are a new user, please Sign Up first.',
+        };
       }
 
-      // If user authenticates on Staff Portal with staff authorization code or matches requested staff role
-      if (targetRole && (targetRole === 'admin' || targetRole === 'coordinator')) {
-        if (isStaffPasscode || foundAccount.role === targetRole || foundAccount.role === 'admin') {
-          foundAccount.role = targetRole;
-          if (targetRole === 'admin' && !foundAccount.college_id?.startsWith('ADM')) {
-            foundAccount.college_id = `ADM-${Math.floor(1000 + Math.random() * 9000)}`;
-          } else if (targetRole === 'coordinator' && !foundAccount.college_id?.startsWith('FAC')) {
-            foundAccount.college_id = `FAC-${Math.floor(1000 + Math.random() * 9000)}`;
-          }
-        }
+      // Fetch user profile from public.profiles table
+      let profile = null;
+      try {
+        const { data: dbProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+        if (dbProfile) profile = dbProfile;
+      } catch (e) {
+        console.warn('Profile fetch warning:', e);
       }
 
-      if (!isMockMode) {
+      const dbRole = profile?.role || data.user.user_metadata?.role || 'student';
+
+      if (!profile) {
+        profile = {
+          id: data.user.id,
+          name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || cleanEmail.split('@')[0],
+          full_name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || cleanEmail.split('@')[0],
+          username: data.user.user_metadata?.username || cleanEmail.split('@')[0],
+          email: data.user.email || cleanEmail,
+          role: dbRole,
+          college_id: data.user.user_metadata?.college_id || `${dbRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
+          college: data.user.user_metadata?.college || data.user.user_metadata?.college_name || 'Symposium Campus',
+          college_name: data.user.user_metadata?.college_name || data.user.user_metadata?.college || 'Symposium Campus',
+          phone: data.user.user_metadata?.phone || '',
+        };
         try {
-          await supabase.auth.signInWithPassword({
-            email: foundAccount.email,
-            password: password.trim(),
-          });
-        } catch {
-          // ignore network errors
+          await supabase.from('profiles').upsert([profile]);
+        } catch (e) {
+          console.warn('Profile upsert warning:', e);
         }
       }
 
-      const synced = syncUserStorage(foundAccount);
+      const synced = syncUserStorage(profile);
+      setIsAuthenticated(true);
+      setSession(data.session);
 
       // Async non-blocking login alert via Express Nodemailer Backend
       sendLoginAlertApi({
@@ -611,112 +665,14 @@ export const AppProvider = ({ children }) => {
         timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
       }).catch((err) => console.warn('[Login Alert Email Error]:', err));
 
-      return { success: true, user: synced, profile: synced };
+      return { success: true, user: synced, profile: synced, role: synced.role };
+    } catch (err) {
+      console.error('Supabase signInWithPassword exception:', err);
+      return {
+        success: false,
+        message: 'Invalid credentials. If you are a new user, please Sign Up first.',
+      };
     }
-
-    // 2. If not in local accounts and not in mock mode, try Supabase Auth
-    if (!isMockMode) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: cleanInput,
-          password: password.trim(),
-        });
-
-        if (data?.user && !error) {
-          let profile = null;
-          try {
-            const { data: dbProfile } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', data.user.id)
-              .single();
-            if (dbProfile) profile = dbProfile;
-          } catch (e) {
-            console.warn('Profile fetch warning:', e);
-          }
-
-          let assignedRole = profile?.role || data.user.user_metadata?.role;
-          if (targetRole && (targetRole === 'admin' || targetRole === 'coordinator')) {
-            if (isStaffPasscode || assignedRole === targetRole || assignedRole === 'admin') {
-              assignedRole = targetRole;
-            }
-          }
-          if (!assignedRole) {
-            assignedRole = targetRole || (cleanInput.includes('admin') ? 'admin' : cleanInput.includes('coord') ? 'coordinator' : 'student');
-          }
-
-          if (!profile) {
-            profile = {
-              id: data.user.id,
-              name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || cleanInput.split('@')[0],
-              full_name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || cleanInput.split('@')[0],
-              username: data.user.user_metadata?.username || cleanInput.split('@')[0],
-              email: data.user.email,
-              role: assignedRole,
-              college_id: data.user.user_metadata?.college_id || `${assignedRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
-              password: password,
-              pass_code: password,
-            };
-            try {
-              await supabase.from('profiles').upsert([profile]);
-            } catch (e) {
-              console.warn('Profile upsert warning:', e);
-            }
-          } else {
-            profile.role = assignedRole;
-          }
-
-          const synced = syncUserStorage(profile);
-
-          // Async non-blocking login alert via Express Nodemailer Backend
-          sendLoginAlertApi({
-            email: synced.email,
-            name: synced.full_name || synced.name || synced.username || 'User',
-            role: synced.role || 'student',
-            timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
-          }).catch((err) => console.warn('[Login Alert Email Error]:', err));
-
-          return { success: true, data, user: data.user, profile: synced };
-        }
-      } catch (err) {
-        console.warn('Supabase Auth error (falling back to role matching):', err);
-      }
-    }
-
-    // 3. Dynamic role matching fallback for testing/demo
-    const role =
-      targetRole ||
-      (cleanInput.includes('admin')
-        ? 'admin'
-        : cleanInput.includes('coord')
-        ? 'coordinator'
-        : 'student');
-
-    const fallbackUser = {
-      id: crypto.randomUUID
-        ? crypto.randomUUID()
-        : '11111111-0000-4000-8000-' + Date.now().toString(16).padStart(12, '0'),
-      name: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
-      full_name: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
-      username: cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput,
-      email: cleanInput.includes('@') ? cleanInput : `${cleanInput}@college.edu`,
-      password: password,
-      pass_code: password,
-      role,
-      college_id: `${role.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
-    };
-
-    const synced = syncUserStorage(fallbackUser);
-
-    // Async non-blocking login alert via Express Nodemailer Backend
-    sendLoginAlertApi({
-      email: synced.email,
-      name: synced.full_name || synced.name || synced.username || 'User',
-      role: synced.role || 'student',
-      timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
-    }).catch((err) => console.warn('[Login Alert Email Error]:', err));
-
-    return { success: true, user: synced, profile: synced };
   };
 
   // Supabase Auth SignOut
@@ -1115,76 +1071,95 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Add new event (Admin & Coordinator function)
-  const addEvent = async (newEventData) => {
-    const newEventId = crypto.randomUUID
-      ? crypto.randomUUID()
-      : '11111111-2222-4000-8000-' + Date.now().toString(16).padStart(12, '0');
+  // Global Event Fetching Helper
+  const fetchEvents = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    const eventRecord = {
-      id: newEventId,
-      title: newEventData.title,
-      description: newEventData.description || '',
-      category: newEventData.category || 'Technical',
-      hall_number: newEventData.hall_number || 'Hall 1 (Main Auditorium)',
-      start_time: newEventData.start_time || new Date().toISOString(),
-      end_time: newEventData.end_time || new Date(Date.now() + 7200000).toISOString(),
-      max_capacity: Number(newEventData.max_capacity || newEventData.max_seats || 100),
-      max_seats: Number(newEventData.max_capacity || newEventData.max_seats || 100),
-      status: newEventData.status || 'Scheduled',
-      delay_minutes: Number(newEventData.delay_minutes || 0),
-      latitude: newEventData.latitude ? parseFloat(newEventData.latitude) : null,
-      longitude: newEventData.longitude ? parseFloat(newEventData.longitude) : null,
-      allowed_radius: Number(newEventData.allowed_radius || 200),
-    };
-
-    setEvents((prev) => {
-      const updated = [eventRecord, ...prev];
-      try {
-        localStorage.setItem('smart_sympo_events', JSON.stringify(updated));
-      } catch (e) {
-        console.warn('LocalStorage save error:', e);
+      if (error) {
+        console.error('Error fetching events from Supabase:', error);
+        alert(`Error loading events: ${error.message}`);
+        setLiveAlerts((prev) => [
+          {
+            id: Date.now(),
+            message: `Failed to load events: ${error.message}`,
+            time: new Date().toLocaleTimeString(),
+            type: 'warning',
+          },
+          ...prev.slice(0, 4),
+        ]);
+        return { data: null, error };
       }
-      return updated;
-    });
 
-    setLiveAlerts((prev) => [
-      {
-        id: Date.now(),
-        message: `New Event Added: ${eventRecord.title} at ${eventRecord.hall_number}`,
-        time: new Date().toLocaleTimeString(),
-        type: 'info',
-      },
-      ...prev.slice(0, 4),
-    ]);
-
-    if (!isMockMode) {
-      try {
-        const insertPayload = {
-          id: eventRecord.id,
-          title: eventRecord.title,
-          description: eventRecord.description,
-          category: eventRecord.category,
-          hall_number: eventRecord.hall_number,
-          start_time: eventRecord.start_time,
-          end_time: eventRecord.end_time,
-          max_capacity: eventRecord.max_capacity,
-          status: eventRecord.status,
-          delay_minutes: eventRecord.delay_minutes,
-        };
-        if (eventRecord.latitude && eventRecord.longitude) {
-          insertPayload.location = `SRID=4326;POINT(${eventRecord.longitude} ${eventRecord.latitude})`;
-        }
-        const { data, error } = await supabase.from('events').insert([insertPayload]).select().single();
-        if (data && !error) {
-          setEvents((prev) => prev.map((e) => (e.id === newEventId ? data : e)));
-        }
-      } catch (err) {
-        console.warn('Supabase addEvent warning (saved locally):', err);
+      if (data) {
+        setEvents(data);
       }
+      return { data, error: null };
+    } catch (err) {
+      console.error('Unexpected error fetching events:', err);
+      alert(`Unexpected error fetching events: ${err.message || err}`);
+      return { data: null, error: err };
     }
+  };
 
-    return { success: true, event: eventRecord };
+  // Add new event (Admin & Coordinator function - Insert directly to Supabase)
+  const addEvent = async (newEventData) => {
+    try {
+      const insertPayload = {
+        title: newEventData.title,
+        description: newEventData.description || '',
+        category: newEventData.category || 'Technical',
+        hall_number: newEventData.hall_number || 'Hall 1 (Main Auditorium)',
+        start_time: newEventData.start_time || new Date().toISOString(),
+        end_time: newEventData.end_time || new Date(Date.now() + 7200000).toISOString(),
+        max_capacity: Number(newEventData.max_capacity || newEventData.max_seats || 100),
+        status: newEventData.status || 'Scheduled',
+        delay_minutes: Number(newEventData.delay_minutes || 0),
+      };
+
+      if (newEventData.latitude && newEventData.longitude) {
+        insertPayload.location = `SRID=4326;POINT(${newEventData.longitude} ${newEventData.latitude})`;
+      }
+
+      const { data, error } = await supabase.from('events').insert([insertPayload]).select().single();
+
+      if (error) {
+        console.error('Supabase event creation error:', error);
+        alert(`Event Creation Failed: ${error.message}`);
+        setLiveAlerts((prev) => [
+          {
+            id: Date.now(),
+            message: `Event Creation Error: ${error.message}`,
+            time: new Date().toLocaleTimeString(),
+            type: 'warning',
+          },
+          ...prev.slice(0, 4),
+        ]);
+        return { success: false, error };
+      }
+
+      if (data) {
+        setEvents((prev) => [data, ...prev.filter((e) => e.id !== data.id)]);
+        setLiveAlerts((prev) => [
+          {
+            id: Date.now(),
+            message: `Event Created: ${data.title} in ${data.hall_number}`,
+            time: new Date().toLocaleTimeString(),
+            type: 'info',
+          },
+          ...prev.slice(0, 4),
+        ]);
+      }
+
+      return { success: true, event: data };
+    } catch (err) {
+      console.error('Unexpected error creating event:', err);
+      alert(`Unexpected error creating event: ${err.message || err}`);
+      return { success: false, error: err };
+    }
   };
 
   // Guest QR Check-in
@@ -1492,6 +1467,7 @@ export const AppProvider = ({ children }) => {
         signInWithSupabase,
         signOutFromSupabase,
         events,
+        fetchEvents,
         registrations,
         attendanceLogs,
         guestCheckins,

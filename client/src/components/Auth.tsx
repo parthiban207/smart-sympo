@@ -1,10 +1,28 @@
-// agent-notes: { ctx: "Strict Supabase Auth with DB role vs target UI role matching check to prevent role bypass vulnerability", deps: ["src/supabaseClient.js", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-24" }
+// agent-notes: { ctx: "Upgraded Supabase Auth component with password visibility toggle, confirm password matching, role selection and strict validation", deps: ["src/supabaseClient.js", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-25" }
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { useApp } from '../context/AppContext';
-import { LogIn, UserPlus, AlertCircle, CheckCircle, KeyRound, AtSign, Shield, UserCheck, GraduationCap, Lock, ShieldAlert, Timer } from 'lucide-react';
+import {
+  LogIn,
+  UserPlus,
+  AlertCircle,
+  CheckCircle,
+  KeyRound,
+  AtSign,
+  Shield,
+  UserCheck,
+  GraduationCap,
+  Lock,
+  ShieldAlert,
+  Timer,
+  Eye,
+  EyeOff,
+  Phone,
+  School,
+  User,
+} from 'lucide-react';
 
 export type UserRole = 'student' | 'coordinator' | 'admin';
 
@@ -16,17 +34,28 @@ interface AuthProps {
 
 export default function Auth({ initialMode = 'login', targetRole = 'student', onSuccess }: AuthProps) {
   const navigate = useNavigate();
-  const { signInWithSupabase, signUpWithSupabase, signOutFromSupabase, currentUser } = useApp();
+  const { signInWithSupabase, signUpWithSupabase, signOutFromSupabase } = useApp();
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(initialMode);
-  const [selectedStaffRole, setSelectedStaffRole] = useState<'coordinator' | 'admin'>('coordinator');
 
+  // Role selections
+  const [selectedStaffRole, setSelectedStaffRole] = useState<'coordinator' | 'admin'>('coordinator');
+  const [selectedSignupRole, setSelectedSignupRole] = useState<'student' | 'coordinator'>('student');
+
+  // Form Fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [collegeName, setCollegeName] = useState('');
-  const [collegeIdInput, setCollegeIdInput] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [collegeIdInput, setCollegeIdInput] = useState('');
+
+  // Password Visibility Toggles
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // States
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -67,14 +96,16 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
 
     // If account is currently locked out, prevent submission immediately
     if (mode === 'login' && isLockedOut) {
-      setErrorMsg(`Too many failed login attempts! Account temporarily locked for ${lockoutSeconds} seconds. Please wait before trying again.`);
+      setErrorMsg(
+        `Too many failed login attempts! Account temporarily locked for ${lockoutSeconds} seconds. Please wait before trying again.`
+      );
       return;
     }
 
     setLoading(true);
 
     try {
-      // FORGOT PASSWORD
+      // 1. FORGOT PASSWORD
       if (mode === 'forgot') {
         if (!email.trim()) {
           setErrorMsg('Please enter your registered email address.');
@@ -82,7 +113,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           return;
         }
 
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: window.location.origin + '/login',
         });
 
@@ -95,33 +126,57 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         return;
       }
 
-      // SIGN UP
+      // 2. SIGN UP WITH STRICT CLIENT-SIDE VALIDATION
       if (mode === 'signup') {
-        if (!email.trim() || !password.trim() || !fullName.trim() || !username.trim()) {
-          setErrorMsg('Please complete all required signup fields.');
+        if (!fullName.trim() || !email.trim() || !collegeName.trim() || !phoneNumber.trim()) {
+          setErrorMsg('Please fill in all required fields (Full Name, Email, College Name, Phone Number).');
           setLoading(false);
           return;
         }
 
-        const assignedRole: UserRole = isStaffMode ? selectedStaffRole : 'student';
+        if (!password || !confirmPassword) {
+          setErrorMsg('Please enter and confirm your password.');
+          setLoading(false);
+          return;
+        }
+
+        // Password Length Validation
+        if (password.length < 6) {
+          setErrorMsg('Password must be at least 6 characters long.');
+          setLoading(false);
+          return;
+        }
+
+        // Password Matching Validation
+        if (password !== confirmPassword) {
+          setErrorMsg('Passwords do not match! Please check again.');
+          setLoading(false);
+          return;
+        }
+
+        const assignedRole: UserRole = isStaffMode ? selectedStaffRole : selectedSignupRole;
 
         const result = await signUpWithSupabase({
-          email,
-          password,
-          fullName,
-          username,
+          email: email.trim(),
+          password: password.trim(),
+          fullName: fullName.trim(),
+          username: username.trim() || (email.includes('@') ? email.split('@')[0] : email),
           role: assignedRole,
-          collegeName: collegeName.trim() || (isStaffMode ? 'Symposium Faculty Department' : 'University College Campus'),
-          collegeId: collegeIdInput.trim() || (isStaffMode
-            ? `${assignedRole === 'admin' ? 'ADM' : 'FAC'}-${Math.floor(1000 + Math.random() * 9000)}`
-            : `STU-${Math.floor(1000 + Math.random() * 9000)}`),
+          collegeName: collegeName.trim(),
+          collegeId: collegeIdInput.trim() || (
+            assignedRole === 'admin'
+              ? `ADM-${Math.floor(1000 + Math.random() * 9000)}`
+              : assignedRole === 'coordinator'
+              ? `FAC-${Math.floor(1000 + Math.random() * 9000)}`
+              : `STU-${Math.floor(1000 + Math.random() * 9000)}`
+          ),
           phone: phoneNumber.trim(),
         });
 
         if (!result.success) {
-          setErrorMsg(result.message || 'Signup failed. Please check details.');
+          setErrorMsg(result.message || 'Signup failed. Please check your details.');
         } else {
-          setSuccessMsg(`Account created as ${assignedRole.toUpperCase()}! Redirecting to dashboard...`);
+          setSuccessMsg(`Account created successfully as ${assignedRole.toUpperCase()}! Redirecting...`);
           setTimeout(() => {
             if (onSuccess) onSuccess();
             else if (assignedRole === 'admin') navigate('/admin');
@@ -133,26 +188,18 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         return;
       }
 
-      // LOGIN — Strict Authentication & Database Role Matching Verification
+      // 3. STRICT LOGIN FLOW (No Auto-Account Creation)
       if (mode === 'login') {
         if (!email.trim() || !password.trim()) {
-          const nextCount = failedAttempts + 1;
-          setFailedAttempts(nextCount);
-          if (nextCount >= 3) {
-            setIsLockedOut(true);
-            setLockoutSeconds(30);
-            setErrorMsg('Too many failed login attempts! Account temporarily locked for 30 seconds. Please wait before trying again.');
-          } else {
-            setErrorMsg('Invalid Email or Password!');
-          }
+          setErrorMsg('Invalid credentials. If you are a new user, please Sign Up first.');
           setLoading(false);
           return;
         }
 
         const expectedRole = isStaffMode ? selectedStaffRole.toLowerCase() : 'student';
 
-        // 1. Authenticate Email & Password using Supabase Auth (signInWithPassword)
-        const res = await signInWithSupabase({ email, password, targetRole: expectedRole });
+        // Authenticate existing registered credentials only
+        const res = await signInWithSupabase({ email: email.trim(), password: password.trim(), targetRole: expectedRole });
 
         if (!res || !res.success || (!res.user && !res.profile)) {
           const nextFailed = failedAttempts + 1;
@@ -161,37 +208,33 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           if (nextFailed >= 3) {
             setIsLockedOut(true);
             setLockoutSeconds(30);
-            setErrorMsg('Too many failed login attempts! Account temporarily locked for 30 seconds. Please wait before trying again.');
+            setErrorMsg(
+              'Too many failed login attempts! Account temporarily locked for 30 seconds. Please wait before trying again.'
+            );
           } else {
-            setErrorMsg(res?.message || 'Invalid Email or Password!');
+            setErrorMsg(res?.message || 'Invalid credentials. If you are a new user, please Sign Up first.');
           }
 
           setLoading(false);
-          return; // STOPS ACCESS BYPASS HERE!
+          return;
         }
 
-        // 2. Extract Fetched Database Role & Determine Currently Selected UI Tab Role
+        // Extract Fetched Database Role & Determine Destination
         const fetchedProfile = res.profile || res.user;
-        const userRole = (fetchedProfile.role || 'student').toLowerCase();
+        const userRole = (res.role || fetchedProfile?.role || 'student').toLowerCase();
 
-        // 3. Strict Role Matching Check
-        // Compare DB role with selected tab role (e.g. 'student', 'coordinator', 'admin')
-        if (userRole !== expectedRole) {
-          // Allow Admin users to access Coordinator console if explicitly intended
-          if (userRole === 'admin' && expectedRole === 'coordinator') {
-            // Authorized admin access
-          } else {
-            setErrorMsg(`Access Denied! You are registered as a [${userRole.toUpperCase()}]. You cannot log in as [${expectedRole.toUpperCase()}].`);
-            await signOutFromSupabase(); // Clean up session to prevent unauthorized token retention
-            setLoading(false);
-            return; // STOPS ROLE BYPASS VULNERABILITY HERE!
-          }
+        // Strict Role Matching Check for Staff Portal
+        if (isStaffMode && userRole === 'student') {
+          setErrorMsg('Access Denied! You are registered as a [STUDENT]. Please log in via the Student Access Portal.');
+          await signOutFromSupabase();
+          setLoading(false);
+          return;
         }
 
-        // 4. Safe Navigation to Specific Role Dashboard
+        // Success: Reset rate limits and redirect
         setFailedAttempts(0);
         setIsLockedOut(false);
-        setSuccessMsg(`Role Match Verified! Authenticated as ${userRole.toUpperCase()}. Redirecting...`);
+        setSuccessMsg(`Welcome! Authenticated as ${userRole.toUpperCase()}. Redirecting...`);
         setTimeout(() => {
           if (onSuccess) {
             onSuccess();
@@ -208,9 +251,11 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
       if (nextFailed >= 3) {
         setIsLockedOut(true);
         setLockoutSeconds(30);
-        setErrorMsg('Too many failed login attempts! Account temporarily locked for 30 seconds. Please wait before trying again.');
+        setErrorMsg(
+          'Too many failed login attempts! Account temporarily locked for 30 seconds. Please wait before trying again.'
+        );
       } else {
-        setErrorMsg('Invalid Email or Password!');
+        setErrorMsg(err?.message || 'Invalid credentials. If you are a new user, please Sign Up first.');
       }
       setLoading(false);
       return;
@@ -221,10 +266,14 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <div className="bg-white w-full rounded-2xl border border-slate-200 p-8 shadow-md relative text-left text-slate-900">
+      <div className="bg-white w-full rounded-2xl border border-slate-200 p-7 sm:p-8 shadow-md relative text-left text-slate-900">
         {/* Header */}
-        <div className="flex flex-col items-center text-center mb-6">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-xs mb-3 text-white ${isStaffMode ? 'bg-amber-600' : 'bg-indigo-600'}`}>
+        <div className="flex flex-col items-center text-center mb-5">
+          <div
+            className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-xs mb-3 text-white ${
+              isStaffMode ? 'bg-amber-600' : 'bg-indigo-600'
+            }`}
+          >
             {isStaffMode ? <UserCheck className="w-6 h-6" /> : <GraduationCap className="w-6 h-6" />}
           </div>
 
@@ -232,12 +281,14 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
             {isStaffMode ? 'Staff Operations Portal' : 'Student Access Portal'}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            {isStaffMode
-              ? 'Enter correct staff credentials to log in'
-              : 'Enter correct student username/email and password to log in'}
+            {mode === 'signup'
+              ? 'Create a new account with complete profile details'
+              : isStaffMode
+              ? 'Enter verified staff credentials to access console'
+              : 'Enter student email and password to log in'}
           </p>
 
-          {/* Staff Role Selector Toggle (Coordinator vs Admin) */}
+          {/* Staff Mode Role Toggle (Coordinator vs Admin) */}
           {isStaffMode && (
             <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full mt-4">
               <button
@@ -275,6 +326,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
               onClick={() => {
                 setMode('login');
                 setErrorMsg(null);
+                setSuccessMsg(null);
               }}
               className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 mode === 'login'
@@ -283,7 +335,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
               }`}
             >
               <LogIn className="w-3.5 h-3.5" />
-              Log In
+              Sign In
             </button>
 
             <button
@@ -291,6 +343,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
               onClick={() => {
                 setMode('signup');
                 setErrorMsg(null);
+                setSuccessMsg(null);
               }}
               className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 mode === 'signup'
@@ -312,7 +365,8 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
               <h4 className="font-bold text-sm">Account Security Lockout Active</h4>
               <p className="mt-0.5 leading-relaxed text-rose-100">
                 Too many failed login attempts! Account temporarily locked for{' '}
-                <span className="font-mono font-extrabold underline">{lockoutSeconds}s</span>. Please wait before trying again.
+                <span className="font-mono font-extrabold underline">{lockoutSeconds}s</span>. Please wait before trying
+                again.
               </p>
             </div>
           </div>
@@ -326,6 +380,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           </div>
         )}
 
+        {/* Success Alert Banner */}
         {successMsg && (
           <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2 font-medium">
             <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -337,43 +392,40 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           {mode === 'signup' && (
             <>
+              {/* Full Name */}
               <div>
-                <label className="text-slate-700 font-semibold block mb-1">Full Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Sarah Chen"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-700 font-semibold block mb-1">Username</label>
+                <label className="text-slate-700 font-semibold block mb-1">
+                  Full Name <span className="text-rose-500">*</span>
+                </label>
                 <div className="relative">
-                  <AtSign className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
                     required
-                    placeholder="sarah_chen"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono"
+                    placeholder="e.g. Sarah Chen"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all"
                   />
                 </div>
               </div>
 
+              {/* College Name */}
               <div>
                 <label className="text-slate-700 font-semibold block mb-1">
-                  {isStaffMode ? 'Department / Institution' : 'College / University Name'}
+                  {isStaffMode ? 'Department / Institution' : 'College / University Name'}{' '}
+                  <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <GraduationCap className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  <School className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="text"
                     required
-                    placeholder={isStaffMode ? 'e.g. Dept. of Computer Science & Engineering' : 'e.g. Anna University / Oxford Institute'}
+                    placeholder={
+                      isStaffMode
+                        ? 'e.g. Dept. of Computer Science & Engineering'
+                        : 'e.g. Anna University / Oxford Institute'
+                    }
                     value={collegeName}
                     onChange={(e) => setCollegeName(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all"
@@ -381,57 +433,95 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-700 font-semibold block mb-1">
-                    {isStaffMode ? 'Staff ID (Optional)' : 'College Roll / Student ID'}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={isStaffMode ? 'e.g. FAC-2024' : 'e.g. 2024-CS-101'}
-                    value={collegeIdInput}
-                    onChange={(e) => setCollegeIdInput(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-slate-700 font-semibold block mb-1">Phone Number (Optional)</label>
+              {/* Phone Number */}
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">
+                  Phone Number <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="tel"
+                    required
                     placeholder="e.g. +91 9876543210"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono"
                   />
                 </div>
               </div>
+
+              {/* Role Selection (Student / Coordinator) when not in strict staff gate */}
+              {!isStaffMode && (
+                <div>
+                  <label className="text-slate-700 font-semibold block mb-1">
+                    Select Your Role <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSignupRole('student')}
+                      className={`py-2 px-3 rounded-xl border text-center transition flex items-center justify-center gap-2 cursor-pointer ${
+                        selectedSignupRole === 'student'
+                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700 font-bold shadow-2xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <GraduationCap className="w-4 h-4 text-indigo-600" />
+                      <span>Student</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSignupRole('coordinator')}
+                      className={`py-2 px-3 rounded-xl border text-center transition flex items-center justify-center gap-2 cursor-pointer ${
+                        selectedSignupRole === 'coordinator'
+                          ? 'bg-amber-50 border-amber-500 text-amber-700 font-bold shadow-2xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <UserCheck className="w-4 h-4 text-amber-600" />
+                      <span>Coordinator</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
+          {/* Email Field */}
           <div>
-            <label className="text-slate-700 font-semibold block mb-1">Email Address or Username</label>
-            <input
-              type="text"
-              required
-              disabled={isLockedOut}
-              placeholder="Enter your registered email / username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all disabled:opacity-60"
-            />
+            <label className="text-slate-700 font-semibold block mb-1">
+              Email Address <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative">
+              <AtSign className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="email"
+                required
+                disabled={isLockedOut}
+                placeholder="e.g. sarah.chen@college.edu"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all disabled:opacity-60"
+              />
+            </div>
           </div>
 
+          {/* Password Field with Eye Toggle */}
           {mode !== 'forgot' && (
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-slate-700 font-semibold">Password</label>
+                <label className="text-slate-700 font-semibold">
+                  Password <span className="text-rose-500">*</span>
+                </label>
                 {mode === 'login' && (
                   <button
                     type="button"
                     onClick={() => {
                       setMode('forgot');
                       setErrorMsg(null);
+                      setSuccessMsg(null);
                     }}
                     className="text-[11px] text-indigo-600 hover:text-indigo-700 font-medium cursor-pointer"
                   >
@@ -442,18 +532,57 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   disabled={isLockedOut}
-                  placeholder="Enter your password"
+                  placeholder={mode === 'signup' ? 'Create password (min 6 chars)' : 'Enter your password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono disabled:opacity-60"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-10 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono disabled:opacity-60"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
           )}
 
+          {/* Confirm Password Field with Eye Toggle (Sign Up only) */}
+          {mode === 'signup' && (
+            <div>
+              <label className="text-slate-700 font-semibold block mb-1">
+                Confirm Password <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  placeholder="Re-enter password to match"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-10 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+                  title={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading || isLockedOut}
@@ -471,16 +600,22 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
                 <span>Account Temporarily Locked ({lockoutSeconds}s)</span>
               </>
             ) : loading ? (
-              <span>Authenticating Credentials...</span>
+              <span>Authenticating...</span>
             ) : mode === 'login' ? (
               <>
                 <LogIn className="w-4 h-4" />
-                <span>Log In with Password</span>
+                <span>Sign In with Password</span>
               </>
             ) : mode === 'signup' ? (
               <>
                 <UserPlus className="w-4 h-4" />
-                <span>Create {isStaffMode ? selectedStaffRole.toUpperCase() : 'STUDENT'} Account</span>
+                <span>
+                  Create{' '}
+                  {isStaffMode
+                    ? selectedStaffRole.toUpperCase()
+                    : selectedSignupRole.toUpperCase()}{' '}
+                  Account
+                </span>
               </>
             ) : (
               <>
@@ -494,10 +629,14 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         {mode === 'forgot' && (
           <div className="mt-4 text-center">
             <button
-              onClick={() => setMode('login')}
+              onClick={() => {
+                setMode('login');
+                setErrorMsg(null);
+                setSuccessMsg(null);
+              }}
               className="text-xs text-slate-500 hover:text-slate-900 cursor-pointer"
             >
-              ← Back to Log In
+              ← Back to Sign In
             </button>
           </div>
         )}

@@ -1,6 +1,6 @@
 // agent-notes: { ctx: "Admin analytics dashboard with Excel spreadsheet export system, presence widget, role management, and event creation", deps: ["src/context/AppContext.jsx", "src/hooks/usePresence.ts", "src/components/QRScannerModal.jsx", "src/utils/exportReports.ts", "src/supabaseClient.js", "lucide-react"], state: "active", last: "antigravity@2026-08-24" }
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { usePresence } from '../hooks/usePresence';
 import { supabase, isMockMode } from '../supabaseClient';
@@ -26,7 +26,7 @@ import {
 
 export default function AdminAnalytics() {
   const {
-    events, registrations, attendanceLogs, addEvent, updateEvent, deleteEvent,
+    events, fetchEvents, registrations, attendanceLogs, addEvent, updateEvent, deleteEvent,
     guestCheckins, currentUser, profilesList, updateUserRole, updateUserPassCode,
     deleteUserAccount, clearAllAccounts, liveAlerts, clearGlobalEmergencyBroadcast
   } = useApp();
@@ -34,6 +34,10 @@ export default function AdminAnalytics() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
 
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [selectedRosterEvent, setSelectedRosterEvent] = useState(null);
@@ -612,7 +616,7 @@ export default function AdminAnalytics() {
       return;
     }
 
-    await addEvent({
+    const result = await addEvent({
       ...formData,
       start_time: new Date(formData.start_time).toISOString(),
       end_time: new Date(formData.end_time).toISOString(),
@@ -622,19 +626,23 @@ export default function AdminAnalytics() {
       allowed_radius: Number(formData.allowed_radius) || 200,
     });
 
-    setShowAddModal(false);
-    setFormData({
-      title: '',
-      description: '',
-      category: 'Technical',
-      hall_number: 'Hall 1 (Main Auditorium)',
-      latitude: '',
-      longitude: '',
-      allowed_radius: 200,
-      start_time: '',
-      end_time: '',
-      max_capacity: 100,
-    });
+    if (result && result.success) {
+      setShowAddModal(false);
+      setFormData({
+        title: '',
+        description: '',
+        category: 'Technical',
+        hall_number: 'Hall 1 (Main Auditorium)',
+        latitude: '',
+        longitude: '',
+        allowed_radius: 200,
+        start_time: '',
+        end_time: '',
+        max_capacity: 100,
+      });
+    } else {
+      alert(`Event creation failed: ${result?.error?.message || 'Database insert error'}`);
+    }
   };
 
   const handleUseCurrentLocation = () => {

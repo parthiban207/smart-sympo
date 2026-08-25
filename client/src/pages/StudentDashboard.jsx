@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { isValidUUID } from '../supabaseClient';
 import StudentQRModal from '../components/StudentQRModal';
@@ -17,11 +17,15 @@ import {
 } from 'lucide-react';
 
 export default function StudentDashboard() {
-  const { currentUser, events, registrations, registerForEvent, unregisterForEvent } = useApp();
+  const { currentUser, events, fetchEvents, registrations, registerForEvent, unregisterForEvent } = useApp();
   const [selectedPassEvent, setSelectedPassEvent] = useState(null);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [successModalData, setSuccessModalData] = useState(null);
   const [feedback, setFeedback] = useState(null);
+
+  useEffect(() => {
+    fetchEvents();
+  }, []);
 
   if (!currentUser) return null;
 
