@@ -8,10 +8,15 @@ export default function LiveAlertBanner() {
   const audioCtxRef = useRef(null);
   const sirenIntervalRef = useRef(null);
 
-  // Filter out alerts that this specific user has dismissed locally
-  const activeVisibleAlerts = (liveAlerts || []).filter(
-    (a) => !dismissedAlertIds.includes(a.id)
-  );
+  // Filter out alerts that this specific user has dismissed locally or network error warnings
+  const activeVisibleAlerts = (liveAlerts || []).filter((a) => {
+    if (dismissedAlertIds.includes(a.id)) return false;
+    const msg = (a.message || '').toLowerCase();
+    if (msg.includes('failed to load') || msg.includes('failed to fetch') || msg.includes('typeerror')) {
+      return false;
+    }
+    return true;
+  });
 
   const currentAlert = activeVisibleAlerts[0];
   const isEmergency = Boolean(

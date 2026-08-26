@@ -307,7 +307,7 @@ export const AppProvider = ({ children }) => {
         }
       });
 
-      // 3. Centralized Global Event Fetching directly from Supabase
+      // 3. Centralized Global Event Fetching directly from Supabase (safe silent fallback)
       const fetchEvents = async () => {
         try {
           const { data, error } = await supabase
@@ -316,21 +316,10 @@ export const AppProvider = ({ children }) => {
             .order('created_at', { ascending: false });
 
           if (error) {
+            console.warn('Events fetch warning (silent):', error.message);
             if (isClockSkewOrJwtError(error)) {
-              console.warn('Clock skew / JWT issue detected, retrying fetchEvents silently in 1.5s...');
               setTimeout(() => fetchEvents(), 1500);
-              return { data: null, error };
             }
-            console.error('Error fetching events from Supabase:', error);
-            setLiveAlerts((prev) => [
-              {
-                id: Date.now(),
-                message: `Failed to load events: ${error.message}`,
-                time: new Date().toLocaleTimeString(),
-                type: 'warning',
-              },
-              ...prev.slice(0, 4),
-            ]);
             return { data: null, error };
           }
 
@@ -339,12 +328,7 @@ export const AppProvider = ({ children }) => {
           }
           return { data, error: null };
         } catch (err) {
-          if (isClockSkewOrJwtError(err)) {
-            console.warn('Clock skew exception detected, retrying fetchEvents silently in 1.5s...');
-            setTimeout(() => fetchEvents(), 1500);
-            return { data: null, error: err };
-          }
-          console.error('Unexpected error fetching events:', err);
+          console.warn('Network fetch silent fallback:', err);
           return { data: null, error: err };
         }
       };
@@ -1429,7 +1413,7 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Global Event Fetching Helper
+  // Global Event Fetching Helper (safe silent fallback)
   const fetchEvents = async () => {
     try {
       const { data, error } = await supabase
@@ -1438,21 +1422,10 @@ export const AppProvider = ({ children }) => {
         .order('created_at', { ascending: false });
 
       if (error) {
+        console.warn('Events fetch warning (silent):', error.message);
         if (isClockSkewOrJwtError(error)) {
-          console.warn('Clock skew / JWT issue detected, retrying fetchEvents silently in 1.5s...');
           setTimeout(() => fetchEvents(), 1500);
-          return { data: null, error };
         }
-        console.error('Error fetching events from Supabase:', error);
-        setLiveAlerts((prev) => [
-          {
-            id: Date.now(),
-            message: `Failed to load events: ${error.message}`,
-            time: new Date().toLocaleTimeString(),
-            type: 'warning',
-          },
-          ...prev.slice(0, 4),
-        ]);
         return { data: null, error };
       }
 
@@ -1461,12 +1434,7 @@ export const AppProvider = ({ children }) => {
       }
       return { data, error: null };
     } catch (err) {
-      if (isClockSkewOrJwtError(err)) {
-        console.warn('Clock skew exception detected, retrying fetchEvents in 1.5s...');
-        setTimeout(() => fetchEvents(), 1500);
-        return { data: null, error: err };
-      }
-      console.error('Unexpected error fetching events:', err);
+      console.warn('Network fetch silent fallback:', err);
       return { data: null, error: err };
     }
   };

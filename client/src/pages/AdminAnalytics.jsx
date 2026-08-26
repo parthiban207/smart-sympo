@@ -291,9 +291,6 @@ export default function AdminAnalytics() {
       const trimmedCode = String(inputCode).trim();
       if (trimmedCode !== '2027') {
         const errorText = 'Access Denied: Incorrect Security Code!';
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          alert(errorText);
-        }
         setRoleFeedback({ text: errorText, type: 'error' });
         setTimeout(() => setRoleFeedback(null), 4000);
         return;
@@ -305,9 +302,6 @@ export default function AdminAnalytics() {
         setTimeout(() => setRoleFeedback(null), 3000);
       } else {
         const errorText = res.message || 'Access Denied: Incorrect Security Code!';
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          alert(errorText);
-        }
         setRoleFeedback({ text: errorText, type: 'error' });
         setTimeout(() => setRoleFeedback(null), 4000);
       }
@@ -340,9 +334,6 @@ export default function AdminAnalytics() {
       const trimmedCode = String(inputCode).trim();
       if (trimmedCode !== '2027') {
         const errorText = 'Operation Aborted: Invalid Security Code';
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          alert(errorText);
-        }
         setRoleFeedback({ text: errorText, type: 'error' });
         setTimeout(() => setRoleFeedback(null), 4000);
         return;
@@ -354,9 +345,6 @@ export default function AdminAnalytics() {
         setTimeout(() => setRoleFeedback(null), 3000);
       } else {
         const errorText = res.message || 'Operation Aborted: Invalid Security Code';
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          alert(errorText);
-        }
         setRoleFeedback({ text: errorText, type: 'error' });
         setTimeout(() => setRoleFeedback(null), 4000);
       }
@@ -383,9 +371,6 @@ export default function AdminAnalytics() {
         const errorText = 'Access Denied: Incorrect Security Code!';
         setSecurityModalError(errorText);
         setRoleFeedback({ text: errorText, type: 'error' });
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          alert(errorText);
-        }
         setTimeout(() => setRoleFeedback(null), 4000);
         return;
       }
@@ -398,18 +383,12 @@ export default function AdminAnalytics() {
       } else {
         const errorText = res.message || 'Access Denied: Incorrect Security Code!';
         setSecurityModalError(errorText);
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          alert(errorText);
-        }
       }
     } else if (securityModalState.actionType === 'bulk') {
       if (trimmedCode !== '2027') {
         const errorText = 'Operation Aborted: Invalid Security Code';
         setSecurityModalError(errorText);
         setRoleFeedback({ text: errorText, type: 'error' });
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          alert(errorText);
-        }
         setTimeout(() => setRoleFeedback(null), 4000);
         return;
       }
@@ -422,9 +401,6 @@ export default function AdminAnalytics() {
       } else {
         const errorText = res.message || 'Operation Aborted: Invalid Security Code';
         setSecurityModalError(errorText);
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          alert(errorText);
-        }
       }
     }
   };
@@ -739,7 +715,8 @@ export default function AdminAnalytics() {
 
     const userRole = (currentUser?.role || localStorage.getItem('smart_sympo_active_role') || '').toLowerCase();
     if (userRole !== 'admin' && userRole !== 'coordinator') {
-      alert('Access Denied: Only admins or coordinators can create events.');
+      setRoleFeedback({ text: 'Access Denied: Only admins or coordinators can create events.', type: 'error' });
+      setTimeout(() => setRoleFeedback(null), 4000);
       return;
     }
 
@@ -768,13 +745,13 @@ export default function AdminAnalytics() {
         max_capacity: 100,
       });
     } else {
-      alert(`Event creation failed: ${result?.error?.message || 'Database insert error'}`);
+      console.warn(`Event creation failed: ${result?.error?.message || 'Database insert error'}`);
     }
   };
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser.');
+      console.warn('Geolocation is not supported by your browser.');
       return;
     }
     setGeoLoading(true);
@@ -788,7 +765,7 @@ export default function AdminAnalytics() {
         setGeoLoading(false);
       },
       () => {
-        alert('Unable to retrieve your location. Please enter coordinates manually.');
+        console.warn('Unable to retrieve location. Please enter coordinates manually.');
         setGeoLoading(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }

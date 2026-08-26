@@ -32,9 +32,6 @@ export default function UserSettingsModal({ isOpen, onClose }) {
     const trimmedCode = String(inputCode !== undefined ? inputCode : '2027').trim();
     if (trimmedCode !== '2027') {
       const err = 'Access Denied: Incorrect Security Code!';
-      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-        alert(err);
-      }
       setErrorMsg(err);
       return;
     }
@@ -46,9 +43,6 @@ export default function UserSettingsModal({ isOpen, onClose }) {
       const res = await deleteUserAccount(currentUser.id, trimmedCode);
       if (!res.success) {
         const err = res.message || 'Access Denied: Incorrect Security Code!';
-        if (typeof window !== 'undefined' && typeof window.alert === 'function') {
-          alert(err);
-        }
         setErrorMsg(err);
         return;
       }
