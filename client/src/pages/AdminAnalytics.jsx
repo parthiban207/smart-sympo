@@ -1,6 +1,6 @@
-// agent-notes: { ctx: "Admin analytics dashboard with Excel spreadsheet export system, presence widget, role management, and event creation", deps: ["src/context/AppContext.jsx", "src/hooks/usePresence.ts", "src/components/QRScannerModal.jsx", "src/utils/exportReports.ts", "src/supabaseClient.js", "lucide-react"], state: "active", last: "antigravity@2026-08-24" }
+// agent-notes: { ctx: "Admin analytics dashboard with realtime registrations subscription, Excel spreadsheet export system, and role management", deps: ["src/context/AppContext.jsx", "src/hooks/usePresence.ts", "src/components/QRScannerModal.jsx", "src/utils/exportReports.ts", "src/supabaseClient.js", "lucide-react"], state: "active", last: "antigravity@2026-08-26" }
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { usePresence } from '../hooks/usePresence';
 import { supabase, isMockMode } from '../supabaseClient';
@@ -27,18 +27,74 @@ import {
 
 export default function AdminAnalytics() {
   const {
-    events, fetchEvents, registrations, attendanceLogs, addEvent, updateEvent, deleteEvent,
-    guestCheckins, currentUser, profilesList, updateUserRole, updateUserPassCode,
-    deleteUserAccount, clearAllAccounts, liveAlerts, clearGlobalEmergencyBroadcast
+    events, fetchEvents, registrations, setRegistrations, attendanceLogs, setAttendanceLogs,
+    addEvent, updateEvent, deleteEvent, guestCheckins, currentUser, profilesList, setProfilesList,
+    updateUserRole, updateUserPassCode, deleteUserAccount, clearAllAccounts, liveAlerts,
+    clearGlobalEmergencyBroadcast
   } = useApp();
   const { onlineUsers, onlineCount } = usePresence();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
 
+  // Real-Time Attendance Re-fetch Helper
+  const fetchAttendanceList = useCallback(async () => {
+    if (isMockMode) return;
+    try {
+      const { data: regData } = await supabase
+        .from('registrations')
+        .select('*')
+        .order('registered_at', { ascending: false });
+      if (regData && setRegistrations) {
+        setRegistrations(regData);
+      }
+
+      const { data: attData } = await supabase
+        .from('attendance_logs')
+        .select('*')
+        .order('check_in_time', { ascending: false });
+      if (attData && setAttendanceLogs) {
+        setAttendanceLogs(attData);
+      }
+
+      const { data: profData } = await supabase.from('profiles').select('*');
+      if (profData && setProfilesList) {
+        setProfilesList(profData);
+      }
+    } catch (err) {
+      console.warn('[Admin Dashboard Realtime Attendance Fetch Error]:', err);
+    }
+  }, [setRegistrations, setAttendanceLogs, setProfilesList]);
+
+  // Initial Data Fetch & Live Supabase Realtime Subscription on registrations
   useEffect(() => {
     fetchEvents();
-  }, []);
+    fetchAttendanceList();
+
+    if (!isMockMode) {
+      const channel = supabase
+        .channel('realtime:registrations')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'registrations' },
+          () => {
+            fetchAttendanceList(); // Re-fetch updated list instantly
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'attendance_logs' },
+          () => {
+            fetchAttendanceList(); // Re-fetch updated attendance logs instantly
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [fetchEvents, fetchAttendanceList]);
 
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [selectedRosterEvent, setSelectedRosterEvent] = useState(null);
@@ -1733,9 +1789,19 @@ export default function AdminAnalytics() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-700 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-            <Radio className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
-            <span>Channel: <code className="font-mono text-slate-800 font-bold">public:registrations</code></span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchAttendanceList}
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 flex items-center gap-1.5 transition cursor-pointer"
+              title="Refresh Live Attendance Feed"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Refresh Feed</span>
+            </button>
+            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-700 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <Radio className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+              <span>Channel: <code className="font-mono text-slate-800 font-bold">realtime:registrations</code></span>
+            </div>
           </div>
         </div>
 

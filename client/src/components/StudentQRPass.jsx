@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Dynamic refreshing QR Pass component with 15s rotating timestamp token", deps: ["react-qr-code", "lucide-react"], state: "active", last: "antigravity@2026-07-31" }
+// agent-notes: { ctx: "Dynamic refreshing QR Pass component encoding real Supabase student ID, registration ID, and email with 15s rotating token", deps: ["react-qr-code", "lucide-react"], state: "active", last: "antigravity@2026-08-26" }
 
 import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
@@ -9,7 +9,9 @@ export default function StudentQRPass({
   eventId,
   registrationId,
   studentName,
+  studentEmail,
   collegeId,
+  collegeName,
   eventTitle,
   hallNumber,
 }) {
@@ -33,15 +35,18 @@ export default function StudentQRPass({
     return () => clearInterval(timer);
   }, []);
 
-  // Generate payload encoding registration_id, event_id, user_id, timestamp token and security signature
+  // Generate payload encoding REAL student ID, registration ID, email, and timestamp token
   const payloadData = {
-    registration_id: registrationId || (studentId ? `reg-${studentId.slice(0, 8)}` : ''),
-    event_id: eventId,
-    user_id: studentId,
-    student_id: studentId,
+    studentId: studentId || '',
+    registrationId: registrationId || '',
+    email: studentEmail || '',
+    // Backwards-compatible standard aliases for coordinator scanners:
+    student_id: studentId || '',
+    registration_id: registrationId || '',
+    user_id: studentId || '',
+    event_id: eventId || '',
     timestamp: tokenTimestamp,
     refresh_rate_sec: 15,
-    signature: `sig-${studentId?.slice(0, 4)}-${tokenTimestamp}`,
   };
 
   const qrPayloadString = JSON.stringify(payloadData);
@@ -69,7 +74,7 @@ export default function StudentQRPass({
         ></div>
       </div>
 
-      {/* Centerpiece: Clean White Card housing Dynamic Refreshing QR Code */}
+      {/* Centerpiece: Clean Card housing Dynamic Refreshing QR Code */}
       <div className="relative group bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-center">
         <QRCode
           value={qrPayloadString}
@@ -87,10 +92,10 @@ export default function StudentQRPass({
       {/* Security Notice */}
       <div className="mt-4 w-full text-center text-xs text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl flex items-center justify-center gap-2 font-medium">
         <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
-        <span>Dynamic TOTP Secured - Screenshots Invalid</span>
+        <span>Dynamic TOTP Secured - Live Entry Pass</span>
       </div>
 
-      {/* Student & Event Information Details */}
+      {/* Real Student & Event Information Details */}
       {(studentName || eventTitle) && (
         <div className="mt-4 w-full bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-left space-y-2 text-xs">
           {studentName && (
@@ -101,8 +106,14 @@ export default function StudentQRPass({
           )}
           {collegeId && (
             <div className="flex justify-between items-center pb-1.5 border-b border-slate-200">
-              <span className="text-slate-500 font-medium">Reg No</span>
+              <span className="text-slate-500 font-medium">Roll / Reg No</span>
               <span className="font-mono text-indigo-700 font-bold">{collegeId}</span>
+            </div>
+          )}
+          {collegeName && (
+            <div className="flex justify-between items-center pb-1.5 border-b border-slate-200">
+              <span className="text-slate-500 font-medium">College</span>
+              <span className="font-medium text-slate-800 truncate max-w-[170px]">{collegeName}</span>
             </div>
           )}
           {eventTitle && (

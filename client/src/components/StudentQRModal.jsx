@@ -1,25 +1,56 @@
-// agent-notes: { ctx: "Modal wrapper for StudentQRPass displaying dynamic student venue pass", deps: ["src/components/StudentQRPass.jsx", "src/context/AppContext.jsx"], state: "active", last: "antigravity@2026-07-31" }
+// agent-notes: { ctx: "Modal wrapper for StudentQRPass displaying dynamic student venue pass with genuine Supabase user and registration IDs", deps: ["src/components/StudentQRPass.jsx", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-26" }
 
+import { useEffect, useState } from 'react';
 import { X, QrCode } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { isValidUUID } from '../supabaseClient';
+import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
 import StudentQRPass from './StudentQRPass';
 
 export default function StudentQRModal({ isOpen, onClose, event }) {
   const { currentUser, registrations } = useApp();
-
-  if (!isOpen || !event) return null;
+  const [dbRegistrationId, setDbRegistrationId] = useState('');
 
   const validStudentId = currentUser?.id || '';
   const validEventId = event?.id || '';
 
+  // 1. Locate registration from in-memory state
   const userReg = registrations.find(
-    (r) => r.student_id === validStudentId && r.event_id === validEventId
+    (r) =>
+      (r.student_id === validStudentId || r.user_id === validStudentId) &&
+      (r.event_id === validEventId || (event?.title && r.event_title === event.title))
   );
-  const validRegistrationId = userReg?.id || '';
+
+  const registrationId = userReg?.id || dbRegistrationId;
+
+  // 2. Query Supabase directly if in-memory id is not yet populated
+  useEffect(() => {
+    if (!isOpen || !validStudentId || !validEventId) return;
+
+    if (userReg?.id) {
+      setDbRegistrationId(userReg.id);
+      return;
+    }
+
+    if (!isMockMode && isValidUUID(validStudentId) && isValidUUID(validEventId)) {
+      supabase
+        .from('registrations')
+        .select('id')
+        .eq('student_id', validStudentId)
+        .eq('event_id', validEventId)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.id) {
+            setDbRegistrationId(data.id);
+          }
+        })
+        .catch((err) => console.warn('[StudentQRModal Fetch Reg Error]:', err));
+    }
+  }, [isOpen, validStudentId, validEventId, userReg?.id]);
+
+  if (!isOpen || !event) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
       <div className="bg-white w-full max-w-sm rounded-2xl border border-slate-200 p-6 shadow-2xl text-center relative">
         {/* Close button */}
         <button
@@ -42,9 +73,11 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
         <StudentQRPass
           studentId={validStudentId}
           eventId={validEventId}
-          registrationId={validRegistrationId}
-          studentName={currentUser?.name || currentUser?.full_name}
+          registrationId={registrationId}
+          studentName={currentUser?.full_name || currentUser?.name || 'Student Attendee'}
+          studentEmail={currentUser?.email || ''}
           collegeId={currentUser?.college_id}
+          collegeName={currentUser?.college_name || currentUser?.college}
           eventTitle={event.title}
           hallNumber={event.hall_number}
         />

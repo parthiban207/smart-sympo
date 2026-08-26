@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Coordinator full-page QR attendance scanner with audio/haptic cues, visual camera overlay, and clean verification cards", deps: ["html5-qrcode", "src/context/AppContext.jsx", "src/utils/scanFeedback.js", "lucide-react"], state: "active", last: "antigravity@2026-08-26" }
+// agent-notes: { ctx: "Coordinator full-page QR attendance scanner with real details display, 3s auto-reset timeout, and manual Scan Next button", deps: ["html5-qrcode", "src/context/AppContext.jsx", "src/utils/scanFeedback.js", "lucide-react"], state: "active", last: "antigravity@2026-08-26" }
 
 import { useEffect, useState, useRef, FormEvent, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -14,13 +14,14 @@ import {
   Building2,
   Sparkles,
   SwitchCamera,
-  Check,
   AlertTriangle,
   Building,
   Hash,
   Calendar,
   Clock,
   User,
+  Mail,
+  RefreshCw,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
@@ -37,11 +38,13 @@ export interface ScanResultPayload {
   isDuplicate?: boolean;
   attended_at?: string;
   studentName?: string;
+  email?: string;
   college?: string;
   rollNumber?: string;
   eventTitle?: string;
   hallNumber?: string;
   collegeId?: string;
+  timeSlot?: string;
   student?: {
     id?: string;
     name?: string;
@@ -71,15 +74,30 @@ export default function CoordinatorScanner() {
   const [manualPayload, setManualPayload] = useState<string>('');
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [overlayState, setOverlayState] = useState<'success' | 'warning' | 'error' | null>(null);
+  const [autoResetCountdown, setAutoResetCountdown] = useState<number | null>(null);
 
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
+  const isProcessingScanRef = useRef<boolean>(false);
+  const autoResetTimerRef = useRef<any>(null);
+  const countdownIntervalRef = useRef<any>(null);
 
   const halls: string[] = Array.from(
     new Set((events || []).map((e: any) => e.hall_number || 'Hall 1 (Main Auditorium)'))
   );
 
+  const handleResetForNextScan = useCallback(() => {
+    if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setScanResult(null);
+    setOverlayState(null);
+    setAutoResetCountdown(null);
+    isProcessingScanRef.current = false;
+  }, []);
+
   const handleProcessScan = useCallback((res: ScanResultPayload) => {
+    isProcessingScanRef.current = true;
     setScanResult(res);
+
     if (res.success) {
       playScanSuccessSound();
       triggerScanHaptic('success');
@@ -93,8 +111,19 @@ export default function CoordinatorScanner() {
       triggerScanHaptic('error');
       setOverlayState('error');
     }
-    setTimeout(() => setOverlayState(null), 3000);
-  }, []);
+
+    // 3-Second Visual Countdown & Auto-Reset for Seamless Next Scan
+    setAutoResetCountdown(3);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    countdownIntervalRef.current = setInterval(() => {
+      setAutoResetCountdown((prev) => (prev && prev > 1 ? prev - 1 : null));
+    }, 1000);
+
+    if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
+    autoResetTimerRef.current = setTimeout(() => {
+      handleResetForNextScan();
+    }, 3000);
+  }, [handleResetForNextScan]);
 
   const startScanner = useCallback(async (mode: 'environment' | 'user') => {
     try {
@@ -109,6 +138,7 @@ export default function CoordinatorScanner() {
         { facingMode: mode },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         async (decodedText: string) => {
+          if (isProcessingScanRef.current) return;
           const res: ScanResultPayload = await verifyQRPass(decodedText, selectedHall);
           handleProcessScan(res);
         },
@@ -126,6 +156,8 @@ export default function CoordinatorScanner() {
 
     return () => {
       clearTimeout(timer);
+      if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
       if (html5QrcodeRef.current && html5QrcodeRef.current.isScanning) {
         html5QrcodeRef.current.stop().catch(() => {});
       }
@@ -147,17 +179,20 @@ export default function CoordinatorScanner() {
     if (registrations.length > 0) {
       const sampleReg = registrations[0];
       const demoPayload = JSON.stringify({
-        registration_id: sampleReg.id,
-        student_id: sampleReg.student_id,
-        event_id: sampleReg.event_id,
+        registrationId: sampleReg.id,
+        studentId: sampleReg.student_id,
+        email: sampleReg.student_email || sampleReg.profiles?.email || 'student@college.edu',
+        eventId: sampleReg.event_id,
         hall_number: selectedHall,
       });
       const res: ScanResultPayload = await verifyQRPass(demoPayload, selectedHall);
       handleProcessScan(res);
     } else {
       const samplePayload = JSON.stringify({
-        student_id: currentUser?.id || '33333333-0000-4000-8000-000000000003',
-        event_id: events[0]?.id || '',
+        studentId: currentUser?.id || '33333333-0000-4000-8000-000000000003',
+        registrationId: '33333333-0000-4000-8000-000000000003',
+        email: currentUser?.email || 'student@college.edu',
+        eventId: events[0]?.id || '',
         hall_number: selectedHall,
       });
       const res: ScanResultPayload = await verifyQRPass(samplePayload, selectedHall);
@@ -319,12 +354,23 @@ export default function CoordinatorScanner() {
           </div>
         </div>
 
-        {/* Right Column: Live Toast Verification Feedback */}
+        {/* Right Column: Live Toast Verification Feedback with Auto-Reset & Scan Next Student */}
         <div className="lg:col-span-5 space-y-4">
-          <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-            <UserCheck className="w-4 h-4 text-emerald-600" />
-            Live Verification Feedback
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-emerald-600" />
+              Live Verification Feedback
+            </h2>
+            {scanResult && (
+              <button
+                onClick={handleResetForNextScan}
+                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3 text-indigo-600" />
+                Scan Next Student
+              </button>
+            )}
+          </div>
 
           {scanResult ? (
             <div
@@ -336,7 +382,7 @@ export default function CoordinatorScanner() {
                   : 'bg-rose-50/90 border-rose-300 text-rose-950 ring-2 ring-rose-400/30'
               }`}
             >
-              {/* 1. SUCCESS CARD */}
+              {/* 1. SUCCESS CARD: Genuine Name, Email, College, Roll Number & Registered Event */}
               {scanResult.success && (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3 pb-2 border-b border-emerald-200">
@@ -354,6 +400,7 @@ export default function CoordinatorScanner() {
                   </div>
 
                   <div className="bg-white/90 p-3.5 rounded-xl border border-emerald-200 space-y-2 text-xs text-slate-800 shadow-2xs">
+                    {/* Genuine Student Name */}
                     <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
                       <span className="text-slate-500 font-medium flex items-center gap-1">
                         <User className="w-3 h-3 text-slate-400" />
@@ -364,6 +411,18 @@ export default function CoordinatorScanner() {
                       </span>
                     </div>
 
+                    {/* Genuine Email */}
+                    <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
+                      <span className="text-slate-500 font-medium flex items-center gap-1">
+                        <Mail className="w-3 h-3 text-slate-400" />
+                        Email:
+                      </span>
+                      <span className="font-medium text-slate-800">
+                        {scanResult.email || scanResult.student?.email || 'N/A'}
+                      </span>
+                    </div>
+
+                    {/* Genuine College */}
                     <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
                       <span className="text-slate-500 font-medium flex items-center gap-1">
                         <Building className="w-3 h-3 text-slate-400" />
@@ -374,6 +433,7 @@ export default function CoordinatorScanner() {
                       </span>
                     </div>
 
+                    {/* Genuine Roll / Reg Number */}
                     <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
                       <span className="text-slate-500 font-medium flex items-center gap-1">
                         <Hash className="w-3 h-3 text-slate-400" />
@@ -384,6 +444,7 @@ export default function CoordinatorScanner() {
                       </span>
                     </div>
 
+                    {/* Genuine Registered Event */}
                     <div className="flex justify-between items-center pb-1.5 border-b border-slate-100">
                       <span className="text-slate-500 font-medium flex items-center gap-1">
                         <Calendar className="w-3 h-3 text-slate-400" />
@@ -403,6 +464,21 @@ export default function CoordinatorScanner() {
                         {scanResult.attended_at ? new Date(scanResult.attended_at).toLocaleTimeString() : 'Just now'}
                       </span>
                     </div>
+                  </div>
+
+                  {/* Auto-Reset 3s countdown status & manual Scan Next button */}
+                  <div className="pt-2 flex items-center justify-between">
+                    <span className="text-[11px] text-emerald-800 font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-emerald-600" />
+                      Auto-resetting in {autoResetCountdown ?? 3}s...
+                    </span>
+                    <button
+                      onClick={handleResetForNextScan}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Scan Next Student</span>
+                    </button>
                   </div>
                 </div>
               )}
@@ -430,6 +506,18 @@ export default function CoordinatorScanner() {
                         <span className="text-slate-500 font-medium">Attendee:</span>
                         <span className="font-bold text-slate-900">{scanResult.studentName}</span>
                       </div>
+                      {scanResult.email && (
+                        <div className="flex justify-between pb-1 border-b border-slate-100">
+                          <span className="text-slate-500 font-medium">Email:</span>
+                          <span className="font-medium text-slate-800">{scanResult.email}</span>
+                        </div>
+                      )}
+                      {scanResult.college && (
+                        <div className="flex justify-between pb-1 border-b border-slate-100">
+                          <span className="text-slate-500 font-medium">College:</span>
+                          <span className="font-semibold text-slate-800">{scanResult.college}</span>
+                        </div>
+                      )}
                       {scanResult.rollNumber && (
                         <div className="flex justify-between pb-1 border-b border-slate-100">
                           <span className="text-slate-500 font-medium">Roll No:</span>
@@ -442,22 +530,52 @@ export default function CoordinatorScanner() {
                       </div>
                     </div>
                   )}
+
+                  <div className="pt-2 flex items-center justify-between">
+                    <span className="text-[11px] text-amber-800 font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-amber-600" />
+                      Auto-resetting in {autoResetCountdown ?? 3}s...
+                    </span>
+                    <button
+                      onClick={handleResetForNextScan}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Scan Next Student</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
               {/* 3. INVALID / ERROR CARD */}
               {!scanResult.success && !scanResult.isDuplicate && scanResult.status !== 'ALREADY_SCANNED' && (
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <AlertCircle className="w-6 h-6" />
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <AlertCircle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-rose-900">
+                        ❌ Invalid QR Code! No registration found.
+                      </h3>
+                      <p className="text-xs text-rose-700 mt-1">
+                        {scanResult.message || 'No valid registration could be matched with the provided QR pass.'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-sm font-extrabold text-rose-900">
-                      ❌ Invalid QR Code! No registration found.
-                    </h3>
-                    <p className="text-xs text-rose-700 mt-1">
-                      {scanResult.message || 'No valid registration could be matched with the provided QR pass.'}
-                    </p>
+
+                  <div className="pt-2 flex items-center justify-between">
+                    <span className="text-[11px] text-rose-800 font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-rose-600" />
+                      Auto-resetting in {autoResetCountdown ?? 3}s...
+                    </span>
+                    <button
+                      onClick={handleResetForNextScan}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Try Again</span>
+                    </button>
                   </div>
                 </div>
               )}
