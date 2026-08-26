@@ -15,8 +15,6 @@ import {
   UserCheck,
   GraduationCap,
   Lock,
-  ShieldAlert,
-  Timer,
   Eye,
   EyeOff,
   Phone,
@@ -60,11 +58,6 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Rate Limiting & Failed Attempts Security Lockout State
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [isLockedOut, setIsLockedOut] = useState(false);
-  const [lockoutSeconds, setLockoutSeconds] = useState(30);
-
   const isStaffMode = targetRole === 'staff' || targetRole === 'coordinator' || targetRole === 'admin';
 
   useEffect(() => {
@@ -73,35 +66,10 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
     }
   }, [initialMode]);
 
-  // Rate Limiting Lockout Countdown Timer Effect
-  useEffect(() => {
-    let timer: any;
-    if (isLockedOut && lockoutSeconds > 0) {
-      timer = setInterval(() => {
-        setLockoutSeconds((prev) => prev - 1);
-      }, 1000);
-    } else if (lockoutSeconds === 0 && isLockedOut) {
-      setIsLockedOut(false);
-      setFailedAttempts(0);
-      setLockoutSeconds(30);
-      setErrorMsg(null);
-    }
-    return () => clearInterval(timer);
-  }, [isLockedOut, lockoutSeconds]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
-
-    // If account is currently locked out, prevent submission immediately
-    if (mode === 'login' && isLockedOut) {
-      setErrorMsg(
-        `Too many failed login attempts! Account temporarily locked for ${lockoutSeconds} seconds. Please wait before trying again.`
-      );
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -174,7 +142,12 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         });
 
         if (!result.success) {
-          setErrorMsg(result.message || 'Signup failed. Please check your details.');
+          if (result.alreadyExists || (result.message && result.message.toLowerCase().includes('already'))) {
+            setMode('login');
+            setErrorMsg(result.message || 'An account with this email already exists. Please Sign In using your password, or click Forgot Password.');
+          } else {
+            setErrorMsg(result.message || 'Signup failed. Please check your details.');
+          }
         } else {
           setSuccessMsg(`Account created successfully as ${assignedRole.toUpperCase()}! Redirecting...`);
           setTimeout(() => {
@@ -188,33 +161,25 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         return;
       }
 
-      // 3. STRICT LOGIN FLOW (No Auto-Account Creation)
+      // 3. DIRECT LOGIN FLOW
       if (mode === 'login') {
         if (!email.trim() || !password.trim()) {
-          setErrorMsg('Invalid credentials. If you are a new user, please Sign Up first.');
+          setErrorMsg('Please enter both email and password.');
           setLoading(false);
           return;
         }
 
         const expectedRole = isStaffMode ? selectedStaffRole.toLowerCase() : 'student';
 
-        // Authenticate existing registered credentials only
-        const res = await signInWithSupabase({ email: email.trim(), password: password.trim(), targetRole: expectedRole });
+        // Authenticate credentials via Supabase
+        const res = await signInWithSupabase({
+          email: email.trim(),
+          password: password.trim(),
+          targetRole: expectedRole,
+        });
 
         if (!res || !res.success || (!res.user && !res.profile)) {
-          const nextFailed = failedAttempts + 1;
-          setFailedAttempts(nextFailed);
-
-          if (nextFailed >= 3) {
-            setIsLockedOut(true);
-            setLockoutSeconds(30);
-            setErrorMsg(
-              'Too many failed login attempts! Account temporarily locked for 30 seconds. Please wait before trying again.'
-            );
-          } else {
-            setErrorMsg(res?.message || 'Invalid credentials. If you are a new user, please Sign Up first.');
-          }
-
+          setErrorMsg(res?.message || 'Invalid email or password. Please check your credentials.');
           setLoading(false);
           return;
         }
@@ -231,9 +196,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           return;
         }
 
-        // Success: Reset rate limits and redirect with replace: true
-        setFailedAttempts(0);
-        setIsLockedOut(false);
+        // Success: Redirect smoothly with replace: true
         setSuccessMsg(`Welcome! Authenticated as ${userRole.toUpperCase()}. Redirecting...`);
         setTimeout(() => {
           if (onSuccess) {
@@ -249,17 +212,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
       try {
         await signOutFromSupabase();
       } catch (_) {}
-      const nextFailed = failedAttempts + 1;
-      setFailedAttempts(nextFailed);
-      if (nextFailed >= 3) {
-        setIsLockedOut(true);
-        setLockoutSeconds(30);
-        setErrorMsg(
-          'Too many failed login attempts! Account temporarily locked for 30 seconds. Please wait before trying again.'
-        );
-      } else {
-        setErrorMsg(err?.message || 'Invalid credentials. If you are a new user, please Sign Up first.');
-      }
+      setErrorMsg(err?.message || 'Authentication error. Please check your credentials.');
       setLoading(false);
       return;
     } finally {
@@ -360,23 +313,8 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           </div>
         </div>
 
-        {/* Temporary Lockout Alert Banner */}
-        {isLockedOut && (
-          <div className="mb-4 p-3.5 rounded-xl bg-rose-600 text-white text-xs flex items-start gap-2.5 shadow-md border border-rose-700 animate-pulse">
-            <ShieldAlert className="w-5 h-5 text-white shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-bold text-sm">Account Security Lockout Active</h4>
-              <p className="mt-0.5 leading-relaxed text-rose-100">
-                Too many failed login attempts! Account temporarily locked for{' '}
-                <span className="font-mono font-extrabold underline">{lockoutSeconds}s</span>. Please wait before trying
-                again.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Dynamic Solid Error Alert Banner */}
-        {!isLockedOut && errorMsg && (
+        {errorMsg && (
           <div className="mb-4 p-3 rounded-xl bg-rose-600 text-white text-xs flex items-center gap-2 font-bold shadow-md border border-rose-700">
             <AlertCircle className="w-4 h-4 text-white shrink-0" />
             <span>{errorMsg}</span>
@@ -502,11 +440,10 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
               <input
                 type="email"
                 required
-                disabled={isLockedOut}
                 placeholder="e.g. sarah.chen@college.edu"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all disabled:opacity-60"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all"
               />
             </div>
           </div>
@@ -537,11 +474,10 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  disabled={isLockedOut}
                   placeholder={mode === 'signup' ? 'Create password (min 6 chars)' : 'Enter your password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-10 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono disabled:opacity-60"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-9 pr-10 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono"
                 />
                 <button
                   type="button"
@@ -588,21 +524,14 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading || isLockedOut}
+            disabled={loading}
             className={`w-full mt-4 py-3 text-white font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-50 cursor-pointer text-xs ${
-              isLockedOut
-                ? 'bg-slate-700 hover:bg-slate-700'
-                : isStaffMode
+              isStaffMode
                 ? 'bg-amber-600 hover:bg-amber-700'
                 : 'bg-indigo-600 hover:bg-indigo-700'
             }`}
           >
-            {isLockedOut ? (
-              <>
-                <Timer className="w-4 h-4 text-amber-300 animate-spin" />
-                <span>Account Temporarily Locked ({lockoutSeconds}s)</span>
-              </>
-            ) : loading ? (
+            {loading ? (
               <span>Authenticating...</span>
             ) : mode === 'login' ? (
               <>
