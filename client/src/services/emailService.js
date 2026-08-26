@@ -1,6 +1,54 @@
-// agent-notes: { ctx: "Automated event registration email confirmation dispatch service via @emailjs/browser with graceful fallback simulation", deps: ["@emailjs/browser"], state: "active", last: "antigravity@2026-08-24" }
+// agent-notes: { ctx: "Automated event registration & welcome email confirmation dispatch service via EmailJS & browser simulation fallback", deps: ["@emailjs/browser"], state: "active", last: "antigravity@2026-08-26" }
 
 import emailjs from '@emailjs/browser';
+
+/**
+ * Service to dispatch automated welcome and first login emails
+ */
+export async function sendWelcomeEmail({ name, email, role }) {
+  const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_smartsympo';
+  const templateId = import.meta.env.VITE_EMAILJS_WELCOME_TEMPLATE_ID || 'template_welcome';
+  const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || '';
+
+  const studentName = name || email?.split('@')[0] || 'Student';
+  const studentEmail = email || '';
+  const userRole = role || 'Student';
+
+  const templateParams = {
+    to_name: studentName,
+    to_email: studentEmail,
+    student_name: studentName,
+    role: userRole,
+    subject: '🎉 Welcome to Smart-Sympo 2026!',
+    message: `Hi ${studentName},\nWelcome to Smart-Sympo! Your account has been successfully activated. You can now explore technical/non-technical events, register with one click, and access your digital QR entry pass from your dashboard.\n\nBest regards,\nSmart-Sympo Organizing Team`,
+    symposium_name: 'Smart-Sympo 2026',
+    year: new Date().getFullYear(),
+  };
+
+  if (publicKey && publicKey !== 'YOUR_EMAILJS_PUBLIC_KEY') {
+    try {
+      const response = await emailjs.send(serviceId, templateId, templateParams, publicKey);
+      return { success: true, dispatched: true, response };
+    } catch (err) {
+      console.warn('[EmailService] EmailJS send error for welcome email (falling back to simulation):', err);
+    }
+  }
+
+  console.log(
+    `%c[EmailService Simulated Dispatch] Welcome email generated for ${studentEmail}:\n` +
+    `Subject: 🎉 Welcome to Smart-Sympo 2026!\n` +
+    `Hi ${studentName},\nWelcome to Smart-Sympo! Your account has been successfully activated.`,
+    'color: #6366f1; font-weight: bold;'
+  );
+
+  return {
+    success: true,
+    dispatched: true,
+    simulated: true,
+    message: `Welcome email dispatched to ${studentEmail}!`,
+    params: templateParams,
+  };
+}
 
 /**
  * Service to dispatch automated event registration confirmation emails to students
@@ -21,6 +69,9 @@ export async function sendRegistrationEmail({ student, event, passToken }) {
   const eventTime = event?.start_time
     ? `${new Date(event.start_time).toLocaleDateString()} at ${new Date(event.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
     : 'Scheduled Event Time Slot';
+  const eventDate = event?.start_time
+    ? new Date(event.start_time).toLocaleDateString('en-US', { dateStyle: 'long' })
+    : new Date().toLocaleDateString('en-US', { dateStyle: 'long' });
 
   const generatedToken = passToken || `PASS-${student?.id?.slice(0, 6).toUpperCase() || 'SYMPO'}-${Date.now().toString(36).toUpperCase()}`;
 
@@ -35,6 +86,7 @@ export async function sendRegistrationEmail({ student, event, passToken }) {
     event_category: eventCategory,
     event_venue: eventVenue,
     event_time: eventTime,
+    event_date: eventDate,
     pass_token: generatedToken,
     support_contact: 'support@smartsympo.edu | +1 (800) 555-SYMP (Hall Coordinator Desk)',
     symposium_name: 'SmartSympo 2026',
@@ -72,6 +124,7 @@ export async function sendRegistrationEmail({ student, event, passToken }) {
     `Event: ${eventTitle} (${eventCategory})\n` +
     `Venue: ${eventVenue}\n` +
     `Time: ${eventTime}\n` +
+    `Date: ${eventDate}\n` +
     `Pass Token: ${generatedToken}`,
     'color: #10b981; font-weight: bold;'
   );

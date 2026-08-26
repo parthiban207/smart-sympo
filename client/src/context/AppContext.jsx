@@ -1,9 +1,9 @@
-// agent-notes: { ctx: "Global React AppContext provider for events, profiles, and authentication with 2027 passcode confirmation", deps: ["src/supabaseClient.ts", "src/services/emailService.js", "src/services/backendEmailService.js"], state: "active", last: "antigravity@2026-08-25" }
+// agent-notes: { ctx: "Global React AppContext provider with automated Welcome & First Login and Event Confirmation email dispatch", deps: ["src/supabaseClient.ts", "src/services/emailService.js", "src/services/backendEmailService.js"], state: "active", last: "antigravity@2026-08-26" }
 
 import { createContext, useContext, useState, useEffect } from 'react';
 import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
-import { sendRegistrationEmail } from '../services/emailService';
-import { sendLoginAlertApi, sendEventConfirmationApi } from '../services/backendEmailService';
+import { sendRegistrationEmail, sendWelcomeEmail } from '../services/emailService';
+import { sendLoginAlertApi, sendEventConfirmationApi, sendWelcomeEmailApi } from '../services/backendEmailService';
 
 const AppContext = createContext();
 
@@ -18,6 +18,7 @@ const DEFAULT_SEED_ACCOUNTS = [
     pass_code: '2005',
     role: 'admin',
     college_id: 'ADM-2005',
+    first_login: false,
   },
   {
     id: '22222222-0000-4000-8000-000000000002',
@@ -29,6 +30,7 @@ const DEFAULT_SEED_ACCOUNTS = [
     pass_code: '2005',
     role: 'coordinator',
     college_id: 'FAC-2005',
+    first_login: false,
   },
   {
     id: '33333333-0000-4000-8000-000000000003',
@@ -40,6 +42,7 @@ const DEFAULT_SEED_ACCOUNTS = [
     pass_code: 'student123',
     role: 'student',
     college_id: 'STU-2005',
+    first_login: false,
   },
 ];
 
@@ -601,6 +604,7 @@ export const AppProvider = ({ children }) => {
         phone: finalPhone,
         phone_number: finalPhone,
         pass_code: password.trim(),
+        first_login: false, // Activated on first signup & welcome email
       };
 
       // Explicitly insert into public.profiles table
@@ -612,6 +616,19 @@ export const AppProvider = ({ children }) => {
       const savedUser = syncUserStorage(profileData);
       setIsAuthenticated(true);
       setSession(data.session || null);
+
+      // Async background Welcome Email trigger (non-blocking)
+      sendWelcomeEmailApi({
+        email: cleanEmail,
+        name: fullName.trim(),
+        role: role,
+      }).catch((err) => console.warn('[Welcome Email Backend Error]:', err));
+
+      sendWelcomeEmail({
+        name: fullName.trim(),
+        email: cleanEmail,
+        role: role,
+      }).catch((err) => console.warn('[Welcome EmailJS Error]:', err));
 
       return { success: true, user: savedUser, profile: savedUser, role: savedUser.role };
     } catch (err) {
@@ -671,6 +688,7 @@ export const AppProvider = ({ children }) => {
           college: data.user.user_metadata?.college || data.user.user_metadata?.college_name || 'Symposium Campus',
           college_name: data.user.user_metadata?.college_name || data.user.user_metadata?.college || 'Symposium Campus',
           phone: data.user.user_metadata?.phone || '',
+          first_login: true,
         };
         try {
           await supabase.from('profiles').upsert([profile]);
@@ -683,13 +701,38 @@ export const AppProvider = ({ children }) => {
       setIsAuthenticated(true);
       setSession(data.session);
 
-      // Async non-blocking login alert via Express Nodemailer Backend
-      sendLoginAlertApi({
-        email: synced.email,
-        name: synced.full_name || synced.name || synced.username || 'User',
-        role: synced.role || 'student',
-        timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
-      }).catch((err) => console.warn('[Login Alert Email Error]:', err));
+      // Check first_login flag for automated Welcome Email trigger
+      const isFirstLogin = Boolean(profile?.first_login === true || profile?.first_login === 'true');
+
+      if (isFirstLogin) {
+        // Send Welcome & First Login Email asynchronously in background
+        sendWelcomeEmailApi({
+          email: synced.email,
+          name: synced.full_name || synced.name || synced.username || 'Student',
+          role: synced.role || 'student',
+        }).catch((err) => console.warn('[Welcome Email Backend Error]:', err));
+
+        sendWelcomeEmail({
+          name: synced.full_name || synced.name || synced.username || 'Student',
+          email: synced.email,
+          role: synced.role || 'student',
+        }).catch((err) => console.warn('[Welcome EmailJS Error]:', err));
+
+        // Mark first_login = false in Supabase & Local state
+        if (!isMockMode && isValidUUID(synced.id)) {
+          supabase.from('profiles').update({ first_login: false }).eq('id', synced.id).catch(() => {});
+        }
+        synced.first_login = false;
+        syncUserStorage(synced);
+      } else {
+        // Routine login security alert
+        sendLoginAlertApi({
+          email: synced.email,
+          name: synced.full_name || synced.name || synced.username || 'User',
+          role: synced.role || 'student',
+          timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
+        }).catch((err) => console.warn('[Login Alert Email Error]:', err));
+      }
 
       return { success: true, user: synced, profile: synced, role: synced.role };
     } catch (err) {
@@ -854,16 +897,23 @@ export const AppProvider = ({ children }) => {
       }
     }
 
-    // Dispatch Nodemailer Backend Email Service event confirmation (non-blocking)
+    // Formatted Dates for Email Notification
+    const eventDate = targetEvent.start_time
+      ? new Date(targetEvent.start_time).toLocaleDateString('en-US', { dateStyle: 'long' })
+      : new Date().toLocaleDateString('en-US', { dateStyle: 'long' });
+    const timeSlot = targetEvent.start_time
+      ? `${new Date(targetEvent.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      : 'Scheduled Time Slot';
+
+    // Dispatch Nodemailer Backend Email Service event confirmation (asynchronous, non-blocking)
     sendEventConfirmationApi({
       email: currentUser.email || newReg.student_email,
       name: currentUser.full_name || currentUser.name || newReg.student_name,
       eventName: targetEvent.title,
       category: targetEvent.category || 'General Session',
       venue: targetEvent.hall_number || targetEvent.venue || 'Main Auditorium',
-      timeSlot: targetEvent.start_time
-        ? `${new Date(targetEvent.start_time).toLocaleDateString()} at ${new Date(targetEvent.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-        : 'Scheduled Time Slot',
+      timeSlot,
+      eventDate,
     }).catch((err) => console.warn('[Event Confirmation Email Error]:', err));
 
     // Append confirmation to In-App Notification Center
