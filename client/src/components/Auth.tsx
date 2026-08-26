@@ -179,9 +179,9 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           setSuccessMsg(`Account created successfully as ${assignedRole.toUpperCase()}! Redirecting...`);
           setTimeout(() => {
             if (onSuccess) (onSuccess as any)(result.user || result.profile);
-            else if (assignedRole === 'admin') navigate('/admin');
-            else if (assignedRole === 'coordinator') navigate('/coordinator');
-            else navigate('/student');
+            else if (assignedRole === 'admin') navigate('/admin', { replace: true });
+            else if (assignedRole === 'coordinator') navigate('/coordinator', { replace: true });
+            else navigate('/student', { replace: true });
           }, 800);
         }
         setLoading(false);
@@ -231,7 +231,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           return;
         }
 
-        // Success: Reset rate limits and redirect
+        // Success: Reset rate limits and redirect with replace: true
         setFailedAttempts(0);
         setIsLockedOut(false);
         setSuccessMsg(`Welcome! Authenticated as ${userRole.toUpperCase()}. Redirecting...`);
@@ -239,13 +239,16 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           if (onSuccess) {
             (onSuccess as any)(fetchedProfile || res.user);
           } else {
-            if (userRole === 'admin') navigate('/admin');
-            else if (userRole === 'coordinator') navigate('/coordinator');
-            else navigate('/student');
+            if (userRole === 'admin') navigate('/admin', { replace: true });
+            else if (userRole === 'coordinator') navigate('/coordinator', { replace: true });
+            else navigate('/student', { replace: true });
           }
         }, 600);
       }
     } catch (err: any) {
+      try {
+        await signOutFromSupabase();
+      } catch (_) {}
       const nextFailed = failedAttempts + 1;
       setFailedAttempts(nextFailed);
       if (nextFailed >= 3) {

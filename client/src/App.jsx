@@ -44,6 +44,21 @@ function AuthSyncListener() {
   const location = useLocation();
 
   useEffect(() => {
+    // 0. Global Session Cleanup on Mount (clear stale localStorage auth keys on fresh login entry)
+    try {
+      const isAuthRoute = ['/login', '/login/student', '/login/staff', '/signup'].includes(location.pathname);
+      const hasValidSbToken = Object.keys(localStorage).some(
+        (k) => (k.startsWith('sb-') && k.endsWith('-auth-token')) || k === 'sb-access-token'
+      );
+
+      if (!hasValidSbToken && isAuthRoute) {
+        localStorage.removeItem('smart_sympo_user');
+        localStorage.removeItem('smart_sympo_active_role');
+      }
+    } catch (e) {
+      console.warn('[Session Cleanup Warning]:', e);
+    }
+
     if (isMockMode) return;
 
     // 1. Intercept password recovery tokens in URL hash or search params on initial load

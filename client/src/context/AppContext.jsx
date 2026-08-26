@@ -647,9 +647,27 @@ export const AppProvider = ({ children }) => {
       });
 
       if (error || !data?.user) {
+        // Clear any leftover corrupted/ghost session tokens
+        try {
+          await supabase.auth.signOut();
+        } catch (_) {}
+        localStorage.removeItem('smart_sympo_user');
+        localStorage.removeItem('smart_sympo_active_role');
+        setSession(null);
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+
+        const errDetail = error?.message?.toLowerCase() || '';
+        let userFacingMsg = 'Invalid credentials. If you are a new user, please Sign Up first.';
+        if (errDetail.includes('invalid login credentials') || errDetail.includes('invalid_grant')) {
+          userFacingMsg = 'Invalid email or password. Please check your credentials or Sign Up.';
+        } else if (errDetail.includes('email not confirmed')) {
+          userFacingMsg = 'Email address not confirmed. Please check your inbox.';
+        }
+
         return {
           success: false,
-          message: 'Invalid credentials. If you are a new user, please Sign Up first.',
+          message: userFacingMsg,
         };
       }
 
@@ -729,6 +747,14 @@ export const AppProvider = ({ children }) => {
       return { success: true, user: synced, profile: synced, role: synced.role };
     } catch (err) {
       console.error('Supabase signInWithPassword exception:', err);
+      try {
+        await supabase.auth.signOut();
+      } catch (_) {}
+      localStorage.removeItem('smart_sympo_user');
+      localStorage.removeItem('smart_sympo_active_role');
+      setSession(null);
+      setIsAuthenticated(false);
+      setCurrentUser(null);
       return {
         success: false,
         message: 'Invalid credentials. If you are a new user, please Sign Up first.',
