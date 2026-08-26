@@ -114,13 +114,13 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         }
 
         const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: window.location.origin + '/login',
+          redirectTo: `${window.location.origin}/reset-password`,
         });
 
         if (error) {
           setErrorMsg(error.message);
         } else {
-          setSuccessMsg('Password reset link sent successfully! Check your email inbox.');
+          setSuccessMsg('Password reset link sent to your email! Please check your inbox/spam.');
         }
         setLoading(false);
         return;

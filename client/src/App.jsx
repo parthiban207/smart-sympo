@@ -13,6 +13,7 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import LoginPage from './pages/LoginPage';
 import StudentLoginPage from './pages/StudentLoginPage';
 import StaffLoginPage from './pages/StaffLoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 function getRoleDestination(role) {
   if (role === 'admin') return '/admin';
@@ -41,6 +42,7 @@ export default function App() {
               <Route path="/login/student" element={<StudentLoginPage />} />
               <Route path="/login/staff" element={<StaffLoginPage />} />
               <Route path="/signup" element={<StudentLoginPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
 
               <Route
                 path="/student"
