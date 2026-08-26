@@ -128,7 +128,7 @@ export default function CoordinatorConsole() {
         max_capacity: 100,
       });
     } else {
-      alert(`Event creation failed: ${result?.error?.message || 'Database insert error'}`);
+      console.error(`Event creation failed: ${result?.error?.message || 'Database insert error'}`);
     }
   };
 

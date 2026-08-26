@@ -1,3 +1,5 @@
+// agent-notes: { ctx: "Supabase client initialization with resilient auth storage and clock skew / JWT future error helper", deps: ["@supabase/supabase-js"], state: "active", last: "antigravity@2026-08-26" }
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl =
@@ -11,9 +13,34 @@ export const isMockMode =
   !import.meta.env.VITE_SUPABASE_ANON_KEY ||
   import.meta.env.VITE_SUPABASE_ANON_KEY.includes('placeholder');
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  },
+});
+
+export const isClockSkewOrJwtError = (error) => {
+  if (!error) return false;
+  const msg = (
+    typeof error === 'string'
+      ? error
+      : error.message || error.error_description || JSON.stringify(error)
+  ).toLowerCase();
+
+  return (
+    msg.includes('jwt') ||
+    msg.includes('future') ||
+    msg.includes('issued at') ||
+    msg.includes('clock skew') ||
+    msg.includes('invalid claim') ||
+    msg.includes('token is not valid yet') ||
+    msg.includes('iat')
+  );
+};
 
 export const isValidUUID = (id) =>
   typeof id === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-

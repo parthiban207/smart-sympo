@@ -1,8 +1,8 @@
-// agent-notes: { ctx: "Dedicated Reset Password Screen with Create New Password form, eye password toggles, Supabase Auth updateUser, and clean redirect", deps: ["src/supabaseClient.js", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-08-26" }
+// agent-notes: { ctx: "Dedicated Reset Password Screen with clock skew tolerance, auto retry, eye password toggles, Supabase Auth updateUser, and clean redirect", deps: ["src/supabaseClient.ts", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-08-26" }
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { supabase, isMockMode } from '../supabaseClient';
+import { supabase, isMockMode, isClockSkewOrJwtError } from '../supabaseClient';
 import {
   Lock,
   Eye,
@@ -46,6 +46,13 @@ export default function ResetPasswordPage() {
       supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
         if (!error) {
           setIsRecoveryAuthorized(true);
+        } else if (isClockSkewOrJwtError(error)) {
+          console.warn('Clock skew in PKCE exchange, retrying in 1.5s...');
+          setTimeout(() => {
+            supabase.auth.exchangeCodeForSession(code).then(({ error: retryErr }) => {
+              if (!retryErr) setIsRecoveryAuthorized(true);
+            }).catch(() => {});
+          }, 1500);
         }
       }).catch(() => {});
     }
@@ -83,10 +90,21 @@ export default function ResetPasswordPage() {
         return;
       }
 
-      // Execute Supabase Auth password update
-      const { data, error } = await supabase.auth.updateUser({
+      // Execute Supabase Auth password update with clock skew retry handling
+      let { data, error } = await supabase.auth.updateUser({
         password: newPassword.trim(),
       });
+
+      // If clock skew or future token error, retry silently after 1.5s
+      if (error && isClockSkewOrJwtError(error)) {
+        console.warn('Clock skew detected during password update, retrying in 1.5s...');
+        await new Promise((r) => setTimeout(r, 1500));
+        const retryResult = await supabase.auth.updateUser({
+          password: newPassword.trim(),
+        });
+        data = retryResult.data;
+        error = retryResult.error;
+      }
 
       if (error) {
         setErrorMsg(
@@ -121,6 +139,25 @@ export default function ResetPasswordPage() {
         navigate('/login', { replace: true });
       }, 2000);
     } catch (err: any) {
+      if (isClockSkewOrJwtError(err)) {
+        console.warn('Clock skew exception during password update, retrying...');
+        try {
+          await new Promise((r) => setTimeout(r, 1500));
+          const { error: retryError } = await supabase.auth.updateUser({
+            password: newPassword.trim(),
+          });
+          if (!retryError) {
+            setSuccessMsg('Password updated successfully! Redirecting to login...');
+            setTimeout(async () => {
+              try { await supabase.auth.signOut(); } catch (e) {}
+              navigate('/login', { replace: true });
+            }, 2000);
+            return;
+          }
+        } catch (retryEx) {
+          console.error('[Retry Exception]:', retryEx);
+        }
+      }
       console.error('[Reset Password Exception]:', err);
       setErrorMsg(err.message || 'An unexpected error occurred while resetting your password.');
     } finally {

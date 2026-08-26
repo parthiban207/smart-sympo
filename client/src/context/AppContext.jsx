@@ -1,7 +1,7 @@
 // agent-notes: { ctx: "Global React AppContext provider with automated Welcome & First Login and Event Confirmation email dispatch", deps: ["src/supabaseClient.ts", "src/services/emailService.js", "src/services/backendEmailService.js"], state: "active", last: "antigravity@2026-08-26" }
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
+import { supabase, isMockMode, isValidUUID, isClockSkewOrJwtError } from '../supabaseClient';
 import { sendRegistrationEmail, sendWelcomeEmail } from '../services/emailService';
 import { sendLoginAlertApi, sendEventConfirmationApi, sendWelcomeEmailApi } from '../services/backendEmailService';
 
@@ -316,8 +316,12 @@ export const AppProvider = ({ children }) => {
             .order('created_at', { ascending: false });
 
           if (error) {
+            if (isClockSkewOrJwtError(error)) {
+              console.warn('Clock skew / JWT issue detected, retrying fetchEvents silently in 1.5s...');
+              setTimeout(() => fetchEvents(), 1500);
+              return { data: null, error };
+            }
             console.error('Error fetching events from Supabase:', error);
-            alert(`Error loading events: ${error.message}`);
             setLiveAlerts((prev) => [
               {
                 id: Date.now(),
@@ -335,8 +339,12 @@ export const AppProvider = ({ children }) => {
           }
           return { data, error: null };
         } catch (err) {
+          if (isClockSkewOrJwtError(err)) {
+            console.warn('Clock skew exception detected, retrying fetchEvents silently in 1.5s...');
+            setTimeout(() => fetchEvents(), 1500);
+            return { data: null, error: err };
+          }
           console.error('Unexpected error fetching events:', err);
-          alert(`Unexpected error fetching events: ${err.message || err}`);
           return { data: null, error: err };
         }
       };
@@ -1430,8 +1438,12 @@ export const AppProvider = ({ children }) => {
         .order('created_at', { ascending: false });
 
       if (error) {
+        if (isClockSkewOrJwtError(error)) {
+          console.warn('Clock skew / JWT issue detected, retrying fetchEvents silently in 1.5s...');
+          setTimeout(() => fetchEvents(), 1500);
+          return { data: null, error };
+        }
         console.error('Error fetching events from Supabase:', error);
-        alert(`Error loading events: ${error.message}`);
         setLiveAlerts((prev) => [
           {
             id: Date.now(),
@@ -1449,8 +1461,12 @@ export const AppProvider = ({ children }) => {
       }
       return { data, error: null };
     } catch (err) {
+      if (isClockSkewOrJwtError(err)) {
+        console.warn('Clock skew exception detected, retrying fetchEvents in 1.5s...');
+        setTimeout(() => fetchEvents(), 1500);
+        return { data: null, error: err };
+      }
       console.error('Unexpected error fetching events:', err);
-      alert(`Unexpected error fetching events: ${err.message || err}`);
       return { data: null, error: err };
     }
   };
@@ -1477,8 +1493,12 @@ export const AppProvider = ({ children }) => {
       const { data, error } = await supabase.from('events').insert([insertPayload]).select().single();
 
       if (error) {
+        if (isClockSkewOrJwtError(error)) {
+          console.warn('Clock skew in addEvent, retrying in 1.5s...');
+          await new Promise((r) => setTimeout(r, 1500));
+          return addEvent(newEventData);
+        }
         console.error('Supabase event creation error:', error);
-        alert(`Event Creation Failed: ${error.message}`);
         setLiveAlerts((prev) => [
           {
             id: Date.now(),
@@ -1506,8 +1526,12 @@ export const AppProvider = ({ children }) => {
 
       return { success: true, event: data };
     } catch (err) {
+      if (isClockSkewOrJwtError(err)) {
+        console.warn('Clock skew in addEvent, retrying in 1.5s...');
+        await new Promise((r) => setTimeout(r, 1500));
+        return addEvent(newEventData);
+      }
       console.error('Unexpected error creating event:', err);
-      alert(`Unexpected error creating event: ${err.message || err}`);
       return { success: false, error: err };
     }
   };
