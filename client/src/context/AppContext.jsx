@@ -378,7 +378,32 @@ export const AppProvider = ({ children }) => {
 
       fetchInitialData();
 
-      // 4. Realtime listener for Events table (INSERT, UPDATE, DELETE)
+      // 4. Realtime listener for Registrations table
+      const registrationsChannel = supabase
+        .channel('public:registrations')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'registrations' },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              const newReg = payload.new;
+              setRegistrations((prev) => [newReg, ...prev.filter((r) => r.id !== newReg.id)]);
+            } else if (payload.eventType === 'UPDATE') {
+              const updatedReg = payload.new;
+              setRegistrations((prev) =>
+                prev.map((r) => (r.id === updatedReg.id ? { ...r, ...updatedReg } : r))
+              );
+            } else if (payload.eventType === 'DELETE') {
+              const oldId = payload.old?.id;
+              if (oldId) {
+                setRegistrations((prev) => prev.filter((r) => r.id !== oldId));
+              }
+            }
+          }
+        )
+        .subscribe();
+
+      // 5. Realtime listener for Events table (INSERT, UPDATE, DELETE)
       const eventsChannel = supabase
         .channel('public:events')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, (payload) => {
@@ -423,7 +448,7 @@ export const AppProvider = ({ children }) => {
         })
         .subscribe();
 
-      // 5. Realtime listener for Attendance Logs table
+      // 6. Realtime listener for Attendance Logs table
       const attendanceChannel = supabase
         .channel('public:attendance_logs')
         .on(
@@ -454,7 +479,7 @@ export const AppProvider = ({ children }) => {
         )
         .subscribe();
 
-      // 6. Realtime listener for Profiles table
+      // 7. Realtime listener for Profiles table
       const profilesChannel = supabase
         .channel('public:profiles')
         .on(
@@ -496,6 +521,7 @@ export const AppProvider = ({ children }) => {
 
       return () => {
         authSubscription.unsubscribe();
+        supabase.removeChannel(registrationsChannel);
         supabase.removeChannel(eventsChannel);
         supabase.removeChannel(attendanceChannel);
         supabase.removeChannel(profilesChannel);
@@ -963,66 +989,339 @@ export const AppProvider = ({ children }) => {
     return { success: true, message: 'Active Emergency Broadcast stopped and cleared system-wide by Admin!' };
   };
 
-  // Verify QR Scan & Record Attendance Log
-  const verifyQRPass = async (qrPayload, scannerHall) => {
+  // Verify QR Scan & Record Attendance Log with Full Database Verification
+  const verifyQRPass = async (qrPayload, scannerHall = 'Main Venue') => {
     try {
-      let data = typeof qrPayload === 'string' ? JSON.parse(qrPayload) : qrPayload;
-      const student_id = data.student_id || data.user_id;
-      const event_id = data.event_id;
-
-      if (!student_id || !event_id) {
+      let data;
+      if (typeof qrPayload === 'string') {
+        try {
+          data = JSON.parse(qrPayload);
+        } catch {
+          data = { raw: qrPayload };
+        }
+      } else if (typeof qrPayload === 'object' && qrPayload !== null) {
+        data = qrPayload;
+      } else {
         return {
           success: false,
-          message: 'Wrong QR Code: Invalid or unparseable pass format.',
+          status: 'INVALID_PAYLOAD',
+          message: '❌ Invalid QR Code! No registration found.',
         };
       }
 
-      const targetEvent = events.find((e) => e.id === event_id);
-      const studentProfile = profilesList.find((p) => p.id === student_id);
+      let registration_id = data.registration_id || data.reg_id || data.id;
+      let student_id = data.student_id || data.user_id || data.studentId || data.userId;
+      let event_id = data.event_id || data.eventId;
+      let pass_token = data.pass_token || data.passToken;
 
-      const existingLog = attendanceLogs.find(
-        (log) => log.student_id === student_id && log.event_id === event_id
+      if (!registration_id && !student_id && data.raw) {
+        const rawStr = String(data.raw).trim();
+        if (isValidUUID(rawStr)) {
+          registration_id = rawStr;
+        } else if (rawStr.startsWith('PASS-')) {
+          pass_token = rawStr;
+        } else if (rawStr.startsWith('reg-')) {
+          registration_id = rawStr;
+        }
+      }
+
+      if (!registration_id && !student_id && !pass_token) {
+        return {
+          success: false,
+          status: 'INVALID_PAYLOAD',
+          message: '❌ Invalid QR Code! No registration found.',
+        };
+      }
+
+      // 1. Locate registration from Supabase or local state
+      let matchedReg = null;
+      let dbStudentProfile = null;
+      let dbEventObj = null;
+
+      if (!isMockMode) {
+        try {
+          // Attempt 1: Query by registration ID if provided and valid UUID
+          if (isValidUUID(registration_id)) {
+            const { data: regData } = await supabase
+              .from('registrations')
+              .select('*, profiles(*), events(*)')
+              .eq('id', registration_id)
+              .maybeSingle();
+            if (regData) {
+              matchedReg = regData;
+              dbStudentProfile = regData.profiles;
+              dbEventObj = regData.events;
+            }
+          }
+
+          // Attempt 2: Query by pass_token if provided
+          if (!matchedReg && pass_token) {
+            const { data: regData } = await supabase
+              .from('registrations')
+              .select('*, profiles(*), events(*)')
+              .eq('pass_token', pass_token)
+              .maybeSingle();
+            if (regData) {
+              matchedReg = regData;
+              dbStudentProfile = regData.profiles;
+              dbEventObj = regData.events;
+            }
+          }
+
+          // Attempt 3: Query by student_id and event_id
+          if (!matchedReg && isValidUUID(student_id) && isValidUUID(event_id)) {
+            const { data: regData } = await supabase
+              .from('registrations')
+              .select('*, profiles(*), events(*)')
+              .eq('student_id', student_id)
+              .eq('event_id', event_id)
+              .maybeSingle();
+            if (regData) {
+              matchedReg = regData;
+              dbStudentProfile = regData.profiles;
+              dbEventObj = regData.events;
+            }
+          }
+
+          // Attempt 4: Query by student_id if only student_id is known
+          if (!matchedReg && isValidUUID(student_id)) {
+            const { data: regData } = await supabase
+              .from('registrations')
+              .select('*, profiles(*), events(*)')
+              .eq('student_id', student_id)
+              .order('registered_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (regData) {
+              matchedReg = regData;
+              dbStudentProfile = regData.profiles;
+              dbEventObj = regData.events;
+            }
+          }
+        } catch (dbErr) {
+          console.warn('[Supabase Registration Query Catch]:', dbErr);
+        }
+      }
+
+      // Fallback: Check in-memory / local registrations state
+      if (!matchedReg) {
+        matchedReg = registrations.find((r) => {
+          if (registration_id && (r.id === registration_id || r.registration_id === registration_id)) return true;
+          if (pass_token && r.pass_token === pass_token) return true;
+          if (student_id && event_id && r.student_id === student_id && r.event_id === event_id) return true;
+          if (student_id && !event_id && r.student_id === student_id) return true;
+          return false;
+        });
+      }
+
+      // IF INVALID QR / NOT REGISTERED:
+      if (!matchedReg) {
+        return {
+          success: false,
+          status: 'NOT_REGISTERED',
+          message: '❌ Invalid QR Code! No registration found.',
+        };
+      }
+
+      const regStudentId = matchedReg.student_id || student_id;
+      const regEventId = matchedReg.event_id || event_id;
+
+      const studentProfile =
+        dbStudentProfile ||
+        profilesList.find((p) => p.id === regStudentId || (matchedReg.student_email && p.email === matchedReg.student_email));
+
+      const targetEvent =
+        dbEventObj ||
+        events.find((e) => e.id === regEventId);
+
+      const studentName =
+        matchedReg.student_name ||
+        studentProfile?.full_name ||
+        studentProfile?.name ||
+        studentProfile?.username ||
+        'Student Attendee';
+
+      const studentCollege =
+        studentProfile?.college_name ||
+        studentProfile?.college ||
+        'Main Campus / Engineering';
+
+      const studentCollegeId =
+        studentProfile?.college_id ||
+        (regStudentId ? `STU-${regStudentId.slice(0, 6).toUpperCase()}` : 'N/A');
+
+      const studentEmail = studentProfile?.email || matchedReg.student_email || 'N/A';
+      const eventTitle = targetEvent?.title || matchedReg.event_title || 'Symposium Event';
+      const eventHall = scannerHall || targetEvent?.hall_number || 'Main Auditorium';
+      const eventCategory = targetEvent?.category || matchedReg.category || 'Technical';
+
+      // Check if already attended or scanned in attendanceLogs
+      const existingAttendanceLog = attendanceLogs.find(
+        (log) => log.student_id === regStudentId && log.event_id === regEventId
       );
 
-      if (existingLog) {
+      const isAlreadyCheckedIn = Boolean(matchedReg.attended || existingAttendanceLog);
+
+      // IF ALREADY SCANNED:
+      if (isAlreadyCheckedIn) {
+        const attendedTimestamp =
+          matchedReg.attended_at ||
+          existingAttendanceLog?.check_in_time ||
+          new Date().toISOString();
+
+        const formattedTime = new Date(attendedTimestamp).toLocaleString('en-US', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        });
+
         return {
-          success: true,
+          success: false,
           isDuplicate: true,
-          message: `Already Verified: Student ${studentProfile?.name || 'Attendee'} has already checked in!`,
-          studentName: studentProfile?.name || 'Attendee',
-          eventTitle: targetEvent?.title || 'Symposium Track',
-          hallNumber: scannerHall || targetEvent?.hall_number || 'Main Hall',
+          status: 'ALREADY_SCANNED',
+          message: `⚠️ Already Checked-In at ${formattedTime}`,
+          attended_at: attendedTimestamp,
+          studentName,
+          college: studentCollege,
+          rollNumber: studentCollegeId,
+          eventTitle,
+          hallNumber: eventHall,
+          student: {
+            id: regStudentId,
+            name: studentName,
+            college: studentCollege,
+            college_id: studentCollegeId,
+            email: studentEmail,
+          },
+          event: {
+            id: regEventId,
+            title: eventTitle,
+            hall_number: eventHall,
+            category: eventCategory,
+          },
         };
       }
 
-      const newLog = {
-        student_id,
-        event_id,
-        hall_number: scannerHall || targetEvent?.hall_number || 'Main Hall',
-        check_in_time: new Date().toISOString(),
+      // IF VALID & NOT YET ATTENDED:
+      const nowISO = new Date().toISOString();
+      const coordinatorId = currentUser?.id || null;
+
+      // 1. Update Supabase
+      if (!isMockMode) {
+        try {
+          if (isValidUUID(matchedReg.id)) {
+            await supabase
+              .from('registrations')
+              .update({
+                attended: true,
+                attended_at: nowISO,
+                scanned_by: coordinatorId,
+              })
+              .eq('id', matchedReg.id);
+          } else if (isValidUUID(regStudentId) && isValidUUID(regEventId)) {
+            await supabase
+              .from('registrations')
+              .update({
+                attended: true,
+                attended_at: nowISO,
+                scanned_by: coordinatorId,
+              })
+              .eq('student_id', regStudentId)
+              .eq('event_id', regEventId);
+          }
+
+          const { data: dbLog } = await supabase
+            .from('attendance_logs')
+            .insert([
+              {
+                student_id: isValidUUID(regStudentId) ? regStudentId : null,
+                event_id: isValidUUID(regEventId) ? regEventId : null,
+                hall_number: eventHall,
+                check_in_time: nowISO,
+                status: 'Checked-In',
+              },
+            ])
+            .select()
+            .single();
+
+          if (dbLog) {
+            setAttendanceLogs((prev) => [dbLog, ...prev.filter((l) => l.id !== dbLog.id)]);
+          }
+        } catch (dbErr) {
+          console.warn('[Supabase Attendance Write Catch]:', dbErr);
+        }
+      }
+
+      // 2. Update local registrations state
+      setRegistrations((prev) =>
+        prev.map((r) => {
+          if (
+            (matchedReg.id && r.id === matchedReg.id) ||
+            (r.student_id === regStudentId && r.event_id === regEventId)
+          ) {
+            return {
+              ...r,
+              attended: true,
+              attended_at: nowISO,
+              scanned_by: coordinatorId,
+            };
+          }
+          return r;
+        })
+      );
+
+      // 3. Update local attendance logs if not already set
+      const newAttendanceLog = {
+        id: crypto.randomUUID ? crypto.randomUUID() : 'att-' + Date.now().toString(16),
+        student_id: regStudentId,
+        event_id: regEventId,
+        hall_number: eventHall,
+        check_in_time: nowISO,
         status: 'Checked-In',
       };
+      setAttendanceLogs((prev) => [newAttendanceLog, ...prev]);
 
-      try {
-        const { data: dbLog } = await supabase.from('attendance_logs').insert([newLog]).select().single();
-        if (dbLog) setAttendanceLogs((prev) => [dbLog, ...prev]);
-        await supabase.from('registrations').update({ attended: true }).eq('event_id', event_id).eq('student_id', student_id);
-      } catch (err) {
-        console.warn('Supabase DB Insert Warning:', err);
-      }
+      // 4. Live alert notification
+      setLiveAlerts((prev) => [
+        {
+          id: Date.now(),
+          message: `✓ Attendance Verified: ${studentName} (${studentCollegeId}) for ${eventTitle}!`,
+          time: new Date().toLocaleTimeString(),
+          type: 'success',
+        },
+        ...prev.slice(0, 4),
+      ]);
 
       return {
         success: true,
-        message: `Successfully Verified! Student ${studentProfile?.name || 'Attendee'} registered for ${targetEvent?.title || 'Event'}.`,
-        studentName: studentProfile?.name || 'Attendee',
-        eventTitle: targetEvent?.title || 'Symposium Session',
-        hallNumber: scannerHall || targetEvent?.hall_number || 'Main Hall',
-        collegeId: studentProfile?.college_id || 'Student',
+        status: 'VERIFIED',
+        message: '✓ Attendance Verified Successfully',
+        attended_at: nowISO,
+        studentName,
+        college: studentCollege,
+        rollNumber: studentCollegeId,
+        eventTitle,
+        hallNumber: eventHall,
+        student: {
+          id: regStudentId,
+          name: studentName,
+          college: studentCollege,
+          college_id: studentCollegeId,
+          email: studentEmail,
+        },
+        event: {
+          id: regEventId,
+          title: eventTitle,
+          hall_number: eventHall,
+          category: eventCategory,
+        },
+        registration_id: matchedReg.id,
       };
-    } catch {
+    } catch (err) {
+      console.error('[verifyQRPass Fatal Exception]:', err);
       return {
         success: false,
-        message: 'Wrong QR Code: Could not parse student pass payload.',
+        status: 'ERROR',
+        message: '❌ Invalid QR Code! No registration found.',
       };
     }
   };

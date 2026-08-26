@@ -1,13 +1,19 @@
-// agent-notes: { ctx: "QR Camera Scanner with front/back camera selection, Guest QR pass generator, and rich attendance verification feedback", deps: ["html5-qrcode", "react-qr-code", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-24" }
+// agent-notes: { ctx: "QR Camera Scanner with audio/haptic feedback, green/yellow/red overlay cues, and comprehensive attendance verification cards", deps: ["html5-qrcode", "react-qr-code", "src/context/AppContext.jsx", "src/utils/scanFeedback.js", "lucide-react"], state: "active", last: "antigravity@2026-08-26" }
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import QRCode from 'react-qr-code';
 import {
   X, Camera, CheckCircle2, AlertCircle, RefreshCw, ScanLine, User, SwitchCamera,
-  Check, QrCode, Sparkles, Copy, CheckCheck
+  Check, QrCode, Sparkles, Copy, CheckCheck, AlertTriangle, Building, Hash, Calendar, Clock
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import {
+  playScanSuccessSound,
+  playScanWarningSound,
+  playScanErrorSound,
+  triggerScanHaptic,
+} from '../utils/scanFeedback';
 
 export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestMode = false }) {
   const { verifyQRPass, checkinGuest, registrations, events = [] } = useApp();
@@ -20,8 +26,27 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
   const [copied, setCopied] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState(null);
+  const [overlayState, setOverlayState] = useState(null); // 'success' | 'warning' | 'error' | null
 
   const html5QrcodeRef = useRef(null);
+
+  const processScanResult = useCallback((res) => {
+    setScanResult(res);
+    if (res.success) {
+      playScanSuccessSound();
+      triggerScanHaptic('success');
+      setOverlayState('success');
+    } else if (res.isDuplicate || res.status === 'ALREADY_SCANNED') {
+      playScanWarningSound();
+      triggerScanHaptic('warning');
+      setOverlayState('warning');
+    } else {
+      playScanErrorSound();
+      triggerScanHaptic('error');
+      setOverlayState('error');
+    }
+    setTimeout(() => setOverlayState(null), 3000);
+  }, []);
 
   const startScanner = useCallback(async (mode) => {
     setCameraError(null);
@@ -46,7 +71,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
           } else {
             res = await verifyQRPass(decodedText, selectedHall);
           }
-          setScanResult(res);
+          processScanResult(res);
         },
         () => {
           // Seeking frame
@@ -58,7 +83,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
       setIsScanning(false);
       setCameraError('Camera access restricted or camera unavailable. Use manual verify or test simulator below.');
     }
-  }, [isGuestMode, selectedHall, checkinGuest, verifyQRPass]);
+  }, [isGuestMode, selectedHall, checkinGuest, verifyQRPass, processScanResult]);
 
   useEffect(() => {
     if (!isOpen || (isGuestMode && guestModeTab === 'generate')) return;
@@ -93,7 +118,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
     } else {
       res = await verifyQRPass(manualPayload, selectedHall);
     }
-    setScanResult(res);
+    processScanResult(res);
   };
 
   const currentGuestEventId = guestEvent || events[0]?.id || '';
@@ -110,7 +135,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
 
   const handleDirectCheckinGenerated = async () => {
     const res = await checkinGuest(generatedGuestPayload, selectedHall || currentGuestEventObj?.hall_number || 'Main Venue');
-    setScanResult(res);
+    processScanResult(res);
   };
 
   const handleCopyPayload = () => {
@@ -129,24 +154,25 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
         is_guest: true,
       });
       const res = await checkinGuest(demoPayload, selectedHall);
-      setScanResult(res);
+      processScanResult(res);
     } else if (registrations.length > 0) {
       const sampleReg = registrations[0];
       const demoPayload = JSON.stringify({
+        registration_id: sampleReg.id,
         student_id: sampleReg.student_id,
         event_id: sampleReg.event_id,
         hall_number: selectedHall,
       });
       const res = await verifyQRPass(demoPayload, selectedHall);
-      setScanResult(res);
+      processScanResult(res);
     } else {
       const samplePayload = JSON.stringify({
-        student_id: '11111111-0000-4000-8000-000000000003',
+        student_id: '33333333-0000-4000-8000-000000000003',
         event_id: events[0]?.id || '',
         hall_number: selectedHall,
       });
       const res = await verifyQRPass(samplePayload, selectedHall);
-      setScanResult(res);
+      processScanResult(res);
     }
   };
 
@@ -158,7 +184,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
     } else {
       res = await verifyQRPass(invalidPayload, selectedHall);
     }
-    setScanResult(res);
+    processScanResult(res);
   };
 
   return (
@@ -183,7 +209,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
           Venue: <span className="font-semibold text-slate-800">{selectedHall || 'All Venues'}</span>
         </p>
 
-        {/* Guest Mode Mode Selector Toggle (Camera Scan vs Generate QR Pass) */}
+        {/* Guest Mode Mode Selector Toggle */}
         {isGuestMode && (
           <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full mb-4">
             <button
@@ -220,53 +246,137 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
           </div>
         )}
 
-        {/* Scan Result Feedback Toast */}
+        {/* Scan Result Feedback Card: Clean Success, Yellow Warning, or Red Error */}
         {scanResult && (
           <div
-            className={`p-4 rounded-2xl mb-4 text-left border shadow-sm ${
+            className={`p-4 rounded-2xl mb-4 text-left border shadow-md transition-all duration-300 ${
               scanResult.success
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
-                : 'bg-rose-50 border-rose-200 text-rose-950'
+                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 ring-2 ring-emerald-400/30'
+                : scanResult.isDuplicate || scanResult.status === 'ALREADY_SCANNED'
+                ? 'bg-amber-50/90 border-amber-300 text-amber-950 ring-2 ring-amber-400/30'
+                : 'bg-rose-50/90 border-rose-300 text-rose-950 ring-2 ring-rose-400/30'
             }`}
           >
-            <div className="flex items-start gap-2.5">
-              {scanResult.success ? (
-                <div className="p-1.5 rounded-xl bg-emerald-600 text-white shrink-0 shadow-2xs">
-                  <CheckCircle2 className="w-5 h-5 text-white" />
+            {/* 1. SUCCESS STATE */}
+            {scanResult.success && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2.5 pb-2 border-b border-emerald-200">
+                  <div className="p-1.5 rounded-xl bg-emerald-600 text-white shrink-0 shadow-xs animate-bounce">
+                    <CheckCircle2 className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-emerald-900">
+                      ✓ Attendance Verified Successfully
+                    </h4>
+                    <p className="text-[11px] text-emerald-700 font-medium">
+                      Student attendance marked and synchronized in real-time
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <div className="p-1.5 rounded-xl bg-rose-600 text-white shrink-0 shadow-2xs">
-                  <AlertCircle className="w-5 h-5 text-white" />
+
+                {/* Student & Event Details Card */}
+                <div className="bg-white/90 p-3 rounded-xl border border-emerald-200 space-y-1.5 text-xs text-slate-800 shadow-2xs">
+                  <div className="flex justify-between items-center pb-1 border-b border-slate-100">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <User className="w-3 h-3 text-slate-400" />
+                      Student Name:
+                    </span>
+                    <span className="font-bold text-slate-900">{scanResult.studentName || 'Student Attendee'}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center pb-1 border-b border-slate-100">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <Building className="w-3 h-3 text-slate-400" />
+                      College:
+                    </span>
+                    <span className="font-semibold text-slate-800">{scanResult.college || 'Engineering College'}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center pb-1 border-b border-slate-100">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <Hash className="w-3 h-3 text-slate-400" />
+                      Roll Number:
+                    </span>
+                    <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                      {scanResult.rollNumber || scanResult.collegeId || 'STU-REG'}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center pb-1 border-b border-slate-100">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-400" />
+                      Registered Event:
+                    </span>
+                    <span className="font-bold text-slate-900 truncate max-w-[180px]">{scanResult.eventTitle || 'Symposium Track'}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-slate-400" />
+                      Checked-In At:
+                    </span>
+                    <span className="font-mono text-[11px] text-emerald-800 font-semibold">
+                      {scanResult.attended_at ? new Date(scanResult.attended_at).toLocaleTimeString() : 'Just now'}
+                    </span>
+                  </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              <div className="space-y-1 text-xs flex-1">
-                <h4 className="font-extrabold text-sm flex items-center gap-1.5">
-                  {scanResult.success ? '✅ Verified & Checked In!' : '❌ Scan Error!'}
-                </h4>
-                <p className="font-medium text-slate-700">{scanResult.message}</p>
+            {/* 2. ALREADY SCANNED WARNING STATE */}
+            {(scanResult.isDuplicate || scanResult.status === 'ALREADY_SCANNED') && (
+              <div className="space-y-2.5">
+                <div className="flex items-start gap-2.5">
+                  <div className="p-1.5 rounded-xl bg-amber-500 text-white shrink-0 shadow-xs">
+                    <AlertTriangle className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-extrabold text-xs text-amber-900">
+                      {scanResult.message || '⚠️ Already Checked-In'}
+                    </h4>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      This QR code was already scanned earlier for this event session.
+                    </p>
+                  </div>
+                </div>
 
-                {scanResult.success && (
-                  <div className="mt-2 pt-2 border-t border-emerald-200/80 space-y-1 font-mono text-[11px] text-emerald-900">
+                {scanResult.studentName && (
+                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 space-y-1 text-xs text-slate-800">
                     <div className="flex justify-between">
-                      <span className="text-emerald-700">Attendee:</span>
-                      <span className="font-bold">{scanResult.studentName || guestName || 'Attendee'}</span>
+                      <span className="text-slate-500">Attendee:</span>
+                      <span className="font-bold">{scanResult.studentName}</span>
                     </div>
+                    {scanResult.rollNumber && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Roll No:</span>
+                        <span className="font-mono font-bold text-indigo-700">{scanResult.rollNumber}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
-                      <span className="text-emerald-700">Event Session:</span>
-                      <span className="font-bold">{scanResult.eventTitle || 'Symposium Session'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-emerald-700">Status:</span>
-                      <span className="font-bold text-emerald-800 flex items-center gap-1">
-                        <Check className="w-3 h-3 text-emerald-600" />
-                        Checked-In Successfully
-                      </span>
+                      <span className="text-slate-500">Event:</span>
+                      <span className="font-semibold text-slate-900">{scanResult.eventTitle || 'Session'}</span>
                     </div>
                   </div>
                 )}
               </div>
-            </div>
+            )}
+
+            {/* 3. INVALID / ERROR STATE */}
+            {!scanResult.success && !scanResult.isDuplicate && scanResult.status !== 'ALREADY_SCANNED' && (
+              <div className="flex items-start gap-2.5">
+                <div className="p-1.5 rounded-xl bg-rose-600 text-white shrink-0 shadow-xs">
+                  <AlertCircle className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm text-rose-900">
+                    ❌ Invalid QR Code! No registration found.
+                  </h4>
+                  <p className="text-xs text-rose-700 mt-0.5">
+                    {scanResult.message || 'The scanned QR pass does not match any valid registration for this event.'}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -284,9 +394,47 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
               </button>
             </div>
 
-            {/* HTML5 QR Camera Video Target Container */}
-            <div className="bg-slate-900 rounded-2xl p-2 border border-slate-700 overflow-hidden relative min-h-[240px] flex items-center justify-center">
+            {/* HTML5 QR Camera Video Target Container with Dynamic Feedback Overlay */}
+            <div
+              className={`bg-slate-900 rounded-2xl p-2 border overflow-hidden relative min-h-[240px] flex items-center justify-center transition-all duration-300 ${
+                overlayState === 'success'
+                  ? 'border-emerald-500 ring-4 ring-emerald-500/40 shadow-lg shadow-emerald-500/20'
+                  : overlayState === 'warning'
+                  ? 'border-amber-500 ring-4 ring-amber-500/40 shadow-lg shadow-amber-500/20'
+                  : overlayState === 'error'
+                  ? 'border-rose-500 ring-4 ring-rose-500/40 shadow-lg shadow-rose-500/20'
+                  : 'border-slate-700'
+              }`}
+            >
               <div id="qr-reader-target" className="w-full text-white"></div>
+
+              {/* Scanning Overlay feedback glow */}
+              {overlayState === 'success' && (
+                <div className="absolute inset-0 bg-emerald-500/20 pointer-events-none flex items-center justify-center animate-pulse">
+                  <div className="bg-emerald-600/90 text-white font-bold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>✓ Attendance Verified Successfully</span>
+                  </div>
+                </div>
+              )}
+
+              {overlayState === 'warning' && (
+                <div className="absolute inset-0 bg-amber-500/20 pointer-events-none flex items-center justify-center animate-pulse">
+                  <div className="bg-amber-600/90 text-white font-bold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Already Checked-In</span>
+                  </div>
+                </div>
+              )}
+
+              {overlayState === 'error' && (
+                <div className="absolute inset-0 bg-rose-500/20 pointer-events-none flex items-center justify-center animate-pulse">
+                  <div className="bg-rose-600/90 text-white font-bold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>Invalid QR Code</span>
+                  </div>
+                </div>
+              )}
 
               {cameraError && (
                 <div className="p-4 text-center text-xs text-rose-300 bg-rose-950/80 border border-rose-800 rounded-xl space-y-2 max-w-xs">

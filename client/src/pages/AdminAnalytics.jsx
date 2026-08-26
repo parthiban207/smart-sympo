@@ -21,7 +21,8 @@ import {
   ShieldCheck, PlusCircle, MapPin, Activity, Radio, UserCheck, Users, Signal,
   Globe, Crosshair, Ruler, FileText, ScanLine, Clock, Hash, CheckCircle2, AlertCircle,
   Pencil, Trash2, KeyRound, RefreshCw, Lock, FileSpreadsheet, Download, FileDown,
-  CalendarCheck, ClipboardCheck, Loader2, StopCircle, Mail, Send, CheckCircle, AlertTriangle
+  CalendarCheck, ClipboardCheck, Loader2, StopCircle, Mail, Send, CheckCircle, AlertTriangle,
+  Search, Building, Filter
 } from 'lucide-react';
 
 export default function AdminAnalytics() {
@@ -47,6 +48,10 @@ export default function AdminAnalytics() {
   const [geoLoading, setGeoLoading] = useState(false);
   const [updatingUser, setUpdatingUser] = useState(null);
   const [roleFeedback, setRoleFeedback] = useState(null);
+
+  // Real-Time Attendance Search & Filter State
+  const [attendanceSearchQuery, setAttendanceSearchQuery] = useState('');
+  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('ALL'); // 'ALL' | 'ATTENDED' | 'PENDING'
 
   // Spreadsheet Export Loading & Feedback State
   const [exportingReport, setExportingReport] = useState(null);
@@ -91,6 +96,72 @@ export default function AdminAnalytics() {
   const adminCount = (profilesList || []).filter((p) => p.role === 'admin').length;
   const coordinatorCount = (profilesList || []).filter((p) => p.role === 'coordinator').length;
   const studentCount = (profilesList || []).filter((p) => p.role === 'student').length;
+
+  const totalRegistrationsCount = (registrations || []).length;
+  const totalAttendedCount = (registrations || []).filter(
+    (r) => r.attended || (attendanceLogs || []).some((log) => log.student_id === r.student_id && log.event_id === r.event_id)
+  ).length;
+  const pendingAttendanceCount = Math.max(0, totalRegistrationsCount - totalAttendedCount);
+  const liveAttendanceRate = totalRegistrationsCount > 0
+    ? Math.round((totalAttendedCount / totalRegistrationsCount) * 100)
+    : 0;
+
+  // Combined Real-Time Joined Attendance Table: Registrations joined with Profiles, Events, & Attendance Logs
+  const joinedAttendanceRecords = (registrations || []).map((reg) => {
+    const matchedProfile = (profilesList || []).find((p) => p.id === reg.student_id);
+    const matchedEvent = (events || []).find((e) => e.id === reg.event_id);
+    const matchedLog = (attendanceLogs || []).find(
+      (log) => log.student_id === reg.student_id && log.event_id === reg.event_id
+    );
+    const coordinatorProfile = reg.scanned_by
+      ? (profilesList || []).find((p) => p.id === reg.scanned_by)
+      : null;
+
+    const isAttended = Boolean(reg.attended || matchedLog);
+    const checkInTime = reg.attended_at || matchedLog?.check_in_time || null;
+
+    return {
+      id: reg.id,
+      registration_id: reg.id,
+      student_id: reg.student_id,
+      student_name:
+        matchedProfile?.full_name ||
+        matchedProfile?.name ||
+        reg.student_name ||
+        `Student (${reg.student_id?.slice(0, 8)})`,
+      college_name:
+        matchedProfile?.college_name ||
+        matchedProfile?.college ||
+        'Main Campus',
+      college_id:
+        matchedProfile?.college_id ||
+        (reg.student_id ? `STU-${reg.student_id.slice(0, 6).toUpperCase()}` : 'N/A'),
+      email: matchedProfile?.email || reg.student_email || 'N/A',
+      event_id: reg.event_id,
+      event_title: matchedEvent?.title || reg.event_title || 'Symposium Session',
+      hall_number: matchedEvent?.hall_number || matchedLog?.hall_number || 'Main Venue',
+      category: matchedEvent?.category || reg.category || 'Technical',
+      is_attended: isAttended,
+      attended_at: checkInTime,
+      registered_at: reg.registered_at,
+      scanned_by_name: coordinatorProfile?.full_name || coordinatorProfile?.name || null,
+    };
+  });
+
+  const filteredAttendanceRecords = joinedAttendanceRecords.filter((record) => {
+    const query = attendanceSearchQuery.toLowerCase();
+    const matchesQuery =
+      record.student_name.toLowerCase().includes(query) ||
+      record.college_id.toLowerCase().includes(query) ||
+      record.college_name.toLowerCase().includes(query) ||
+      record.event_title.toLowerCase().includes(query) ||
+      record.email.toLowerCase().includes(query);
+
+    if (!matchesQuery) return false;
+    if (attendanceStatusFilter === 'ATTENDED') return record.is_attended;
+    if (attendanceStatusFilter === 'PENDING') return !record.is_attended;
+    return true;
+  });
 
   const handleRoleChange = async (targetUserId, newRole) => {
     setUpdatingUser(targetUserId);
@@ -1640,63 +1711,215 @@ export default function AdminAnalytics() {
         </div>
       </div>
 
-      {/* System-Wide Live Attendance Activity Stream Data Table */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-          <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-indigo-600" />
+      {/* Real-Time Admin Attendance Dashboard & Live Joined Records Table */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+        {/* Header & Live Subscription Pulse */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-200 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 flex items-center justify-center shrink-0">
+              <UserCheck className="w-5 h-5" />
+            </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">System-Wide Live Attendance Feed</h3>
-              <p className="text-[11px] text-slate-500">Realtime postgres_changes stream for multi-venue check-ins</p>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900">Real-Time Event Attendance & Verification Feed</h3>
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Live Sync
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Instant real-time synchronization between coordinator QR scanners, Supabase database, and admin tables
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-            <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
-            <span>Supabase Realtime Listening</span>
+
+          <div className="flex items-center gap-2 text-xs font-semibold text-indigo-700 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+            <Radio className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+            <span>Channel: <code className="font-mono text-slate-800 font-bold">public:registrations</code></span>
           </div>
         </div>
 
+        {/* Live Attendance Counter Metrics Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+            <div className="text-[11px] text-slate-500 font-medium">Total Registered</div>
+            <div className="text-xl font-bold text-slate-900 mt-0.5">{totalRegistrationsCount}</div>
+            <div className="text-[10px] text-slate-400 mt-0.5 font-mono">Across all sessions</div>
+          </div>
+
+          <div className="bg-emerald-50/70 p-3.5 rounded-xl border border-emerald-200">
+            <div className="text-[11px] text-emerald-700 font-medium flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Verified Check-Ins</span>
+            </div>
+            <div className="text-xl font-bold text-emerald-900 mt-0.5">{totalAttendedCount}</div>
+            <div className="text-[10px] text-emerald-600 mt-0.5 font-mono">attended = true</div>
+          </div>
+
+          <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200">
+            <div className="text-[11px] text-amber-700 font-medium flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-amber-600" />
+              <span>Pending Check-Ins</span>
+            </div>
+            <div className="text-xl font-bold text-amber-900 mt-0.5">{pendingAttendanceCount}</div>
+            <div className="text-[10px] text-amber-600 mt-0.5 font-mono">Awaiting venue scan</div>
+          </div>
+
+          <div className="bg-indigo-50/70 p-3.5 rounded-xl border border-indigo-200">
+            <div className="text-[11px] text-indigo-700 font-medium flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Attendance Rate</span>
+            </div>
+            <div className="text-xl font-bold text-indigo-900 mt-0.5">{liveAttendanceRate}%</div>
+            <div className="text-[10px] text-indigo-600 mt-0.5 font-mono">Turnout percentage</div>
+          </div>
+        </div>
+
+        {/* Search & Filter Toolbar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+            <input
+              type="text"
+              placeholder="Search by student name, college, roll number, or event..."
+              value={attendanceSearchQuery}
+              onChange={(e) => setAttendanceSearchQuery(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-10 pr-3.5 py-2 text-xs focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-medium"
+            />
+          </div>
+
+          {/* Status Filter Tabs */}
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 text-xs font-semibold">
+            <button
+              onClick={() => setAttendanceStatusFilter('ALL')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                attendanceStatusFilter === 'ALL'
+                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              All ({joinedAttendanceRecords.length})
+            </button>
+            <button
+              onClick={() => setAttendanceStatusFilter('ATTENDED')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                attendanceStatusFilter === 'ATTENDED'
+                  ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-emerald-700'
+              }`}
+            >
+              Verified ({totalAttendedCount})
+            </button>
+            <button
+              onClick={() => setAttendanceStatusFilter('PENDING')}
+              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                attendanceStatusFilter === 'PENDING'
+                  ? 'bg-amber-600 text-white shadow-2xs font-bold'
+                  : 'text-slate-600 hover:text-amber-700'
+              }`}
+            >
+              Pending ({pendingAttendanceCount})
+            </button>
+          </div>
+        </div>
+
+        {/* Real-Time Joined Data Table */}
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 text-slate-700 uppercase font-semibold border-b border-slate-200 text-[11px]">
               <tr>
-                <th className="px-4 py-3">Student ID</th>
-                <th className="px-4 py-3">Event / Venue</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Timestamp</th>
+                <th className="px-4 py-3">Student Name & Roll No</th>
+                <th className="px-4 py-3">College / Institution</th>
+                <th className="px-4 py-3">Registered Event</th>
+                <th className="px-4 py-3">Live Status</th>
+                <th className="px-4 py-3">Check-In Time</th>
+                <th className="px-4 py-3">Scanned By</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {attendanceLogs.length === 0 ? (
+              {filteredAttendanceRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
-                    No live check-in logs recorded yet. Door scans will stream here live instantly.
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                    {attendanceSearchQuery
+                      ? 'No attendance records match your search filter.'
+                      : 'No student registrations recorded yet. When a student registers and scans in, it will appear here in real-time.'}
                   </td>
                 </tr>
               ) : (
-                attendanceLogs.map((log) => {
-                  const matchedEvt = events.find((e) => e.id === log.event_id);
-                  return (
-                    <tr key={log.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="px-4 py-3 font-mono text-slate-900 flex items-center gap-2 font-semibold">
-                        <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>{log.student_id?.slice(0, 16)}</span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">
-                        <div>{matchedEvt ? matchedEvt.title : 'Symposium Session'}</div>
-                        <div className="text-[10px] text-slate-400">{log.hall_number || 'Main Venue'}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          {log.status || 'Checked-In'}
+                filteredAttendanceRecords.map((record) => (
+                  <tr key={record.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="px-4 py-3 font-semibold text-slate-900">
+                      <div className="flex items-center gap-2.5">
+                        <img
+                          src={`https://api.dicebear.com/7.x/bottts/svg?seed=${record.student_id}`}
+                          alt="Avatar"
+                          className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 p-0.5 shrink-0"
+                        />
+                        <div>
+                          <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                            <span>{record.student_name}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono">
+                            <span className="text-indigo-700 font-bold">{record.college_id}</span>
+                            <span className="mx-1">•</span>
+                            <span>{record.email}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3 text-slate-700">
+                      <div className="flex items-center gap-1 font-medium">
+                        <Building className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="truncate max-w-[170px]">{record.college_name}</span>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3 text-slate-800">
+                      <div className="font-semibold text-slate-900 truncate max-w-[180px]">{record.event_title}</div>
+                      <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-2.5 h-2.5 text-amber-600" />
+                        <span>{record.hall_number}</span>
+                        <span>•</span>
+                        <span className="text-indigo-700 font-medium">{record.category}</span>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {record.is_attended ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          ✓ Attended / Verified
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 font-mono text-[11px]">
-                        {log.check_in_time ? new Date(log.check_in_time).toLocaleTimeString() : 'Just now'}
-                      </td>
-                    </tr>
-                  );
-                })
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          ⏳ Pending Scan
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3 text-slate-600 font-mono text-[11px]">
+                      {record.attended_at ? (
+                        <span className="text-emerald-800 font-semibold">
+                          {new Date(record.attended_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 italic">Not checked in</span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-3 text-slate-600 text-[11px]">
+                      {record.scanned_by_name ? (
+                        <span className="font-semibold text-slate-800">{record.scanned_by_name}</span>
+                      ) : record.is_attended ? (
+                        <span className="text-slate-500">Door Scanner</span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
