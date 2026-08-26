@@ -178,7 +178,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         } else {
           setSuccessMsg(`Account created successfully as ${assignedRole.toUpperCase()}! Redirecting...`);
           setTimeout(() => {
-            if (onSuccess) onSuccess();
+            if (onSuccess) (onSuccess as any)(result.user || result.profile);
             else if (assignedRole === 'admin') navigate('/admin');
             else if (assignedRole === 'coordinator') navigate('/coordinator');
             else navigate('/student');
@@ -237,7 +237,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         setSuccessMsg(`Welcome! Authenticated as ${userRole.toUpperCase()}. Redirecting...`);
         setTimeout(() => {
           if (onSuccess) {
-            onSuccess();
+            (onSuccess as any)(fetchedProfile || res.user);
           } else {
             if (userRole === 'admin') navigate('/admin');
             else if (userRole === 'coordinator') navigate('/coordinator');

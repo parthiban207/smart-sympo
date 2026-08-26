@@ -71,7 +71,16 @@ export default function StudentLoginPage() {
 
         {/* Right column: Student Auth Form */}
         <div>
-          <Auth targetRole="student" initialMode="login" onSuccess={() => navigate('/student')} />
+          <Auth
+            targetRole="student"
+            initialMode="login"
+            onSuccess={(user) => {
+              const role = (user?.role || 'student').toLowerCase();
+              if (role === 'admin') navigate('/admin');
+              else if (role === 'coordinator') navigate('/coordinator');
+              else navigate('/student');
+            }}
+          />
         </div>
       </div>
     </div>

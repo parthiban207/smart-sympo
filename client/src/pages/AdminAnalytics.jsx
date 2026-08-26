@@ -29,13 +29,16 @@ export default function AdminAnalytics() {
   const {
     events, fetchEvents, registrations, setRegistrations, attendanceLogs, setAttendanceLogs,
     addEvent, updateEvent, deleteEvent, guestCheckins, currentUser, profilesList, setProfilesList,
-    updateUserRole, updateUserPassCode, deleteUserAccount, clearAllAccounts, liveAlerts,
+    updateUserRole, createCoordinatorAccount, updateUserPassCode, deleteUserAccount, clearAllAccounts, liveAlerts,
     clearGlobalEmergencyBroadcast
   } = useApp();
   const { onlineUsers, onlineCount } = usePresence();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddCoordinatorModal, setShowAddCoordinatorModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [coordForm, setCoordForm] = useState({ fullName: '', email: '', password: '', phone: '', department: '' });
+  const [creatingCoord, setCreatingCoord] = useState(false);
 
   // Real-Time Attendance Re-fetch Helper
   const fetchAttendanceList = useCallback(async () => {
@@ -229,6 +232,25 @@ export default function AdminAnalytics() {
       setRoleFeedback({ type: 'error', text: res.message });
     }
     setUpdatingUser(null);
+  };
+
+  const handleCreateCoordinator = async (e) => {
+    e.preventDefault();
+    if (!coordForm.fullName.trim() || !coordForm.email.trim() || !coordForm.password.trim()) {
+      setRoleFeedback({ type: 'error', text: 'Please fill in Coordinator Full Name, Email, and Password.' });
+      return;
+    }
+    setCreatingCoord(true);
+    const res = await createCoordinatorAccount(coordForm);
+    if (res.success) {
+      setRoleFeedback({ type: 'success', text: res.message });
+      setShowAddCoordinatorModal(false);
+      setCoordForm({ fullName: '', email: '', password: '', phone: '', department: '' });
+      setTimeout(() => setRoleFeedback(null), 4000);
+    } else {
+      setRoleFeedback({ type: 'error', text: res.message });
+    }
+    setCreatingCoord(false);
   };
 
   const handleGeneratePassCode = async (targetUserId) => {
@@ -1420,6 +1442,13 @@ export default function AdminAnalytics() {
               Students: <strong>{studentCount}</strong>
             </span>
             <button
+              onClick={() => setShowAddCoordinatorModal(true)}
+              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs shadow-2xs"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              Add Coordinator
+            </button>
+            <button
               onClick={handleClearAllAccounts}
               className="px-3 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold flex items-center gap-1.5 transition-colors cursor-pointer text-xs"
               title="Delete all accounts to start fresh"
@@ -2396,6 +2425,122 @@ export default function AdminAnalytics() {
                     setSecurityModalError(null);
                   }}
                   className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Coordinator Modal */}
+      {showAddCoordinatorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white max-w-md w-full rounded-3xl border border-slate-200 p-6 shadow-2xl space-y-4 text-left relative">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">Add New Coordinator</h3>
+                  <p className="text-[11px] text-slate-500">Create staff coordinator account in Supabase</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAddCoordinatorModal(false)}
+                className="p-1.5 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCoordinator} className="space-y-3.5">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Full Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Dr. Ramesh Kumar"
+                  value={coordForm.fullName}
+                  onChange={(e) => setCoordForm({ ...coordForm, fullName: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Email Address <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="coordinator@college.edu"
+                  value={coordForm.email}
+                  onChange={(e) => setCoordForm({ ...coordForm, email: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    Password / PIN <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Min 6 chars"
+                    value={coordForm.password}
+                    onChange={(e) => setCoordForm({ ...coordForm, password: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="9876543210"
+                    value={coordForm.phone}
+                    onChange={(e) => setCoordForm({ ...coordForm, phone: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Department / Institution
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Department of Computer Science"
+                  value={coordForm.department}
+                  onChange={(e) => setCoordForm({ ...coordForm, department: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={creatingCoord}
+                  className="flex-1 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>{creatingCoord ? 'Creating Coordinator...' : 'Create Coordinator'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddCoordinatorModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
                 >
                   Cancel
                 </button>

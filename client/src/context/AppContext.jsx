@@ -1634,6 +1634,102 @@ export const AppProvider = ({ children }) => {
     return { success: true, message: `User role successfully updated to ${newRole.toUpperCase()}!` };
   };
 
+  // Direct Coordinator Creation Function (Permanent Supabase Profiles Storage)
+  const createCoordinatorAccount = async ({ fullName, email, password, phone, department, collegeId }) => {
+    if (!email || !email.trim() || !password || !password.trim()) {
+      return { success: false, message: 'Please provide a valid email and password.' };
+    }
+    if (!fullName || !fullName.trim()) {
+      return { success: false, message: 'Please enter the Coordinator Full Name.' };
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const finalPhone = phone?.trim() || '';
+    const finalDept = department?.trim() || 'Symposium Coordination';
+    const finalCollegeId = collegeId?.trim() || `FAC-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    try {
+      let userId = null;
+      if (!isMockMode) {
+        try {
+          const { data } = await supabase.auth.signUp({
+            email: cleanEmail,
+            password: password.trim(),
+            options: {
+              data: {
+                full_name: fullName.trim(),
+                name: fullName.trim(),
+                role: 'coordinator',
+                department: finalDept,
+                college: finalDept,
+                college_name: finalDept,
+                college_id: finalCollegeId,
+                phone: finalPhone,
+                phone_number: finalPhone,
+              },
+            },
+          });
+          if (data?.user?.id) {
+            userId = data.user.id;
+          }
+        } catch (e) {
+          console.warn('[Coordinator SignUp Warning]:', e);
+        }
+      }
+
+      if (!userId) {
+        userId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `coord-${Date.now()}`;
+      }
+
+      const coordinatorProfile = {
+        id: userId,
+        name: fullName.trim(),
+        full_name: fullName.trim(),
+        username: cleanEmail.split('@')[0],
+        email: cleanEmail,
+        role: 'coordinator',
+        department: finalDept,
+        college: finalDept,
+        college_name: finalDept,
+        college_id: finalCollegeId,
+        phone: finalPhone,
+        phone_number: finalPhone,
+        pass_code: password.trim(),
+        first_login: false,
+      };
+
+      // Explicitly store in Supabase profiles table
+      if (!isMockMode && isValidUUID(userId)) {
+        try {
+          await supabase.from('profiles').upsert([coordinatorProfile]);
+        } catch (e) {
+          console.warn('[Supabase Coordinator Profile Upsert Error]:', e);
+        }
+      }
+
+      // Sync into profilesList and accounts cache
+      setProfilesList((prev) => {
+        const exists = prev.some((p) => p.email && p.email.toLowerCase() === cleanEmail);
+        const updated = exists
+          ? prev.map((p) => (p.email && p.email.toLowerCase() === cleanEmail ? { ...p, ...coordinatorProfile } : p))
+          : [coordinatorProfile, ...prev];
+        try {
+          localStorage.setItem('smart_sympo_accounts', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
+
+      return {
+        success: true,
+        message: `Coordinator "${fullName}" registered and saved to Supabase successfully!`,
+        profile: coordinatorProfile,
+      };
+    } catch (err) {
+      console.error('[Create Coordinator Exception]:', err);
+      return { success: false, message: err.message || 'Failed to create coordinator account.' };
+    }
+  };
+
   // Admin Passcode Management Function
   const updateUserPassCode = async (targetUserId, newPassCode) => {
     if (!targetUserId) {
@@ -1827,6 +1923,7 @@ export const AppProvider = ({ children }) => {
         deleteEvent,
         checkinGuest,
         updateUserRole,
+        createCoordinatorAccount,
         updateUserPassCode,
         deleteUserAccount,
         clearAllAccounts,
