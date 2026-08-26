@@ -1,7 +1,7 @@
-// agent-notes: { ctx: "Main App container with router navigation, protected routes, and cross-tab auth state synchronization", deps: ["src/components/Navbar.jsx", "src/components/LiveAlertBanner.jsx", "src/components/Chatbot.jsx", "src/components/ProtectedRoute.tsx", "src/pages/LoginPage.jsx", "src/pages/StudentLoginPage.jsx", "src/pages/StaffLoginPage.jsx", "src/pages/ResetPasswordPage.tsx", "src/context/AppContext.jsx", "src/supabaseClient.ts"], state: "active", last: "antigravity@2026-08-26" }
+// agent-notes: { ctx: "Main App container with PASSWORD_RECOVERY global listener, URL recovery hash interception, and protected routes", deps: ["src/components/Navbar.jsx", "src/components/LiveAlertBanner.jsx", "src/components/Chatbot.jsx", "src/components/ProtectedRoute.tsx", "src/pages/LoginPage.jsx", "src/pages/StudentLoginPage.jsx", "src/pages/StaffLoginPage.jsx", "src/pages/ResetPasswordPage.tsx", "src/context/AppContext.jsx", "src/supabaseClient.ts"], state: "active", last: "antigravity@2026-08-26" }
 
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { supabase, isMockMode } from './supabaseClient';
 import Navbar from './components/Navbar';
@@ -24,42 +24,64 @@ function getRoleDestination(role) {
 }
 
 function RootRouteRedirect() {
+  const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
+  const search = typeof window !== 'undefined' ? window.location.search || '' : '';
+
+  // If user arrives via password reset recovery link, navigate to /reset-password
+  if (hash.includes('type=recovery') || search.includes('type=recovery')) {
+    return <Navigate to={`/reset-password${hash}${search}`} replace />;
+  }
+
   const { isAuthenticated, currentUser } = useApp();
   const isLoggedIn = isAuthenticated || Boolean(currentUser?.id);
   if (!isLoggedIn) return <Navigate to="/login" replace />;
   return <Navigate to={getRoleDestination(currentUser?.role)} replace />;
 }
 
-// Cross-Tab Session Synchronization & Global Auth Listener Component
+// Global Auth State & Password Recovery Interceptor Listener
 function AuthSyncListener() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   useEffect(() => {
     if (isMockMode) return;
 
-    // 1. Supabase onAuthStateChange for cross-tab session tracking
+    // 1. Intercept password recovery tokens in URL hash or search params on initial load
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+    if (hash.includes('type=recovery') || search.includes('type=recovery')) {
+      if (location.pathname !== '/reset-password') {
+        navigate(`/reset-password${hash}${search}`, { replace: true });
+      }
+    }
+
+    // 2. Global Supabase onAuthStateChange for PASSWORD_RECOVERY and SIGNED_OUT
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[App Cross-Tab Auth Event]:', event, Boolean(session));
-      if (event === 'SIGNED_OUT' || (!session && event !== 'INITIAL_SESSION')) {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[Supabase Auth Event]:', event, Boolean(session));
+
+      if (event === 'PASSWORD_RECOVERY') {
+        // Force navigate user directly to the reset-password route
+        navigate('/reset-password', { replace: true });
+      } else if (event === 'SIGNED_OUT') {
         const publicPaths = ['/login', '/login/student', '/login/staff', '/signup', '/reset-password'];
         const currentPath = window.location.pathname;
 
-        if (!publicPaths.includes(currentPath)) {
-          console.warn('[Cross-Tab Sync]: User logged out in another tab. Redirecting to /login...');
-          window.location.href = '/login';
+        if (!publicPaths.includes(currentPath) && !window.location.hash.includes('type=recovery')) {
+          console.warn('[Session Expired / Signed Out]: Redirecting to /login...');
+          navigate('/login', { replace: true });
         }
       }
     });
 
-    // 2. Storage event listener for explicit localStorage clearance across tabs
+    // 3. Storage listener across tabs
     const handleStorageChange = (e) => {
       if (e.key === 'smart_sympo_user' && !e.newValue) {
         const publicPaths = ['/login', '/login/student', '/login/staff', '/signup', '/reset-password'];
         const currentPath = window.location.pathname;
-
-        if (!publicPaths.includes(currentPath)) {
-          console.warn('[Cross-Tab Storage Sync]: User storage cleared. Redirecting to /login...');
-          window.location.href = '/login';
+        if (!publicPaths.includes(currentPath) && !window.location.hash.includes('type=recovery')) {
+          navigate('/login', { replace: true });
         }
       }
     };
@@ -70,7 +92,7 @@ function AuthSyncListener() {
       subscription?.unsubscribe();
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, []);
+  }, [navigate, location]);
 
   return null;
 }
