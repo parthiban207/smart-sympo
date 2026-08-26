@@ -1,10 +1,11 @@
-// agent-notes: { ctx: "Strict role authority route protection: Student -> Student only; Coordinator -> Coordinator & Scanner only; Admin -> Full access", deps: ["src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-13" }
+// agent-notes: { ctx: "Strict role authority and session verification route protection wrapper with no flash of content", deps: ["src/context/AppContext.jsx", "src/supabaseClient.js", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-08-26" }
 
 import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { supabase, isMockMode } from '../supabaseClient';
 import { UserRole } from '../hooks/useUserRole';
-import { AlertCircle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
   allowedRoles: UserRole[];
@@ -14,58 +15,79 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) {
   const { currentUser, isAuthenticated } = useApp();
   const location = useLocation();
-  const [deniedMsg, setDeniedMsg] = useState<string | null>(null);
 
-  const savedRole = (typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_active_role') : null) as UserRole | null;
-  const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_user') : null;
-  const activeRole: UserRole = (currentUser?.role as UserRole) || savedRole || 'student';
-  const isLoggedIn = isAuthenticated || Boolean(currentUser?.id) || Boolean(savedUserStr);
+  const [isChecking, setIsChecking] = useState(true);
+  const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    if (isLoggedIn && !allowedRoles.includes(activeRole)) {
-      if (activeRole === 'student') {
-        setDeniedMsg('Access Denied: Student permissions only. Staff login required.');
-      } else if (activeRole === 'coordinator') {
-        setDeniedMsg('Access Denied: Coordinator cannot access Admin Governance Panel.');
-      }
-    }
-  }, [activeRole, allowedRoles, isLoggedIn, location.pathname]);
+    let isMounted = true;
 
-  if (!isLoggedIn) {
-    return <Navigate to="/login" replace />;
+    const verifyAccess = async () => {
+      try {
+        let hasActiveSession = isAuthenticated || Boolean(currentUser?.id);
+
+        if (!isMockMode) {
+          const { data: sessionData, error } = await supabase.auth.getSession();
+          if (error || !sessionData?.session) {
+            hasActiveSession = false;
+          } else if (sessionData.session?.user) {
+            hasActiveSession = true;
+          }
+        }
+
+        const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_user') : null;
+        if (!hasActiveSession && !savedUserStr) {
+          if (isMounted) {
+            setIsAuthorized(false);
+            setIsChecking(false);
+          }
+          return;
+        }
+
+        const savedRole = (typeof localStorage !== 'undefined'
+          ? localStorage.getItem('smart_sympo_active_role')
+          : null) as UserRole | null;
+
+        const effectiveRole: UserRole =
+          (currentUser?.role as UserRole) || savedRole || 'student';
+
+        const roleAllowed = allowedRoles.includes(effectiveRole);
+
+        if (isMounted) {
+          setIsAuthorized(hasActiveSession && roleAllowed);
+          setIsChecking(false);
+        }
+      } catch (err) {
+        console.warn('[ProtectedRoute Verification Catch]:', err);
+        if (isMounted) {
+          setIsAuthorized(false);
+          setIsChecking(false);
+        }
+      }
+    };
+
+    verifyAccess();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [allowedRoles, currentUser, isAuthenticated, location.pathname]);
+
+  // While verifying session, render sleek loading indicator to prevent content flash
+  if (isChecking) {
+    return (
+      <div className="min-h-[calc(100vh-80px)] flex flex-col items-center justify-center bg-slate-50 space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shadow-xs">
+          <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+        </div>
+        <p className="text-xs font-semibold text-slate-500">Verifying session permissions...</p>
+      </div>
+    );
   }
 
-  // Strict role hierarchy enforcement
-  if (!allowedRoles.includes(activeRole)) {
-    if (activeRole === 'student') {
-      return (
-        <div className="relative">
-          {deniedMsg && (
-            <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 bg-rose-600 text-white px-4 py-2.5 rounded-xl shadow-2xl font-bold text-xs flex items-center gap-2 border border-rose-400 animate-bounce">
-              <AlertCircle className="w-4 h-4 text-white" />
-              <span>{deniedMsg}</span>
-            </div>
-          )}
-          <Navigate to="/student" replace />
-        </div>
-      );
-    }
-
-    if (activeRole === 'coordinator') {
-      return (
-        <div className="relative">
-          {deniedMsg && (
-            <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 bg-rose-600 text-white px-4 py-2.5 rounded-xl shadow-2xl font-bold text-xs flex items-center gap-2 border border-rose-400 animate-bounce">
-              <AlertCircle className="w-4 h-4 text-white" />
-              <span>{deniedMsg}</span>
-            </div>
-          )}
-          <Navigate to="/coordinator" replace />
-        </div>
-      );
-    }
-
-    return <Navigate to="/student" replace />;
+  // If no valid session or role mismatch, immediately redirect to /login
+  if (!isAuthorized) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   return <>{children}</>;

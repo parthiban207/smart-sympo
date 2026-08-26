@@ -23,7 +23,7 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     await signOutFromSupabase();
-    navigate('/login');
+    navigate('/login', { replace: true });
   };
 
   const handleGuardedNavigation = useCallback((targetPath, requiredRole) => {
