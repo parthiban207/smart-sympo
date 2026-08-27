@@ -848,7 +848,11 @@ export const AppProvider = ({ children }) => {
 
         // Mark first_login = false in Supabase & Local state
         if (!isMockMode && isValidUUID(synced.id)) {
-          supabase.from('profiles').update({ first_login: false }).eq('id', synced.id).catch(() => {});
+          try {
+            await supabase.from('profiles').update({ first_login: false }).eq('id', synced.id);
+          } catch (updateErr) {
+            console.warn('[First Login Flag Update Warning]:', updateErr);
+          }
         }
         synced.first_login = false;
         syncUserStorage(synced);
