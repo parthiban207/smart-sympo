@@ -250,74 +250,65 @@ export const AppProvider = ({ children }) => {
   }, [currentUser]);
 
   // Load user profile from Supabase profiles table or local accounts with caching & debounce
-  const fetchUserProfile = useCallback(async (userId, userEmail, force = false) => {
+  const fetchUserProfile = useCallback(async (userId, userEmail, userObj = null, force = false) => {
     if (!userId) return;
-    const cleanEmail = (userEmail || '').trim().toLowerCase();
+    const cleanEmail = (userEmail || userObj?.email || '').trim().toLowerCase();
 
-    // Debounce: Prevent rapid concurrent or repeated calls for the same user
-    const now = Date.now();
-    if (profileFetchingRef.current.has(userId)) return;
-    if (!force && lastProfileFetchTimeRef.current[userId] && (now - lastProfileFetchTimeRef.current[userId] < 10000)) {
+    // 1. Immediately hydrate from session user object / local account
+    const accounts = getStoredAccounts();
+    const localMatch = accounts.find(
+      (a) => a.id === userId || (cleanEmail && a.email?.toLowerCase() === cleanEmail)
+    );
+
+    const meta = userObj?.user_metadata || {};
+    const effectiveRole = meta.role || localMatch?.role || 'student';
+    const effectiveName = meta.full_name || meta.name || localMatch?.name || (cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User');
+    const effectiveCollege = meta.college || meta.college_name || localMatch?.college || 'Symposium Campus';
+
+    const immediateProfile = {
+      id: userId,
+      email: cleanEmail,
+      name: effectiveName,
+      full_name: effectiveName,
+      username: meta.username || localMatch?.username || (cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'user'),
+      role: effectiveRole,
+      college_id: meta.college_id || localMatch?.college_id || `${effectiveRole.toUpperCase().slice(0, 3)}-${userId.slice(0, 4).toUpperCase()}`,
+      college: effectiveCollege,
+      college_name: effectiveCollege,
+      department: meta.department || localMatch?.department || effectiveCollege,
+      phone: meta.phone || meta.phone_number || localMatch?.phone || '',
+      phone_number: meta.phone_number || meta.phone || localMatch?.phone_number || '',
+      pass_code: meta.pass_code || localMatch?.pass_code || '2005',
+      first_login: false,
+      ...(localMatch || {}),
+    };
+
+    syncUserStorage(immediateProfile);
+
+    // If profile endpoint is failing or user was already fetched, no need to make network call
+    if (profilesEndpointFailedRef.current || !isValidUUID(userId)) {
       return;
     }
 
-    // If profile already matches currentUser, skip re-fetching unless forced
-    if (!force && currentUserRef.current?.id === userId && currentUserRef.current?.role) {
+    const now = Date.now();
+    if (profileFetchingRef.current.has(userId)) return;
+    if (!force && lastProfileFetchTimeRef.current[userId] && (now - lastProfileFetchTimeRef.current[userId] < 15000)) {
       return;
     }
 
     profileFetchingRef.current.add(userId);
     lastProfileFetchTimeRef.current[userId] = now;
 
-    const accounts = getStoredAccounts();
-    const localMatch = accounts.find(
-      (a) => a.id === userId || (cleanEmail && a.email?.toLowerCase() === cleanEmail)
-    );
-
-    if (!isValidUUID(userId) || profilesEndpointFailedRef.current) {
-      const fallback = localMatch || {
-        id: userId,
-        email: cleanEmail,
-        name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
-        full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
-        role: 'student',
-        college_id: `STU-${userId.slice(0, 6).toUpperCase()}`,
-      };
-      syncUserStorage(fallback);
-      profileFetchingRef.current.delete(userId);
-      return;
-    }
-
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       if (data && !error) {
-        const merged = { ...(localMatch || {}), ...data };
+        const merged = { ...immediateProfile, ...data };
         syncUserStorage(merged);
-      } else {
-        if (error && (error.code === '500' || error.message?.includes('500') || error.status === 500)) {
-          profilesEndpointFailedRef.current = true;
-        }
-        const fallback = localMatch || {
-          id: userId,
-          email: cleanEmail,
-          name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
-          full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
-          role: 'student',
-          college_id: `STU-${userId.slice(0, 6).toUpperCase()}`,
-        };
-        syncUserStorage(fallback);
+      } else if (error && (error.code === '500' || error.status === 500 || error.message?.includes('500'))) {
+        profilesEndpointFailedRef.current = true;
       }
-    } catch (err) {
+    } catch (_) {
       profilesEndpointFailedRef.current = true;
-      const fallback = localMatch || {
-        id: userId,
-        email: cleanEmail,
-        name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
-        full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
-        role: 'student',
-        college_id: `STU-${userId.slice(0, 6).toUpperCase()}`,
-      };
-      syncUserStorage(fallback);
     } finally {
       profileFetchingRef.current.delete(userId);
     }
@@ -359,7 +350,7 @@ export const AppProvider = ({ children }) => {
           setSession(session);
           if (session?.user) {
             setIsAuthenticated(true);
-            fetchUserProfile(session.user.id, session.user.email);
+            fetchUserProfile(session.user.id, session.user.email, session.user);
           }
         })
         .catch((e) => console.warn('Supabase getSession catch:', e));
@@ -371,7 +362,7 @@ export const AppProvider = ({ children }) => {
         setSession(session);
         if (session?.user) {
           setIsAuthenticated(true);
-          fetchUserProfile(session.user.id, session.user.email);
+          fetchUserProfile(session.user.id, session.user.email, session.user);
         }
       });
 
@@ -385,28 +376,34 @@ export const AppProvider = ({ children }) => {
           const { data: attData } = await supabase.from('attendance_logs').select('*');
           if (attData && attData.length > 0) setAttendanceLogs(attData);
 
-          const { data: profData } = await supabase.from('profiles').select('*');
-          if (profData && profData.length > 0) {
-            setProfilesList((prev) => {
-              const combined = [...profData];
-              for (const localAcc of prev) {
-                if (
-                  !combined.some(
-                    (p) =>
-                      p.id === localAcc.id ||
-                      (p.email && localAcc.email && p.email.toLowerCase() === localAcc.email.toLowerCase())
-                  )
-                ) {
-                  combined.push(localAcc);
-                }
+          if (!profilesEndpointFailedRef.current) {
+            try {
+              const { data: profData, error: profErr } = await supabase.from('profiles').select('*');
+              if (profErr) {
+                profilesEndpointFailedRef.current = true;
+              } else if (profData && profData.length > 0) {
+                setProfilesList((prev) => {
+                  const combined = [...profData];
+                  for (const localAcc of prev) {
+                    if (
+                      !combined.some(
+                        (p) =>
+                          p.id === localAcc.id ||
+                          (p.email && localAcc.email && p.email.toLowerCase() === localAcc.email.toLowerCase())
+                      )
+                    ) {
+                      combined.push(localAcc);
+                    }
+                  }
+                  try {
+                    localStorage.setItem('smart_sympo_accounts', JSON.stringify(combined));
+                  } catch (e) {}
+                  return combined;
+                });
               }
-              try {
-                localStorage.setItem('smart_sympo_accounts', JSON.stringify(combined));
-              } catch (e) {
-                console.warn('LocalStorage save error:', e);
-              }
-              return combined;
-            });
+            } catch (_) {
+              profilesEndpointFailedRef.current = true;
+            }
           }
         } catch (e) {
           console.warn('Supabase fetchInitialData catch:', e);

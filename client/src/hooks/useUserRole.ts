@@ -22,37 +22,50 @@ export function useUserRole() {
   const [loading, setLoading] = useState<boolean>(true);
   const [user, setUser] = useState<any>(null);
 
-  const fetchRoleAndProfile = useCallback(async (userId: string, userEmail?: string) => {
+  const fetchRoleAndProfile = useCallback(async (userId: string, userEmail?: string, userObj?: any) => {
     setLoading(true);
     try {
+      const meta = userObj?.user_metadata || {};
+      const fallbackRole = (meta.role as UserRole) || (typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_active_role') as UserRole : null) || 'student';
+      const fallbackName = meta.full_name || meta.name || userEmail?.split('@')[0] || 'User';
+
+      setRole(fallbackRole);
+      setProfile({
+        id: userId,
+        full_name: fallbackName,
+        name: fallbackName,
+        email: userEmail,
+        role: fallbackRole,
+        college_id: meta.college_id,
+      });
+
       if (!isValidUUID(userId)) {
         setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
 
-      if (data && !error) {
-        const fetchedRole = (data.role as UserRole) || 'student';
-        setRole(fetchedRole);
-        setProfile({
-          id: data.id,
-          full_name: data.full_name || data.name || userEmail?.split('@')[0],
-          name: data.name || data.full_name,
-          email: data.email || userEmail,
-          role: fetchedRole,
-          college_id: data.college_id,
-        });
-      } else {
-        setRole('student');
-      }
+        if (data && !error) {
+          const fetchedRole = (data.role as UserRole) || fallbackRole;
+          setRole(fetchedRole);
+          setProfile({
+            id: data.id,
+            full_name: data.full_name || data.name || fallbackName,
+            name: data.name || data.full_name || fallbackName,
+            email: data.email || userEmail,
+            role: fetchedRole,
+            college_id: data.college_id,
+          });
+        }
+      } catch (_) {}
     } catch (err) {
-      console.warn('Error in useUserRole:', err);
-      setRole('student');
+      console.warn('useUserRole fallback:', err);
     } finally {
       setLoading(false);
     }
@@ -63,7 +76,7 @@ export function useUserRole() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        fetchRoleAndProfile(session.user.id, session.user.email);
+        fetchRoleAndProfile(session.user.id, session.user.email, session.user);
       } else {
         setUser(null);
         setRole(null);
@@ -81,7 +94,7 @@ export function useUserRole() {
         if (session.user.id !== currentUserId) {
           currentUserId = session.user.id;
           setUser(session.user);
-          fetchRoleAndProfile(session.user.id, session.user.email);
+          fetchRoleAndProfile(session.user.id, session.user.email, session.user);
         }
       } else {
         currentUserId = null;
