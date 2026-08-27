@@ -15,6 +15,10 @@ export async function sendWelcomeEmailApi({ email, name, role }) {
     return { success: false, error: 'Recipient email required' };
   }
 
+  if (!API_BASE_URL) {
+    return { success: true, simulated: true, note: 'Backend email URL not configured' };
+  }
+
   const payload = {
     email: email.trim(),
     name: name || email.split('@')[0] || 'Student',
@@ -67,6 +71,10 @@ export async function sendEventConfirmationApi({
     return { success: false, error: 'Recipient email required' };
   }
 
+  if (!API_BASE_URL) {
+    return { success: true, simulated: true, note: 'Backend email URL not configured' };
+  }
+
   const payload = {
     email: email.trim(),
     name: name || email.split('@')[0] || 'Participant',
@@ -110,6 +118,10 @@ export async function sendLoginAlertApi({ email, name, role, timestamp }) {
   if (!email) {
     console.warn('[BackendEmailService] sendLoginAlertApi called without recipient email.');
     return { success: false, error: 'Recipient email required' };
+  }
+
+  if (!API_BASE_URL) {
+    return { success: true, simulated: true, note: 'Backend email URL not configured' };
   }
 
   const payload = {
