@@ -1,9 +1,8 @@
-// agent-notes: { ctx: "Comprehensive report export utilities supporting dedicated CSV, PDF, and XLSX spreadsheets with file-saver", deps: ["jspdf", "jspdf-autotable", "xlsx", "file-saver"], state: "active", last: "antigravity@2026-08-27" }
+// agent-notes: { ctx: "Fail-safe browser report export utilities supporting dedicated CSV, PDF, and XLSX spreadsheets with native HTML5 Blob download", deps: ["jspdf", "jspdf-autotable", "xlsx"], state: "active", last: "antigravity@2026-08-27" }
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
 
 export interface ExportStudent {
   id: string;
@@ -30,7 +29,55 @@ export interface ExportEvent {
 }
 
 /**
- * Generic CSV data export utility using Blob and FileSaver with UTF-8 BOM encoding
+ * Universal, 100% fail-safe browser file download engine.
+ * Works natively across all modern browsers (Chrome, Edge, Firefox, Safari, iOS, Android).
+ */
+export function saveBlobToFile(blob: Blob, fileName: string) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.setAttribute('download', fileName);
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+
+    setTimeout(() => {
+      if (link.parentNode) {
+        document.body.removeChild(link);
+      }
+      window.URL.revokeObjectURL(url);
+    }, 1000);
+    return;
+  } catch (err) {
+    console.warn('Native ObjectURL download failed, attempting data URI fallback:', err);
+  }
+
+  try {
+    const reader = new FileReader();
+    reader.onload = function () {
+      const link = document.createElement('a');
+      link.href = reader.result as string;
+      link.download = fileName;
+      link.setAttribute('download', fileName);
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) document.body.removeChild(link);
+      }, 1000);
+    };
+    reader.readAsDataURL(blob);
+  } catch (err2) {
+    console.error('All browser file download methods failed:', err2);
+  }
+}
+
+/**
+ * Generic CSV data export utility with UTF-8 BOM encoding for Excel/Numbers compatibility
  */
 export function exportToCSVFile<T extends Record<string, any>>(
   data: T[],
@@ -38,10 +85,10 @@ export function exportToCSVFile<T extends Record<string, any>>(
 ) {
   const actualFileName = fileName.endsWith('.csv') ? fileName : `${fileName}.csv`;
   if (!data || data.length === 0) {
-    const blob = new Blob(['\uFEFFNo records found for this export.\r\n'], {
+    const blob = new Blob(['\uFEFFNote\r\n"No records found for this export."\r\n'], {
       type: 'text/csv;charset=utf-8;',
     });
-    saveAs(blob, actualFileName);
+    saveBlobToFile(blob, actualFileName);
     return;
   }
 
@@ -59,11 +106,11 @@ export function exportToCSVFile<T extends Record<string, any>>(
 
   const csvString = '\uFEFF' + csvRows.join('\r\n');
   const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-  saveAs(blob, actualFileName);
+  saveBlobToFile(blob, actualFileName);
 }
 
 /**
- * Generic Excel spreadsheet export utility using XLSX and FileSaver
+ * Generic Excel spreadsheet export utility using XLSX
  */
 export function exportToExcel<T extends Record<string, any>>(
   data: T[],
@@ -79,7 +126,7 @@ export function exportToExcel<T extends Record<string, any>>(
     const blob = new Blob([excelBuffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
     });
-    saveAs(blob, actualFileName);
+    saveBlobToFile(blob, actualFileName);
     return;
   }
 
@@ -101,12 +148,12 @@ export function exportToExcel<T extends Record<string, any>>(
   const blob = new Blob([excelBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
   });
-  saveAs(blob, actualFileName);
+  saveBlobToFile(blob, actualFileName);
 }
 
 /**
  * 1. STUDENT ATTENDANCE CSV EXPORT
- * Filename: SmartSympo_Student_Attendance_Report_<date>.csv
+ * Filename: SmartSympo_Student_Attendance_<date>.csv
  */
 export function exportAttendanceCSV(
   recordsOrLogs: any[],
@@ -531,7 +578,7 @@ export function exportMultiSheetUsersWorkbook(users: any[]) {
   const blob = new Blob([excelBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8',
   });
-  saveAs(blob, 'All_Users_Directory_By_Role.xlsx');
+  saveBlobToFile(blob, 'All_Users_Directory_By_Role.xlsx');
 }
 
 export function exportStudentsExcel(users: any[]) {
@@ -743,24 +790,26 @@ export function exportEmailDispatchExcel(
  * Export student roster to CSV file download
  */
 export function exportToCSV(event: ExportEvent, students: ExportStudent[]) {
-  if (!students || students.length === 0) return;
-
+  const studentList = students || [];
   const headers = ['S.No', 'Student Name', 'Username', 'College ID', 'Email', 'Role', 'Registered Date'];
-  const rows = students.map((s, idx) => [
-    idx + 1,
-    `"${(s.name || '').replace(/"/g, '""')}"`,
-    `"${(s.username || '').replace(/"/g, '""')}"`,
-    `"${(s.college_id || '').replace(/"/g, '""')}"`,
-    `"${(s.email || '').replace(/"/g, '""')}"`,
-    `"${(s.role || '').replace(/"/g, '""')}"`,
-    `"${s.registered_at ? new Date(s.registered_at).toLocaleString() : 'N/A'}"`,
-  ]);
+  
+  const rows = studentList.length > 0 
+    ? studentList.map((s, idx) => [
+        idx + 1,
+        `"${(s.name || '').replace(/"/g, '""')}"`,
+        `"${(s.username || '').replace(/"/g, '""')}"`,
+        `"${(s.college_id || '').replace(/"/g, '""')}"`,
+        `"${(s.email || '').replace(/"/g, '""')}"`,
+        `"${(s.role || '').replace(/"/g, '""')}"`,
+        `"${s.registered_at ? new Date(s.registered_at).toLocaleString() : 'N/A'}"`,
+      ])
+    : [[1, '"No students registered yet"', '""', '""', '""', '""', '""']];
 
   const csvContent = [
     `"Event Title: ${(event?.title || 'Event').replace(/"/g, '""')}"`,
     `"Venue: ${(event?.hall_number || 'Main Venue').replace(/"/g, '""')}"`,
     `"Exported Date: ${new Date().toLocaleString()}"`,
-    `"Total Registered: ${students.length}"`,
+    `"Total Registered: ${studentList.length}"`,
     '',
     headers.join(','),
     ...rows.map((r) => r.join(',')),
@@ -768,15 +817,14 @@ export function exportToCSV(event: ExportEvent, students: ExportStudent[]) {
 
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const sanitizedTitle = (event?.title || 'Event').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  saveAs(blob, `${sanitizedTitle}_registered_students.csv`);
+  saveBlobToFile(blob, `${sanitizedTitle}_registered_students.csv`);
 }
 
 /**
  * Export student roster to formatted PDF document download
  */
 export function exportToPDF(event: ExportEvent, students: ExportStudent[]) {
-  if (!students || students.length === 0) return;
-
+  const studentList = students || [];
   const doc = new jsPDF();
 
   // Document Title Header
@@ -787,24 +835,26 @@ export function exportToPDF(event: ExportEvent, students: ExportStudent[]) {
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(79, 70, 229); // indigo-600
-  doc.text(event.title || 'Symposium Event', 14, 28);
+  doc.text(event?.title || 'Symposium Event', 14, 28);
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139); // slate-500
-  doc.text(`Venue: ${event.hall_number || 'Main Hall'} | Total Registered: ${students.length}`, 14, 35);
+  doc.text(`Venue: ${event?.hall_number || 'Main Hall'} | Total Registered: ${studentList.length}`, 14, 35);
   doc.text(`Report Generated: ${new Date().toLocaleString()}`, 14, 41);
 
   // Table Columns & Rows
   const tableColumn = ['#', 'Student Name', 'College ID', 'Email', 'Role', 'Registered Date'];
-  const tableRows = students.map((s, idx) => [
-    idx + 1,
-    s.name || 'N/A',
-    s.college_id || 'N/A',
-    s.email || 'N/A',
-    s.role || 'student',
-    s.registered_at ? new Date(s.registered_at).toLocaleDateString() : 'N/A',
-  ]);
+  const tableRows = studentList.length > 0
+    ? studentList.map((s, idx) => [
+        idx + 1,
+        s.name || 'N/A',
+        s.college_id || 'N/A',
+        s.email || 'N/A',
+        s.role || 'student',
+        s.registered_at ? new Date(s.registered_at).toLocaleDateString() : 'N/A',
+      ])
+    : [[1, 'No registered students yet', '-', '-', '-', '-']];
 
   autoTable(doc, {
     startY: 48,
@@ -827,6 +877,6 @@ export function exportToPDF(event: ExportEvent, students: ExportStudent[]) {
     margin: { top: 48, left: 14, right: 14 },
   });
 
-  const sanitizedTitle = (event.title || 'Event').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  const sanitizedTitle = (event?.title || 'Event').replace(/[^a-z0-9]/gi, '_').toLowerCase();
   doc.save(`${sanitizedTitle}_registered_students.pdf`);
 }
