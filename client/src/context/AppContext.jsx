@@ -371,10 +371,10 @@ export const AppProvider = ({ children }) => {
           await fetchEvents();
 
           const { data: regData } = await supabase.from('registrations').select('*');
-          if (regData && regData.length > 0) setRegistrations(regData);
+          if (regData) setRegistrations(regData);
 
           const { data: attData } = await supabase.from('attendance_logs').select('*');
-          if (attData && attData.length > 0) setAttendanceLogs(attData);
+          if (attData) setAttendanceLogs(attData);
 
           if (!profilesEndpointFailedRef.current) {
             try {
@@ -431,9 +431,15 @@ export const AppProvider = ({ children }) => {
               );
             } else if (payload.eventType === 'DELETE') {
               const oldId = payload.old?.id;
-              if (oldId) {
-                setRegistrations((prev) => prev.filter((r) => r.id !== oldId));
-              }
+              const oldStudentId = payload.old?.student_id;
+              const oldEventId = payload.old?.event_id;
+              setRegistrations((prev) =>
+                prev.filter((r) => {
+                  if (oldId && r.id === oldId) return false;
+                  if (oldStudentId && oldEventId && r.student_id === oldStudentId && r.event_id === oldEventId) return false;
+                  return true;
+                })
+              );
             }
           }
         )
@@ -1931,15 +1937,26 @@ export const AppProvider = ({ children }) => {
     return { success: true, message: `Security Passcode updated to "${newPassCode}"!` };
   };
 
-  // Unregister / Cancel registration for an event
-  const unregisterForEvent = async (eventId) => {
+  // Unregister / Cancel registration for an event (Student self-unregister or Admin removal)
+  const unregisterForEvent = async (eventId, studentId = null) => {
     if (!eventId) return { success: false, message: 'Invalid Event ID.' };
-    if (!currentUser) return { success: false, message: 'Must be logged in to unregister.' };
+    const targetUserId = studentId || currentUser?.id;
+    if (!targetUserId) return { success: false, message: 'Must be logged in to unregister.' };
 
     const targetEvent = events.find((e) => e.id === eventId);
 
     setRegistrations((prev) => {
-      const updated = prev.filter((r) => !(r.student_id === currentUser.id && r.event_id === eventId));
+      const updated = prev.filter((r) => {
+        const matchesEvent = r.event_id === eventId;
+        const matchesStudent =
+          r.student_id === targetUserId ||
+          r.id === targetUserId ||
+          (currentUser && targetUserId === currentUser.id && (
+            (r.student_email && currentUser.email && r.student_email.toLowerCase() === currentUser.email.toLowerCase()) ||
+            (r.student_username && currentUser.username && r.student_username.toLowerCase() === currentUser.username.toLowerCase())
+          ));
+        return !(matchesEvent && matchesStudent);
+      });
       try {
         localStorage.setItem('smart_sympo_registrations', JSON.stringify(updated));
       } catch (e) {
@@ -1948,15 +1965,18 @@ export const AppProvider = ({ children }) => {
       return updated;
     });
 
-    if (!isMockMode && isValidUUID(eventId) && isValidUUID(currentUser?.id)) {
+    if (!isMockMode && isValidUUID(eventId) && isValidUUID(targetUserId)) {
       try {
-        await supabase
+        const { error: delErr } = await supabase
           .from('registrations')
           .delete()
-          .eq('student_id', currentUser.id)
+          .eq('student_id', targetUserId)
           .eq('event_id', eventId);
+        if (delErr) {
+          console.warn('Supabase delete registration error:', delErr);
+        }
       } catch (err) {
-        console.warn('Supabase delete registration error:', err);
+        console.warn('Supabase delete registration exception:', err);
       }
     }
 

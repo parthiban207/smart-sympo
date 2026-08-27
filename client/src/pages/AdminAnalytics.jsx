@@ -13,6 +13,8 @@ import {
   exportEventRegistrationsExcel,
   exportAttendanceRecordsExcel,
   exportEmailDispatchExcel,
+  exportToCSVFile,
+  exportToExcel,
 } from '../utils/exportReports';
 import QRScannerModal from '../components/QRScannerModal';
 import ViewRegisteredStudentsModal from '../components/ViewRegisteredStudentsModal';
@@ -22,13 +24,13 @@ import {
   Globe, Crosshair, Ruler, FileText, ScanLine, Clock, Hash, CheckCircle2, AlertCircle,
   Pencil, Trash2, KeyRound, RefreshCw, Lock, FileSpreadsheet, Download, FileDown,
   CalendarCheck, ClipboardCheck, Loader2, StopCircle, Mail, Send, CheckCircle, AlertTriangle,
-  Search, Building, Filter
+  Search, Building, Filter, UserMinus
 } from 'lucide-react';
 
 export default function AdminAnalytics() {
   const {
     events, fetchEvents, registrations, setRegistrations, attendanceLogs, setAttendanceLogs,
-    addEvent, updateEvent, deleteEvent, guestCheckins, currentUser, profilesList, setProfilesList,
+    addEvent, updateEvent, deleteEvent, unregisterForEvent, guestCheckins, currentUser, profilesList, setProfilesList,
     updateUserRole, createCoordinatorAccount, updateUserPassCode, deleteUserAccount, clearAllAccounts, liveAlerts,
     clearGlobalEmergencyBroadcast
   } = useApp();
@@ -613,13 +615,13 @@ export default function AdminAnalytics() {
             supabase.from('profiles').select('*'),
           ]);
 
-          if (regRes.data && regRes.data.length > 0) {
+          if (regRes.data) {
             regsToExport = regRes.data;
           }
-          if (evtRes.data && evtRes.data.length > 0) {
+          if (evtRes.data) {
             eventsList = evtRes.data;
           }
-          if (profRes.data && profRes.data.length > 0) {
+          if (profRes.data) {
             profsList = profRes.data;
           }
         } catch (e) {
@@ -681,13 +683,13 @@ export default function AdminAnalytics() {
             supabase.from('profiles').select('*'),
           ]);
 
-          if (regRes.data && regRes.data.length > 0) {
+          if (regRes.data) {
             regsToExport = regRes.data;
           }
-          if (evtRes.data && evtRes.data.length > 0) {
+          if (evtRes.data) {
             eventsList = evtRes.data;
           }
-          if (profRes.data && profRes.data.length > 0) {
+          if (profRes.data) {
             profsList = profRes.data;
           }
         } catch (e) {
@@ -707,6 +709,21 @@ export default function AdminAnalytics() {
       setTimeout(() => setExportFeedback(null), 4000);
     } finally {
       setExportingReport(null);
+    }
+  };
+
+  const handleAdminUnregister = async (eventId, studentId, studentName, eventTitle) => {
+    if (!window.confirm(`Are you sure you want to remove the registration of "${studentName || 'this student'}" from "${eventTitle || 'the event'}"?`)) {
+      return;
+    }
+    const res = await unregisterForEvent(eventId, studentId);
+    if (res?.success) {
+      setExportFeedback({ type: 'success', message: res.message || 'Registration removed successfully.' });
+      setTimeout(() => setExportFeedback(null), 3000);
+      fetchAttendanceList();
+    } else {
+      setExportFeedback({ type: 'error', message: res?.message || 'Failed to remove registration.' });
+      setTimeout(() => setExportFeedback(null), 3000);
     }
   };
 
@@ -813,7 +830,7 @@ export default function AdminAnalytics() {
       'Status': r.is_attended ? 'Verified' : 'Pending',
       'Check-in Time': r.checked_in_at ? new Date(r.checked_in_at).toLocaleString() : 'Not Checked In',
     }));
-    exportToExcel(dataToExport, 'Attendance', `SmartSympo_Attendance_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    exportToCSVFile(dataToExport, `SmartSympo_Attendance_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   return (
@@ -1030,12 +1047,13 @@ export default function AdminAnalytics() {
                   <th className="py-3 px-4">College</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Check-in Time</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredAttendanceRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-slate-400">
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
                       {attendanceSearchQuery
                         ? 'No attendance records match your search query.'
                         : 'No student registrations recorded yet.'}
@@ -1104,6 +1122,18 @@ export default function AdminAnalytics() {
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
+                      </td>
+
+                      {/* Column 6: Actions */}
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          onClick={() => handleAdminUnregister(record.event_id, record.student_id, record.student_name, record.event_title)}
+                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200/70 transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px] font-medium"
+                          title="Remove this registration"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove</span>
+                        </button>
                       </td>
                     </tr>
                   ))

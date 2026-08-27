@@ -391,6 +391,39 @@ export function exportEmailDispatchExcel(
 }
 
 /**
+ * Generic CSV data export utility using Blob and FileSaver with UTF-8 BOM encoding
+ */
+export function exportToCSVFile<T extends Record<string, any>>(
+  data: T[],
+  fileName: string
+) {
+  const actualFileName = fileName.endsWith('.csv') ? fileName : `${fileName}.csv`;
+  if (!data || data.length === 0) {
+    const blob = new Blob(['\uFEFFNo records found for this export.\r\n'], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    saveAs(blob, actualFileName);
+    return;
+  }
+
+  const headers = Object.keys(data[0] || {});
+  const escapeCSV = (val: any) => {
+    if (val === null || val === undefined) return '""';
+    const str = String(val).replace(/"/g, '""');
+    return `"${str}"`;
+  };
+
+  const csvRows = [
+    headers.map(escapeCSV).join(','),
+    ...data.map((row) => headers.map((h) => escapeCSV(row[h])).join(',')),
+  ];
+
+  const csvString = '\uFEFF' + csvRows.join('\r\n');
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+  saveAs(blob, actualFileName);
+}
+
+/**
  * Export student roster to CSV file download
  */
 export function exportToCSV(event: ExportEvent, students: ExportStudent[]) {
@@ -408,25 +441,18 @@ export function exportToCSV(event: ExportEvent, students: ExportStudent[]) {
   ]);
 
   const csvContent = [
-    `"Event Title: ${(event.title || '').replace(/"/g, '""')}"`,
-    `"Venue: ${(event.hall_number || 'Main Venue').replace(/"/g, '""')}"`,
+    `"Event Title: ${(event?.title || 'Event').replace(/"/g, '""')}"`,
+    `"Venue: ${(event?.hall_number || 'Main Venue').replace(/"/g, '""')}"`,
     `"Exported Date: ${new Date().toLocaleString()}"`,
     `"Total Registered: ${students.length}"`,
     '',
     headers.join(','),
     ...rows.map((r) => r.join(',')),
-  ].join('\n');
+  ].join('\r\n');
 
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  const sanitizedTitle = (event.title || 'Event').replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  link.setAttribute('href', url);
-  link.setAttribute('download', `${sanitizedTitle}_registered_students.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const sanitizedTitle = (event?.title || 'Event').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  saveAs(blob, `${sanitizedTitle}_registered_students.csv`);
 }
 
 /**

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { X, Users, Search, Mail, Hash, UserCheck, Calendar, FileSpreadsheet, FileText, Download } from 'lucide-react';
+import { X, Users, Search, Mail, Hash, UserCheck, Calendar, FileSpreadsheet, FileText, Download, Trash2 } from 'lucide-react';
 import { exportToCSV, exportToPDF } from '../utils/exportReports';
+import { useApp } from '../context/AppContext';
 
 export default function ViewRegisteredStudentsModal({
   isOpen,
@@ -9,7 +10,9 @@ export default function ViewRegisteredStudentsModal({
   registrations = [],
   profilesList = [],
 }) {
+  const { unregisterForEvent } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
+  const [removingId, setRemovingId] = useState(null);
 
   if (!isOpen || !event) return null;
 
@@ -41,6 +44,18 @@ export default function ViewRegisteredStudentsModal({
       student.username.toLowerCase().includes(query)
     );
   });
+
+  const handleRemoveRegistration = async (student) => {
+    if (!window.confirm(`Are you sure you want to remove ${student.name} from "${event.title}"?`)) {
+      return;
+    }
+    setRemovingId(student.student_id);
+    try {
+      await unregisterForEvent(event.id, student.student_id);
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   const isExportDisabled = registeredStudents.length === 0;
 
@@ -145,17 +160,28 @@ export default function ViewRegisteredStudentsModal({
                   </div>
                 </div>
 
-                <div className="text-right shrink-0">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                    <UserCheck className="w-3 h-3 text-emerald-600" />
-                    Confirmed
-                  </span>
-                  {student.registered_at && (
-                    <div className="text-[9px] text-slate-400 font-mono mt-1 flex items-center justify-end gap-1">
-                      <Calendar className="w-2.5 h-2.5" />
-                      {new Date(student.registered_at).toLocaleDateString()}
-                    </div>
-                  )}
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="text-right">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                      <UserCheck className="w-3 h-3 text-emerald-600" />
+                      Confirmed
+                    </span>
+                    {student.registered_at && (
+                      <div className="text-[9px] text-slate-400 font-mono mt-1 flex items-center justify-end gap-1">
+                        <Calendar className="w-2.5 h-2.5" />
+                        {new Date(student.registered_at).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleRemoveRegistration(student)}
+                    disabled={removingId === student.student_id}
+                    className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/70 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Remove student from event"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             ))
