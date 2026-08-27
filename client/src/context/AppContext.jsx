@@ -809,7 +809,16 @@ export const AppProvider = ({ children }) => {
         console.warn('Profile fetch warning:', e);
       }
 
-      const dbRole = profile?.role || authUser.user_metadata?.role || targetRole || 'student';
+      // If profile exists, check if auth user metadata had staff role (admin/coordinator) and sync if needed
+      const authMetaRole = authUser.user_metadata?.role;
+      let dbRole = profile?.role || authMetaRole || targetRole || 'student';
+      if (profile && profile.role === 'student' && (authMetaRole === 'admin' || authMetaRole === 'coordinator')) {
+        dbRole = authMetaRole;
+        profile.role = authMetaRole;
+        try {
+          await supabase.from('profiles').update({ role: authMetaRole }).eq('id', authUser.id);
+        } catch (_) {}
+      }
 
       if (!profile) {
         profile = {
