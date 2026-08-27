@@ -188,58 +188,31 @@ export default function CoordinatorConsole() {
     setIsPassModalOpen(true);
   };
 
+  const totalRegisteredCount = eventRegs.length;
+  const totalScannedCount = checkedInStudentIds.length;
+  const pendingCount = missingRegs.length;
+  const successRate = totalRegisteredCount > 0 ? Math.round((totalScannedCount / totalRegisteredCount) * 100) : 0;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-      {/* Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+      {/* 1. Sleek Venue Control Header */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">
-              <UserCheck className="w-5 h-5" />
-            </span>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Coordinator Touch Console
-            </h1>
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            1-Touch Hall Control, Real-Time Delay Propagation & Embedded QR Door Scanner
+          <h1 className="text-lg font-bold text-slate-900 tracking-tight">
+            Coordinator Console
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Real-time venue attendance verification & scanner terminal
           </p>
         </div>
 
-        {/* Hall Selector & Create Event & Emergency Broadcast Button */}
-        <div className="w-full md:w-auto flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          {(liveAlerts || []).some((a) => a.isEmergency || a.severity === 'emergency' || a.type === 'emergency') && (
-            <button
-              onClick={async () => {
-                await clearGlobalEmergencyBroadcast();
-              }}
-              className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 border border-amber-500 animate-bounce"
-              title="Stop emergency broadcast & silence alarms system-wide"
-            >
-              <StopCircle className="w-4 h-4 text-rose-700" />
-              <span>🛑 Stop Emergency</span>
-            </button>
-          )}
-          <button
-            onClick={() => setShowEmergencyModal(true)}
-            className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0 border border-rose-500"
-          >
-            <Radio className="w-4 h-4 text-white" />
-            <span>Emergency Broadcast</span>
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
-          >
-            <PlusCircle className="w-4 h-4" />
-            Create Event
-          </button>
+        <div className="w-full sm:w-auto flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
           <div className="flex items-center gap-2 flex-1 sm:flex-none">
-            <MapPin className="w-4 h-4 text-slate-500 shrink-0" />
+            <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
             <select
               value={selectedHall}
               onChange={(e) => setSelectedHall(e.target.value)}
-              className="w-full md:w-56 bg-slate-50 border border-slate-200 text-slate-900 font-bold text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
+              className="w-full sm:w-56 bg-slate-50 border border-slate-200/90 text-slate-900 font-semibold text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
             >
               {halls.map((hall) => (
                 <option key={hall} value={hall}>
@@ -248,252 +221,212 @@ export default function CoordinatorConsole() {
               ))}
             </select>
           </div>
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Create Event</span>
+          </button>
         </div>
       </div>
 
-      {/* Main Console Layout */}
+      {/* 2. Top Stats: 3 Minimalist Pastel Stat Boxes */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Stat 1: Total Scanned */}
+        <div className="bg-emerald-50/70 border border-emerald-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
+          <div className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span>Total Scanned</span>
+          </div>
+          <div className="text-3xl font-extrabold text-emerald-950 font-mono tracking-tight">
+            {totalScannedCount}
+          </div>
+          <p className="text-[11px] text-emerald-700/80 font-medium">
+            Verified check-ins in {activeEvent?.title ? `"${activeEvent.title}"` : selectedHall}
+          </p>
+        </div>
+
+        {/* Stat 2: Pending */}
+        <div className="bg-amber-50/70 border border-amber-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
+          <div className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+            <Clock className="w-4 h-4 text-amber-600" />
+            <span>Pending Check-In</span>
+          </div>
+          <div className="text-3xl font-extrabold text-amber-950 font-mono tracking-tight">
+            {pendingCount}
+          </div>
+          <p className="text-[11px] text-amber-700/80 font-medium">
+            Registered students awaiting venue check-in
+          </p>
+        </div>
+
+        {/* Stat 3: Success Rate */}
+        <div className="bg-indigo-50/70 border border-indigo-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
+          <div className="text-xs font-semibold text-indigo-800 flex items-center gap-1.5">
+            <Activity className="w-4 h-4 text-indigo-600" />
+            <span>Success Rate</span>
+          </div>
+          <div className="text-3xl font-extrabold text-indigo-950 font-mono tracking-tight">
+            {successRate}%
+          </div>
+          <p className="text-[11px] text-indigo-700/80 font-medium">
+            {totalScannedCount} of {totalRegisteredCount} students present
+          </p>
+        </div>
+      </div>
+
+      {/* 3. Main Body Grid: Scanner Card & Live Recent Scans */}
       {!activeEvent ? (
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center text-slate-500 text-xs">
-          No active event mapped to {selectedHall}.
+        <div className="bg-white p-12 rounded-2xl border border-slate-200/80 shadow-xs text-center text-slate-500 text-xs">
+          No active symposium event is currently assigned to <strong className="text-slate-700">{selectedHall}</strong>.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left 2 Cols: Event Info & One-Touch Action Buttons */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Active Event Status Card */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-indigo-700 uppercase bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-200">
-                    {activeEvent.category} Track
-                  </span>
-                  <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200 font-mono">
-                    Registered: {eventRegs.length} / {activeEvent.max_capacity || activeEvent.max_seats || 100}
-                  </span>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Centered Distraction-Free Scanner Card (7 Cols) */}
+          <div className="lg:col-span-7 space-y-5">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-indigo-600" />
+                    Scan Student Pass
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Position student QR badge in front of lens
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-slate-500">Current Status:</span>
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                    {activeEvent.status}{' '}
-                    {activeEvent.delay_minutes > 0 && `(+${activeEvent.delay_minutes}m Delay)`}
-                  </span>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-mono">
+                  {selectedHall}
+                </span>
+              </div>
+
+              {/* Centered Clean Viewfinder Box */}
+              <div className="flex flex-col items-center justify-center p-8 bg-slate-50/80 rounded-2xl border border-dashed border-slate-200 text-center space-y-4">
+                <div className="w-24 h-24 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex items-center justify-center text-indigo-600 relative group">
+                  <QrCode className="w-12 h-12 stroke-[1.5]" />
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white"></span>
                 </div>
-              </div>
 
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">{activeEvent.title}</h2>
-                <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                  <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                  <span className="font-semibold text-slate-700">{activeEvent.hall_number}</span>
-                  <span>•</span>
-                  <span>Max Seats: {activeEvent.max_capacity || activeEvent.max_seats || 100}</span>
-                </p>
-              </div>
-
-              {/* Event Control & Roster Action Bar */}
-              <div className="pt-2 border-t border-slate-100 flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    setSelectedRosterEvent(activeEvent);
-                    setShowRosterModal(true);
-                  }}
-                  className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-indigo-200 shadow-2xs"
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  View Registered Roster ({eventRegs.length})
-                </button>
-                <button
-                  onClick={() => handleEditClick(activeEvent)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200"
-                >
-                  <Pencil className="w-3.5 h-3.5 text-slate-600" />
-                  Edit Event
-                </button>
-                <button
-                  onClick={() => handleDeleteClick(activeEvent)}
-                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer border border-rose-200"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                  Delete Event
-                </button>
-              </div>
-
-              {/* Attendance Progress bar */}
-              <div className="space-y-1.5 pt-2">
-                <div className="flex justify-between text-xs font-semibold text-slate-700">
-                  <span>Attendance Verified:</span>
-                  <span className="text-indigo-700">
-                    {checkedInStudentIds.length} / {eventRegs.length} Students Checked-In
-                  </span>
-                </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5 border border-slate-200 overflow-hidden">
-                  <div
-                    className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500"
-                    style={{
-                      width: `${eventRegs.length > 0 ? (checkedInStudentIds.length / eventRegs.length) * 100 : 0}%`,
-                    }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-
-            {/* One-Touch Control Panel */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                <Play className="w-4 h-4 text-indigo-600" />
-                One-Touch Real-Time Control Panel
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <button
-                  onClick={handleStartEvent}
-                  className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-xs flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer"
-                >
-                  <Play className="w-5 h-5 fill-current" />
-                  Start Event
-                </button>
-
-                <button
-                  onClick={handleDelayEvent}
-                  className="py-3 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-xs flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer"
-                >
-                  <Clock className="w-5 h-5" />
-                  Delay 10 Mins
-                </button>
-
-                <button
-                  onClick={handleEndEvent}
-                  className="py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-xs flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer"
-                >
-                  <CheckSquare className="w-5 h-5" />
-                  End Event
-                </button>
-              </div>
-
-              {/* Embedded Camera Trigger */}
-              <button
-                onClick={() => setIsScannerOpen(true)}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-              >
-                <Camera className="w-4 h-4" />
-                Launch Live Door Camera QR Scanner
-              </button>
-            </div>
-
-            {/* Live Attendance Realtime Stream Feed */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-indigo-600" />
-                  <h3 className="text-sm font-bold text-slate-900">Live Realtime Attendance Feed</h3>
-                </div>
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-                  <Radio className="w-3 h-3 text-emerald-600 animate-pulse" />
-                  <span>Realtime Active</span>
-                </div>
-              </div>
-
-              <div className="space-y-2 max-h-[240px] overflow-y-auto pr-1">
-                {liveHallLogs.length === 0 ? (
-                  <div className="text-center py-6 text-xs text-slate-500">
-                    Waiting for live QR check-ins... Scans will appear instantly without page refresh.
+                <div className="space-y-1">
+                  <div className="text-xs font-bold text-slate-900">
+                    Ready for Camera Verification
                   </div>
-                ) : (
-                  liveHallLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs transition-colors hover:bg-slate-100/80"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                        <div>
-                          <span className="font-semibold text-slate-900 block">
-                            Student ID: {log.student_id?.slice(0, 14)}
-                          </span>
-                          <span className="text-[10px] text-slate-500">
-                            Hall: {log.hall_number || selectedHall}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
-                          {log.status || 'Checked-In'}
-                        </span>
-                        <span className="text-[10px] text-slate-500 block mt-0.5 font-mono">
-                          {log.check_in_time ? new Date(log.check_in_time).toLocaleTimeString() : 'Just now'}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
+                  <p className="text-[11px] text-slate-500 max-w-xs">
+                    One-touch fast camera verification with instant audio and visual haptic response
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setIsScannerOpen(true)}
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>Launch QR Scanner</span>
+                </button>
+              </div>
+
+              {/* Event Quick Actions Bar */}
+              <div className="pt-1 flex items-center justify-between gap-2 flex-wrap text-xs">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedRosterEvent(activeEvent);
+                      setShowRosterModal(true);
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
+                  >
+                    View Roster ({totalRegisteredCount})
+                  </button>
+                  <button
+                    onClick={() => handleEditClick(activeEvent)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
+                  >
+                    Edit Event
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleStartEvent}
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-medium transition-colors cursor-pointer"
+                  >
+                    Start
+                  </button>
+                  <button
+                    onClick={handleDelayEvent}
+                    className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl font-medium transition-colors cursor-pointer"
+                  >
+                    +10m Delay
+                  </button>
+                  <button
+                    onClick={handleEndEvent}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
+                  >
+                    End
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Right Col: Missing Students Drawer */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-amber-600" />
-                <h3 className="text-sm font-bold text-slate-900">Missing Students Drawer</h3>
+          {/* Recent Scans Lightweight Feed (5 Cols) */}
+          <div className="lg:col-span-5 space-y-5">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  Recent Scans
+                </h3>
+                <span className="text-[11px] font-semibold text-slate-500 font-mono">
+                  {liveHallLogs.length} Scanned
+                </span>
               </div>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold">
-                {missingRegs.length} Unscanned
-              </span>
-            </div>
 
-            {nudgeStatus && (
-              <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-800 border border-indigo-200 text-[11px] font-semibold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
-                <span>{nudgeStatus}</span>
-              </div>
-            )}
-
-            <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
-              {missingRegs.length === 0 ? (
-                <div className="text-center py-8 text-xs text-emerald-700 font-semibold bg-emerald-50 rounded-xl border border-emerald-200 p-4">
-                  All registered students checked in for this venue!
-                </div>
-              ) : (
-                missingRegs.map((reg) => (
-                  <div
-                    key={reg.id}
-                    className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs gap-2"
-                  >
-                    <div>
-                      <div className="font-semibold text-slate-900">
-                        Student ID: {reg.student_id.slice(0, 12)}
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-mono">
-                        Registered:{' '}
-                        {new Date(reg.registered_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleRequestStudentPass(reg.student_id)}
-                        title="View Student Pass (Requires PIN)"
-                        className="px-2.5 py-1 bg-white hover:bg-slate-100 text-indigo-700 border border-slate-200 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
-                      >
-                        <QrCode className="w-3.5 h-3.5" />
-                        Pass
-                      </button>
-                      <button
-                        onClick={() => handleNudgeMissing(reg.student_id)}
-                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-                      >
-                        <Bell className="w-3 h-3 text-amber-600" />
-                        Nudge
-                      </button>
-                    </div>
+              {/* Clean Lightweight Scans List (No excessive nested tags) */}
+              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                {liveHallLogs.length === 0 ? (
+                  <div className="text-center py-10 text-xs text-slate-400">
+                    No scans recorded yet for this venue.
                   </div>
-                ))
-              )}
+                ) : (
+                  liveHallLogs.slice(0, 15).map((log) => {
+                    const studentProfile = (profilesList || []).find((p) => p.id === log.student_id);
+                    const studentName =
+                      log.guest_name ||
+                      studentProfile?.full_name ||
+                      studentProfile?.name ||
+                      (log.student_id ? `Student ${log.student_id.slice(0, 6)}` : 'Attendee');
+                    const timeString = log.check_in_time
+                      ? new Date(log.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : 'Just now';
+
+                    return (
+                      <div
+                        key={log.id}
+                        className="py-2.5 px-3 bg-slate-50/80 hover:bg-slate-100/80 rounded-xl border border-slate-100 flex items-center justify-between text-xs transition-colors"
+                      >
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="font-semibold text-slate-900 truncate">
+                            {studentName}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate">
+                            {activeEvent.title}
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-[11px] font-mono text-slate-500">
+                            {timeString}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         </div>

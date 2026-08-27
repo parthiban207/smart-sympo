@@ -1,19 +1,18 @@
+// agent-notes: { ctx: "Ultra-minimalist modern Navbar with sleek branding, clean navigation pills, profile avatar, and logout", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-27" }
+
 import { useState, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import UserSettingsModal from './UserSettingsModal';
-import NotificationCenter from './NotificationCenter';
-import { Calendar, UserCheck, ShieldCheck, Wifi, LogOut, Settings, QrCode, RefreshCw, Bell } from 'lucide-react';
+import { Wifi, LogOut } from 'lucide-react';
 
 export default function Navbar() {
-  const { currentUser, switchRole, signOutFromSupabase, unreadNotificationCount } = useApp();
+  const { currentUser, switchRole, signOutFromSupabase } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   const activeRole = currentUser?.role || 'student';
-  const isStudentRole = activeRole === 'student';
   const isCoordinatorRole = activeRole === 'coordinator';
   const isAdminRole = activeRole === 'admin';
 
@@ -29,7 +28,6 @@ export default function Navbar() {
   const handleGuardedNavigation = useCallback((targetPath, requiredRole) => {
     if (requiredRole && activeRole !== requiredRole) {
       if (activeRole === 'coordinator' && requiredRole === 'admin') {
-        // Coordinator cannot access admin page
         return;
       }
       switchRole(requiredRole);
@@ -37,174 +35,94 @@ export default function Navbar() {
     navigate(targetPath);
   }, [activeRole, switchRole, navigate]);
 
-  const handleRoleSwitchAttempt = useCallback((newRole) => {
-    switchRole(newRole);
-    const dest = newRole === 'admin' ? '/admin' : newRole === 'coordinator' ? '/coordinator' : '/student';
-    navigate(dest);
-  }, [switchRole, navigate]);
-
-  const getRoleBadgeStyle = (role) => {
-    if (role === 'admin') return 'bg-rose-50 text-rose-700 border-rose-200';
-    if (role === 'coordinator') return 'bg-amber-50 text-amber-700 border-amber-200';
-    return 'bg-indigo-50 text-indigo-700 border-indigo-200';
-  };
-
   return (
     <>
-      <header className="bg-white sticky top-0 z-40 border-b border-slate-200 px-4 py-2.5 shadow-xs">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          {/* Institutional Brand Logo & Title */}
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow-xs text-white group-hover:bg-indigo-700 transition-colors">
-              <Wifi className="w-5 h-5" />
+      <header className="bg-white/95 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200/80 px-4 sm:px-6 py-2.5 shadow-2xs">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          {/* 1. Sleek Logo / Institutional Name */}
+          <Link to="/" className="flex items-center gap-2.5 group shrink-0">
+            <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center shadow-xs text-white group-hover:bg-indigo-700 transition-colors">
+              <Wifi className="w-4 h-4" />
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-base text-slate-900 tracking-tight">
-                Smart Coordinator
-              </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                V1.0 Live
-              </span>
-            </div>
+            <span className="font-bold text-sm text-slate-900 tracking-tight">
+              Smart Coordinator
+            </span>
           </Link>
 
-          {/* Segmented Navigation Control */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-full border border-slate-200 shadow-2xs">
-            {/* Student Pass — Available to all */}
+          {/* 2. Clean Navigation Tabs (Subtle Pill Active States) */}
+          <nav className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/60">
             <button
               onClick={() => handleGuardedNavigation('/student', 'student')}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 location.pathname.startsWith('/student') || location.pathname === '/'
-                  ? 'bg-white text-slate-900 shadow-sm font-bold'
+                  ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Calendar className="w-3.5 h-3.5" />
               Student Pass
             </button>
 
-            {/* Coordinator Console — Available to Coordinator & Admin only */}
             {(isCoordinatorRole || isAdminRole) && (
               <>
                 <button
                   onClick={() => handleGuardedNavigation('/coordinator', 'coordinator')}
-                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     location.pathname === '/coordinator'
-                      ? 'bg-white text-slate-900 shadow-sm font-bold'
+                      ? 'bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  Coordinator Dashboard
+                  Coordinator
                 </button>
                 <button
                   onClick={() => handleGuardedNavigation('/scanner', 'coordinator')}
-                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     location.pathname.startsWith('/scanner')
-                      ? 'bg-white text-slate-900 shadow-sm font-bold'
+                      ? 'bg-white text-indigo-700 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <QrCode className="w-3.5 h-3.5 text-indigo-600" />
                   QR Scanner
                 </button>
               </>
             )}
 
-            {/* Admin Panel — Available to Admin ONLY (Coordinator cannot access) */}
             {isAdminRole && (
               <button
                 onClick={() => handleGuardedNavigation('/admin', 'admin')}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   location.pathname.startsWith('/admin')
-                    ? 'bg-white text-slate-900 shadow-sm font-bold'
+                    ? 'bg-white text-slate-900 shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <ShieldCheck className="w-3.5 h-3.5" />
                 Admin Panel
               </button>
             )}
-          </div>
+          </nav>
 
-          {/* User Profile Pill & Actions */}
+          {/* 3. Sleek User Avatar & Logout Action */}
           <div className="flex items-center gap-2.5">
-            {/* Staff Role Switcher controls (Hidden for Students) */}
-            {!isStudentRole && (
-              <>
-                <button
-                  onClick={() => navigate('/login')}
-                  title="Switch Portal Login"
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition cursor-pointer shadow-2xs"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Switch Role</span>
-                </button>
-
-                {isAdminRole && (
-                  <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
-                    <span className="text-[10px] text-slate-500 font-medium">Role:</span>
-                    <select
-                      value={activeRole}
-                      onChange={(e) => handleRoleSwitchAttempt(e.target.value)}
-                      className="bg-transparent text-slate-800 text-xs font-semibold focus:outline-none cursor-pointer"
-                    >
-                      <option value="coordinator">Coordinator</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* User Profile Pill Card */}
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full p-1 pr-3 shadow-2xs">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              title="Account Settings"
+              className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-xl hover:bg-slate-100/80 transition-colors cursor-pointer border border-transparent hover:border-slate-200 text-left"
+            >
               <img
                 src={`https://api.dicebear.com/7.x/bottts/svg?seed=${avatarSeed}`}
                 alt="Avatar"
-                className="w-7 h-7 rounded-full bg-white border border-slate-200 p-0.5"
+                className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200/80 p-0.5 shrink-0"
               />
-              <div className="hidden lg:block text-left pr-1">
-                <div className="text-xs font-semibold text-slate-900 leading-none">{fullName}</div>
-                <div className="text-[10px] text-slate-500 font-mono mt-0.5">@{username}</div>
+              <div className="hidden md:block">
+                <div className="text-xs font-semibold text-slate-900 leading-tight truncate max-w-[120px]">{fullName}</div>
+                <div className="text-[10px] text-slate-400 font-mono leading-none">@{username}</div>
               </div>
-
-              <span
-                className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full border ${getRoleBadgeStyle(activeRole)}`}
-              >
-                {activeRole}
-              </span>
-
-              {/* User Settings Trigger */}
-              <button
-                onClick={() => setIsSettingsOpen(true)}
-                title="Account Settings"
-                className="p-1 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 transition cursor-pointer"
-              >
-                <Settings className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* In-App Notification Center Bell Trigger */}
-            <button
-              onClick={() => setIsNotifOpen(true)}
-              title="Notification Center & Activity Feed"
-              className="relative p-2 rounded-full bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-600 transition cursor-pointer shadow-2xs"
-            >
-              <Bell className="w-4 h-4" />
-              {unreadNotificationCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse border-2 border-white shadow-xs">
-                  {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
-                </span>
-              )}
             </button>
 
-            {/* Styled Logout Button */}
             <button
               onClick={handleLogout}
-              title="Log Out of Account"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+              title="Log Out"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/80 text-xs font-medium transition-colors cursor-pointer shadow-2xs"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Logout</span>
@@ -213,14 +131,8 @@ export default function Navbar() {
         </div>
       </header>
 
-      {/* User Profile & Account Settings Modal */}
+      {/* Account Settings Modal */}
       <UserSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-
-      {/* In-App Notification Center & Activity Feed Drawer */}
-      <NotificationCenter
-        isOpen={isNotifOpen}
-        onClose={() => setIsNotifOpen(false)}
-      />
     </>
   );
 }
