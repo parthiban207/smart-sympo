@@ -19,6 +19,8 @@ export default function ProtectedRoute({ allowedRoles, children }: ProtectedRout
   const [isChecking, setIsChecking] = useState(true);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
+  const allowedRolesKey = (allowedRoles || []).slice().sort().join(',');
+
   useEffect(() => {
     let isMounted = true;
 
@@ -52,9 +54,10 @@ export default function ProtectedRoute({ allowedRoles, children }: ProtectedRout
           (currentUser?.role as UserRole) || savedRole || 'student';
 
         const roleAllowed = allowedRoles.includes(effectiveRole);
+        const authorized = hasActiveSession && roleAllowed;
 
         if (isMounted) {
-          setIsAuthorized(hasActiveSession && roleAllowed);
+          setIsAuthorized((prev) => (prev !== authorized ? authorized : prev));
           setIsChecking(false);
         }
       } catch (err) {
@@ -71,7 +74,7 @@ export default function ProtectedRoute({ allowedRoles, children }: ProtectedRout
     return () => {
       isMounted = false;
     };
-  }, [allowedRoles, currentUser, isAuthenticated, location.pathname]);
+  }, [allowedRolesKey, currentUser?.id, currentUser?.role, isAuthenticated, location.pathname]);
 
   // While verifying session, render sleek loading indicator to prevent content flash
   if (isChecking) {

@@ -97,7 +97,7 @@ export default function AdminAnalytics() {
         supabase.removeChannel(channel);
       };
     }
-  }, [fetchEvents, fetchAttendanceList]);
+  }, []);
 
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [selectedRosterEvent, setSelectedRosterEvent] = useState(null);

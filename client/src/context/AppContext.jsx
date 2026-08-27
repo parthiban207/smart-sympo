@@ -1,6 +1,6 @@
 // agent-notes: { ctx: "Global React AppContext provider with automated Welcome & First Login and Event Confirmation email dispatch", deps: ["src/supabaseClient.ts", "src/services/emailService.js", "src/services/backendEmailService.js"], state: "active", last: "antigravity@2026-08-26" }
 
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, isMockMode, isValidUUID, isClockSkewOrJwtError } from '../supabaseClient';
 import { sendRegistrationEmail, sendWelcomeEmail } from '../services/emailService';
 import { sendLoginAlertApi, sendEventConfirmationApi, sendWelcomeEmailApi } from '../services/backendEmailService';
@@ -240,9 +240,34 @@ export const AppProvider = ({ children }) => {
     return normalizedUser;
   };
 
-  // Load user profile from Supabase profiles table or local accounts
-  const fetchUserProfile = async (userId, userEmail) => {
+  const profileFetchingRef = useRef(new Set());
+  const lastProfileFetchTimeRef = useRef({});
+  const currentUserRef = useRef(currentUser);
+
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  // Load user profile from Supabase profiles table or local accounts with caching & debounce
+  const fetchUserProfile = useCallback(async (userId, userEmail, force = false) => {
+    if (!userId) return;
     const cleanEmail = (userEmail || '').trim().toLowerCase();
+
+    // Debounce: Prevent rapid concurrent or repeated calls for the same user
+    const now = Date.now();
+    if (profileFetchingRef.current.has(userId)) return;
+    if (!force && lastProfileFetchTimeRef.current[userId] && (now - lastProfileFetchTimeRef.current[userId] < 4000)) {
+      return;
+    }
+
+    // If profile already matches currentUser, skip re-fetching unless forced
+    if (!force && currentUserRef.current?.id === userId && currentUserRef.current?.role) {
+      return;
+    }
+
+    profileFetchingRef.current.add(userId);
+    lastProfileFetchTimeRef.current[userId] = now;
+
     const accounts = getStoredAccounts();
     const localMatch = accounts.find(
       (a) => a.id === userId || (cleanEmail && a.email?.toLowerCase() === cleanEmail)
@@ -252,36 +277,55 @@ export const AppProvider = ({ children }) => {
       if (localMatch) {
         syncUserStorage(localMatch);
       }
+      profileFetchingRef.current.delete(userId);
       return;
     }
 
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       if (data && !error) {
         const merged = { ...(localMatch || {}), ...data };
         syncUserStorage(merged);
-      } else {
-        // Fallback profile retaining any existing local profile details
-        const fallback = {
-          id: userId,
-          name: localMatch?.name || localMatch?.full_name || cleanEmail.split('@')[0] || 'Student Attendee',
-          full_name: localMatch?.full_name || localMatch?.name || cleanEmail.split('@')[0] || 'Student Attendee',
-          username: localMatch?.username || cleanEmail.split('@')[0] || 'student',
-          email: cleanEmail,
-          role: localMatch?.role || 'student',
-          college_id: localMatch?.college_id || `STU-${userId.slice(0, 6).toUpperCase()}`,
-        };
-        syncUserStorage(fallback);
+      } else if (localMatch) {
+        syncUserStorage(localMatch);
       }
     } catch (err) {
-      console.warn('Error fetching profile:', err);
+      console.warn('Error fetching profile (silent catch):', err);
       if (localMatch) {
         syncUserStorage(localMatch);
       }
+    } finally {
+      profileFetchingRef.current.delete(userId);
     }
-  };
+  }, []);
 
-  // Initialize Supabase Auth Session & Realtime Subscriptions
+  // Global Event Fetching Helper (memoized)
+  const fetchEvents = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.warn('Events fetch warning (silent):', error.message);
+        if (isClockSkewOrJwtError(error)) {
+          setTimeout(() => fetchEvents(), 1500);
+        }
+        return { data: null, error };
+      }
+
+      if (data) {
+        setEvents(data);
+      }
+      return { data, error: null };
+    } catch (err) {
+      console.warn('Network fetch silent fallback:', err);
+      return { data: null, error: err };
+    }
+  }, []);
+
+  // Initialize Supabase Auth Session & Realtime Subscriptions (Strict Mount Only)
   useEffect(() => {
     if (!isMockMode) {
       // 1. Get initial Auth Session
@@ -306,32 +350,6 @@ export const AppProvider = ({ children }) => {
           fetchUserProfile(session.user.id, session.user.email);
         }
       });
-
-      // 3. Centralized Global Event Fetching directly from Supabase (safe silent fallback)
-      const fetchEvents = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('events')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-          if (error) {
-            console.warn('Events fetch warning (silent):', error.message);
-            if (isClockSkewOrJwtError(error)) {
-              setTimeout(() => fetchEvents(), 1500);
-            }
-            return { data: null, error };
-          }
-
-          if (data) {
-            setEvents(data);
-          }
-          return { data, error: null };
-        } catch (err) {
-          console.warn('Network fetch silent fallback:', err);
-          return { data: null, error: err };
-        }
-      };
 
       const fetchInitialData = async () => {
         try {
@@ -1515,32 +1533,6 @@ export const AppProvider = ({ children }) => {
       };
     } catch {
       return { success: false, message: 'Malformed QR payload format.' };
-    }
-  };
-
-  // Global Event Fetching Helper (safe silent fallback)
-  const fetchEvents = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.warn('Events fetch warning (silent):', error.message);
-        if (isClockSkewOrJwtError(error)) {
-          setTimeout(() => fetchEvents(), 1500);
-        }
-        return { data: null, error };
-      }
-
-      if (data) {
-        setEvents(data);
-      }
-      return { data, error: null };
-    } catch (err) {
-      console.warn('Network fetch silent fallback:', err);
-      return { data: null, error: err };
     }
   };
 

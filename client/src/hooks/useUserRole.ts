@@ -72,14 +72,19 @@ export function useUserRole() {
       }
     });
 
-    // Listen to Auth state changes
+    // Listen to Auth state changes (only refetch if user ID changed)
+    let currentUserId: string | null = null;
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        setUser(session.user);
-        fetchRoleAndProfile(session.user.id, session.user.email);
+        if (session.user.id !== currentUserId) {
+          currentUserId = session.user.id;
+          setUser(session.user);
+          fetchRoleAndProfile(session.user.id, session.user.email);
+        }
       } else {
+        currentUserId = null;
         setUser(null);
         setRole(null);
         setProfile(null);
