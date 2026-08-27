@@ -397,11 +397,13 @@ export const AppProvider = ({ children }) => {
                   }
                   try {
                     localStorage.setItem('smart_sympo_accounts', JSON.stringify(combined));
-                  } catch (e) {}
+                  } catch (err) {
+                    /* ignore storage quota errors */
+                  }
                   return combined;
                 });
               }
-            } catch (_) {
+            } catch (err) {
               profilesEndpointFailedRef.current = true;
             }
           }
@@ -654,7 +656,9 @@ export const AppProvider = ({ children }) => {
               setSession(loginRes.data.session || null);
               return { success: true, user: savedUser, profile: savedUser, role: savedUser.role };
             }
-          } catch (_) {}
+          } catch (loginErr) {
+            console.error('Login fallback error:', loginErr);
+          }
 
           return {
             success: false,
@@ -753,7 +757,9 @@ export const AppProvider = ({ children }) => {
           if (prof) {
             fallbackProfile = prof;
           }
-        } catch (_) {}
+        } catch (fetchErr) {
+          /* ignore fallback profile fetch errors */
+        }
 
         if (!fallbackProfile) {
           const localAccounts = getStoredAccounts();
@@ -775,7 +781,9 @@ export const AppProvider = ({ children }) => {
         // Clear invalid session tokens
         try {
           await supabase.auth.signOut();
-        } catch (_) {}
+        } catch (signOutErr) {
+          /* ignore signOut error during fallback */
+        }
         localStorage.removeItem('smart_sympo_user');
         localStorage.removeItem('smart_sympo_active_role');
         setSession(null);
@@ -871,7 +879,9 @@ export const AppProvider = ({ children }) => {
       console.error('Supabase signIn exception:', err);
       try {
         await supabase.auth.signOut();
-      } catch (_) {}
+      } catch (signOutErr) {
+        /* ignore signOut error */
+      }
       localStorage.removeItem('smart_sympo_user');
       localStorage.removeItem('smart_sympo_active_role');
       setSession(null);
@@ -1853,7 +1863,9 @@ export const AppProvider = ({ children }) => {
           : [coordinatorProfile, ...prev];
         try {
           localStorage.setItem('smart_sympo_accounts', JSON.stringify(updated));
-        } catch (e) {}
+        } catch (storageErr) {
+          /* ignore localStorage error */
+        }
         return updated;
       });
 
