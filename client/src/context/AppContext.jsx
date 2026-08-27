@@ -286,14 +286,28 @@ export const AppProvider = ({ children }) => {
       if (data && !error) {
         const merged = { ...(localMatch || {}), ...data };
         syncUserStorage(merged);
-      } else if (localMatch) {
-        syncUserStorage(localMatch);
+      } else {
+        const fallback = localMatch || {
+          id: userId,
+          email: cleanEmail,
+          name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'Student Attendee',
+          full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'Student Attendee',
+          role: 'student',
+          college_id: `STU-${userId.slice(0, 6).toUpperCase()}`,
+        };
+        syncUserStorage(fallback);
       }
     } catch (err) {
       console.warn('Error fetching profile (silent catch):', err);
-      if (localMatch) {
-        syncUserStorage(localMatch);
-      }
+      const fallback = localMatch || {
+        id: userId,
+        email: cleanEmail,
+        name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'Student Attendee',
+        full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'Student Attendee',
+        role: 'student',
+        college_id: `STU-${userId.slice(0, 6).toUpperCase()}`,
+      };
+      syncUserStorage(fallback);
     } finally {
       profileFetchingRef.current.delete(userId);
     }
