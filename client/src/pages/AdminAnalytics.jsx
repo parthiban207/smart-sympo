@@ -40,14 +40,27 @@ export default function AdminAnalytics() {
   const [coordForm, setCoordForm] = useState({ fullName: '', email: '', password: '', phone: '', department: '' });
   const [creatingCoord, setCreatingCoord] = useState(false);
 
-  // Real-Time Attendance Re-fetch Helper
+  // Real-Time Attendance Re-fetch Helper (with relational query)
   const fetchAttendanceList = useCallback(async () => {
     if (isMockMode) return;
     try {
-      const { data: regData } = await supabase
+      let { data: regData, error: regError } = await supabase
         .from('registrations')
-        .select('*')
+        .select(`
+          *,
+          events (title, venue, type, hall_number, category),
+          profiles:student_id (id, full_name, name, email, roll_no, college, department, phone, college_id)
+        `)
         .order('registered_at', { ascending: false });
+
+      if (regError) {
+        const { data: fallbackReg } = await supabase
+          .from('registrations')
+          .select('*')
+          .order('registered_at', { ascending: false });
+        regData = fallbackReg;
+      }
+
       if (regData && setRegistrations) {
         setRegistrations(regData);
       }
@@ -167,17 +180,17 @@ export default function AdminAnalytics() {
 
   // Combined Real-Time Joined Attendance Table: Registrations joined with Profiles, Events, & Attendance Logs
   const joinedAttendanceRecords = (registrations || []).map((reg) => {
-    const matchedProfile = (profilesList || []).find((p) => p.id === reg.student_id);
-    const matchedEvent = (events || []).find((e) => e.id === reg.event_id);
+    const matchedProfile = reg.profiles || (profilesList || []).find((p) => p.id === reg.student_id);
+    const matchedEvent = reg.events || (events || []).find((e) => e.id === reg.event_id);
     const matchedLog = (attendanceLogs || []).find(
       (log) => log.student_id === reg.student_id && log.event_id === reg.event_id
     );
     const coordinatorProfile = reg.scanned_by
-      ? (profilesList || []).find((p) => p.id === reg.scanned_by)
+      ? (profilesList || []).find((p) => p.id === reg.scanned_by || p.email === reg.scanned_by || p.full_name === reg.scanned_by)
       : null;
 
-    const isAttended = Boolean(reg.attended || matchedLog);
-    const checkInTime = reg.attended_at || matchedLog?.check_in_time || null;
+    const isAttended = Boolean(reg.attended || reg.checked_in_at || matchedLog);
+    const checkInTime = reg.checked_in_at || reg.attended_at || matchedLog?.check_in_time || null;
 
     return {
       id: reg.id,
@@ -187,23 +200,37 @@ export default function AdminAnalytics() {
         matchedProfile?.full_name ||
         matchedProfile?.name ||
         reg.student_name ||
-        `Student (${reg.student_id?.slice(0, 8)})`,
-      college_name:
-        matchedProfile?.college_name ||
-        matchedProfile?.college ||
-        'Main Campus',
-      college_id:
+        matchedProfile?.email ||
+        'Student',
+      roll_no:
+        matchedProfile?.roll_no ||
         matchedProfile?.college_id ||
-        (reg.student_id ? `STU-${reg.student_id.slice(0, 6).toUpperCase()}` : 'N/A'),
+        reg.roll_no ||
+        reg.college_id ||
+        'N/A',
+      college_name:
+        matchedProfile?.college ||
+        matchedProfile?.college_name ||
+        reg.college ||
+        'Main Campus',
+      department:
+        matchedProfile?.department ||
+        reg.department ||
+        'General',
+      phone:
+        matchedProfile?.phone ||
+        matchedProfile?.phone_number ||
+        'N/A',
       email: matchedProfile?.email || reg.student_email || 'N/A',
       event_id: reg.event_id,
       event_title: matchedEvent?.title || reg.event_title || 'Symposium Session',
-      hall_number: matchedEvent?.hall_number || matchedLog?.hall_number || 'Main Venue',
-      category: matchedEvent?.category || reg.category || 'Technical',
+      hall_number: matchedEvent?.venue || matchedEvent?.hall_number || matchedLog?.hall_number || 'Main Venue',
+      category: matchedEvent?.type || matchedEvent?.category || reg.category || 'Technical',
       is_attended: isAttended,
+      checked_in_at: checkInTime,
       attended_at: checkInTime,
       registered_at: reg.registered_at,
-      scanned_by_name: coordinatorProfile?.full_name || coordinatorProfile?.name || null,
+      scanned_by_name: reg.scanned_by || coordinatorProfile?.full_name || coordinatorProfile?.name || null,
     };
   });
 
@@ -620,53 +647,10 @@ export default function AdminAnalytics() {
       setExportingReport('attendance');
       setExportFeedback(null);
 
-      let logsToExport = attendanceLogs || [];
-      let eventsList = events || [];
-      let profsList = profilesList || [];
-
-      if (!isMockMode) {
-        try {
-          const [attRes, evtRes, profRes] = await Promise.all([
-            supabase.from('attendance_logs').select('*').order('check_in_time', { ascending: false }),
-            supabase.from('events').select('*'),
-            supabase.from('profiles').select('*'),
-          ]);
-
-          if (attRes.data && attRes.data.length > 0) {
-            logsToExport = attRes.data;
-          }
-          if (evtRes.data && evtRes.data.length > 0) {
-            eventsList = evtRes.data;
-          }
-          if (profRes.data && profRes.data.length > 0) {
-            profsList = profRes.data;
-          }
-        } catch (e) {
-          console.warn('Supabase fetch attendance for export warning:', e);
-        }
-      }
-
-      // Merge any guest checkin records if not already in logs
-      if (guestCheckins && guestCheckins.length > 0) {
-        const combined = [...logsToExport];
-        for (const g of guestCheckins) {
-          if (!combined.some((l) => l.id === g.id)) {
-            combined.push({
-              guest_name: g.name,
-              event_title: g.event_title || 'Guest Check-in',
-              hall_number: g.hall_number || 'Main Venue',
-              check_in_time: g.created_at || g.check_in_time || new Date().toISOString(),
-              status: 'Checked-In (Guest)',
-            });
-          }
-        }
-        logsToExport = combined;
-      }
-
-      exportAttendanceRecordsExcel(logsToExport, eventsList, profsList);
+      exportAttendanceRecordsExcel(joinedAttendanceRecords, events, profilesList);
       setExportFeedback({
         type: 'success',
-        message: `Live_Attendance_Report.xlsx exported successfully (${logsToExport.length} records)!`,
+        message: `Live_Attendance_Report.xlsx exported successfully (${joinedAttendanceRecords.length} records)!`,
       });
       setTimeout(() => setExportFeedback(null), 4000);
     } catch (err) {
@@ -1932,7 +1916,7 @@ export default function AdminAnalytics() {
                             <span>{record.student_name}</span>
                           </div>
                           <div className="text-[10px] text-slate-500 font-mono">
-                            <span className="text-indigo-700 font-bold">{record.college_id}</span>
+                            <span className="text-indigo-700 font-bold">{record.roll_no}</span>
                             <span className="mx-1">•</span>
                             <span>{record.email}</span>
                           </div>
@@ -1945,6 +1929,9 @@ export default function AdminAnalytics() {
                         <Building className="w-3 h-3 text-slate-400 shrink-0" />
                         <span className="truncate max-w-[170px]">{record.college_name}</span>
                       </div>
+                      {record.department && (
+                        <div className="text-[10px] text-slate-400 mt-0.5">{record.department}</div>
+                      )}
                     </td>
 
                     <td className="px-4 py-3 text-slate-800">
@@ -1972,9 +1959,15 @@ export default function AdminAnalytics() {
                     </td>
 
                     <td className="px-4 py-3 text-slate-600 font-mono text-[11px]">
-                      {record.attended_at ? (
+                      {record.checked_in_at ? (
                         <span className="text-emerald-800 font-semibold">
-                          {new Date(record.attended_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          {new Date(record.checked_in_at).toLocaleString([], {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit'
+                          })}
                         </span>
                       ) : (
                         <span className="text-slate-400 italic">Not checked in</span>

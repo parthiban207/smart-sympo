@@ -1389,7 +1389,7 @@ export const AppProvider = ({ children }) => {
 
       // IF VALID & NOT YET ATTENDED:
       const nowISO = new Date().toISOString();
-      const coordinatorId = currentUser?.id || null;
+      const coordinatorIdentifier = currentUser?.full_name || currentUser?.name || currentUser?.email || currentUser?.id || 'Coordinator';
 
       // 1. Update Supabase
       if (!isMockMode) {
@@ -1399,8 +1399,9 @@ export const AppProvider = ({ children }) => {
               .from('registrations')
               .update({
                 attended: true,
+                checked_in_at: nowISO,
                 attended_at: nowISO,
-                scanned_by: coordinatorId,
+                scanned_by: coordinatorIdentifier,
               })
               .eq('id', matchedReg.id);
           } else if (isValidUUID(regStudentId) && isValidUUID(regEventId)) {
@@ -1408,8 +1409,9 @@ export const AppProvider = ({ children }) => {
               .from('registrations')
               .update({
                 attended: true,
+                checked_in_at: nowISO,
                 attended_at: nowISO,
-                scanned_by: coordinatorId,
+                scanned_by: coordinatorIdentifier,
               })
               .eq('student_id', regStudentId)
               .eq('event_id', regEventId);
@@ -1447,8 +1449,9 @@ export const AppProvider = ({ children }) => {
             return {
               ...r,
               attended: true,
+              checked_in_at: nowISO,
               attended_at: nowISO,
-              scanned_by: coordinatorId,
+              scanned_by: coordinatorIdentifier,
             };
           }
           return r;
@@ -1525,19 +1528,32 @@ export const AppProvider = ({ children }) => {
         return { success: false, message: 'Invalid QR Pass structure: Missing event or registration ID.' };
       }
 
+      const nowISO = new Date().toISOString();
+      const coordinatorIdentifier = currentUser?.full_name || currentUser?.name || currentUser?.email || currentUser?.id || 'Coordinator';
+
       const newLog = {
         student_id: student_id || null,
         event_id: event_id || null,
         hall_number: scannerHall,
-        check_in_time: new Date().toISOString(),
+        check_in_time: nowISO,
         status: 'Checked-In',
       };
 
       try {
         if (isValidUUID(registration_id)) {
-          await supabase.from('registrations').update({ attended: true }).eq('id', registration_id);
+          await supabase.from('registrations').update({
+            attended: true,
+            checked_in_at: nowISO,
+            attended_at: nowISO,
+            scanned_by: coordinatorIdentifier,
+          }).eq('id', registration_id);
         } else if (isValidUUID(event_id) && isValidUUID(student_id)) {
-          await supabase.from('registrations').update({ attended: true }).eq('event_id', event_id).eq('student_id', student_id);
+          await supabase.from('registrations').update({
+            attended: true,
+            checked_in_at: nowISO,
+            attended_at: nowISO,
+            scanned_by: coordinatorIdentifier,
+          }).eq('event_id', event_id).eq('student_id', student_id);
         }
         if (isValidUUID(event_id)) {
           const { data: dbLog } = await supabase.from('attendance_logs').insert([newLog]).select().single();

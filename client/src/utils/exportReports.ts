@@ -251,34 +251,96 @@ export function exportEventRegistrationsExcel(
  * Filename: Live_Attendance_Report.xlsx
  */
 export function exportAttendanceRecordsExcel(
-  attendanceLogs: any[],
+  recordsOrLogs: any[],
   events: any[] = [],
   profiles: any[] = []
 ) {
-  const formattedLogs = (attendanceLogs || []).map((log) => {
-    const event = events.find((e) => e.id === log.event_id);
-    const profile = profiles.find((p) => p.id === log.student_id);
+  const formattedLogs = (recordsOrLogs || []).map((item, idx) => {
+    const event = events.find((e) => e.id === item.event_id);
+    const profile = profiles.find((p) => p.id === (item.student_id || item.id));
 
     const studentName =
-      log.guest_name ||
+      item.student_name ||
+      item.guest_name ||
+      item.profiles?.full_name ||
+      item.profiles?.name ||
       profile?.full_name ||
       profile?.name ||
-      (log.student_id ? `Student (${log.student_id.slice(0, 8)})` : 'Attendee');
+      (item.student_id ? `Student (${item.student_id.slice(0, 8)})` : 'Student');
+
+    const rollNo =
+      item.roll_no ||
+      item.profiles?.roll_no ||
+      item.profiles?.college_id ||
+      profile?.roll_no ||
+      profile?.college_id ||
+      item.college_id ||
+      'N/A';
+
+    const email =
+      item.email ||
+      item.profiles?.email ||
+      profile?.email ||
+      item.student_email ||
+      'N/A';
+
+    const college =
+      item.college ||
+      item.college_name ||
+      item.profiles?.college ||
+      item.profiles?.college_name ||
+      profile?.college ||
+      profile?.college_name ||
+      'Main Campus';
+
+    const department =
+      item.department ||
+      item.profiles?.department ||
+      profile?.department ||
+      'General';
+
+    const eventName =
+      item.event_title ||
+      item.events?.title ||
+      event?.title ||
+      'Symposium Event';
+
+    const isAttended = Boolean(
+      item.is_attended ||
+      item.attended ||
+      item.status === 'Checked-In' ||
+      item.check_in_time ||
+      item.checked_in_at ||
+      item.attended_at
+    );
+
+    const checkInTime =
+      item.checked_in_at ||
+      item.attended_at ||
+      item.check_in_time ||
+      item.scanned_at ||
+      null;
+
+    const scannedBy =
+      item.scanned_by_name ||
+      item.scanned_by ||
+      (isAttended ? 'Door Scanner' : 'N/A');
 
     return {
+      'S.No': idx + 1,
       'Student Name': studentName,
-      'Event Name': event?.title || log.event_title || 'General Session',
-      'Venue': log.hall_number || event?.hall_number || 'Main Venue',
-      'Check-in Timestamp': log.check_in_time
-        ? new Date(log.check_in_time).toLocaleString()
-        : log.scanned_at
-        ? new Date(log.scanned_at).toLocaleString()
-        : 'N/A',
-      'Attendance Status': log.status || 'Checked-In',
+      'Roll No': rollNo,
+      'Email': email,
+      'College': college,
+      'Department': department,
+      'Event Name': eventName,
+      'Live Status': isAttended ? 'Attended' : 'Pending',
+      'Check-in Time': checkInTime ? new Date(checkInTime).toLocaleString() : 'N/A',
+      'Scanned By': scannedBy,
     };
   });
 
-  exportToExcel(formattedLogs, 'Attendance Records', 'Live_Attendance_Report.xlsx');
+  exportToExcel(formattedLogs, 'Live Attendance Feed', 'Live_Attendance_Report.xlsx');
 }
 
 /**
