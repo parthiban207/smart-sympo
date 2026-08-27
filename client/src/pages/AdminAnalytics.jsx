@@ -5,6 +5,13 @@ import { useApp } from '../context/AppContext';
 import { usePresence } from '../hooks/usePresence';
 import { supabase, isMockMode } from '../supabaseClient';
 import {
+  exportAttendanceCSV,
+  exportEventRegistrationsCSV,
+  exportCoordinatorsCSV,
+  exportSingleEventRegistrationsCSV,
+  exportStudentsCSV,
+  exportAllUsersCSV,
+  exportEmailDispatchCSV,
   exportAllUsersExcel,
   exportMultiSheetUsersWorkbook,
   exportStudentsExcel,
@@ -15,6 +22,7 @@ import {
   exportEmailDispatchExcel,
   exportToCSVFile,
   exportToExcel,
+  exportToPDF,
 } from '../utils/exportReports';
 import QRScannerModal from '../components/QRScannerModal';
 import ViewRegisteredStudentsModal from '../components/ViewRegisteredStudentsModal';
@@ -24,7 +32,7 @@ import {
   Globe, Crosshair, Ruler, FileText, ScanLine, Clock, Hash, CheckCircle2, AlertCircle,
   Pencil, Trash2, KeyRound, RefreshCw, Lock, FileSpreadsheet, Download, FileDown,
   CalendarCheck, ClipboardCheck, Loader2, StopCircle, Mail, Send, CheckCircle, AlertTriangle,
-  Search, Building, Filter, UserMinus
+  Search, Building, Filter, UserMinus, ChevronRight, Eye
 } from 'lucide-react';
 
 export default function AdminAnalytics() {
@@ -39,7 +47,8 @@ export default function AdminAnalytics() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddCoordinatorModal, setShowAddCoordinatorModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
-  const [adminTab, setAdminTab] = useState('attendance'); // 'attendance' | 'events' | 'users'
+  const [adminTab, setAdminTab] = useState('attendance'); // 'attendance' | 'events' | 'users' | 'reports'
+  const [selectedExportEventId, setSelectedExportEventId] = useState('');
   const [coordForm, setCoordForm] = useState({ fullName: '', email: '', password: '', phone: '', department: '' });
   const [creatingCoord, setCreatingCoord] = useState(false);
 
@@ -510,10 +519,31 @@ export default function AdminAnalytics() {
     }
   };
 
-  // 1b. Export Students Sheet -> Registered_Students_Report.xlsx
-  const handleExportStudents = async () => {
+  // 1b. Export Students (CSV & Excel)
+  const handleExportStudentsCSV = async () => {
     try {
-      setExportingReport('students');
+      setExportingReport('students-csv');
+      setExportFeedback(null);
+      const users = await getCombinedUsersForExport();
+      const count = users.filter((u) => (u.role || 'student').toLowerCase() === 'student').length;
+      exportStudentsCSV(users);
+      setExportFeedback({
+        type: 'success',
+        message: `SmartSympo_Registered_Students.csv downloaded (${count} students)!`,
+      });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } catch (err) {
+      console.error('Error exporting students CSV:', err);
+      setExportFeedback({ type: 'error', message: 'Failed to export students CSV.' });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } finally {
+      setExportingReport(null);
+    }
+  };
+
+  const handleExportStudentsExcel = async () => {
+    try {
+      setExportingReport('students-excel');
       setExportFeedback(null);
       const users = await getCombinedUsersForExport();
       const count = users.filter((u) => (u.role || 'student').toLowerCase() === 'student').length;
@@ -532,10 +562,31 @@ export default function AdminAnalytics() {
     }
   };
 
-  // 1c. Export Coordinators Sheet -> Coordinators_Directory_Report.xlsx
-  const handleExportCoordinators = async () => {
+  // 1c. Export Coordinators (CSV & Excel)
+  const handleExportCoordinatorsCSV = async () => {
     try {
-      setExportingReport('coordinators');
+      setExportingReport('coordinators-csv');
+      setExportFeedback(null);
+      const users = await getCombinedUsersForExport();
+      const count = users.filter((u) => (u.role || '').toLowerCase() === 'coordinator').length;
+      exportCoordinatorsCSV(users, onlineUsers);
+      setExportFeedback({
+        type: 'success',
+        message: `SmartSympo_Coordinators_Login_Report.csv downloaded (${count} coordinators)!`,
+      });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } catch (err) {
+      console.error('Error exporting coordinators CSV:', err);
+      setExportFeedback({ type: 'error', message: 'Failed to export coordinators CSV.' });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } finally {
+      setExportingReport(null);
+    }
+  };
+
+  const handleExportCoordinatorsExcel = async () => {
+    try {
+      setExportingReport('coordinators-excel');
       setExportFeedback(null);
       const users = await getCombinedUsersForExport();
       const count = users.filter((u) => (u.role || '').toLowerCase() === 'coordinator').length;
@@ -554,32 +605,30 @@ export default function AdminAnalytics() {
     }
   };
 
-  // 1d. Export Admin Staff Sheet -> Admin_Staff_Report.xlsx
-  const handleExportAdmins = async () => {
+  // 1d. Export All Users (CSV & Excel)
+  const handleExportAllUsersCSV = async () => {
     try {
-      setExportingReport('admins');
+      setExportingReport('users-csv');
       setExportFeedback(null);
       const users = await getCombinedUsersForExport();
-      const count = users.filter((u) => (u.role || '').toLowerCase() === 'admin').length;
-      exportAdminsExcel(users);
+      exportAllUsersCSV(users, onlineUsers);
       setExportFeedback({
         type: 'success',
-        message: `Admin_Staff_Report.xlsx exported successfully (${count} administrators)!`,
+        message: `SmartSympo_All_Users_Directory.csv downloaded (${users.length} accounts)!`,
       });
       setTimeout(() => setExportFeedback(null), 4000);
     } catch (err) {
-      console.error('Error exporting admin staff report:', err);
-      setExportFeedback({ type: 'error', message: 'Failed to export admin staff spreadsheet.' });
+      console.error('Error exporting all users CSV:', err);
+      setExportFeedback({ type: 'error', message: 'Failed to export all users CSV.' });
       setTimeout(() => setExportFeedback(null), 4000);
     } finally {
       setExportingReport(null);
     }
   };
 
-  // 1e. Export All Users Single Sheet -> All_Users_Report.xlsx
-  const handleExportUsers = async () => {
+  const handleExportAllUsersExcel = async () => {
     try {
-      setExportingReport('users');
+      setExportingReport('users-excel');
       setExportFeedback(null);
       const usersToExport = await getCombinedUsersForExport();
       exportAllUsersExcel(usersToExport);
@@ -597,10 +646,10 @@ export default function AdminAnalytics() {
     }
   };
 
-  // 2. Export Event-wise Registrations (.xlsx) -> Event_Participants_Report.xlsx
-  const handleExportEventRegistrations = async () => {
+  // 2. Export All Student Event Registrations (CSV & Excel)
+  const handleExportAllRegistrationsCSV = async () => {
     try {
-      setExportingReport('registrations');
+      setExportingReport('registrations-csv');
       setExportFeedback(null);
 
       let regsToExport = registrations || [];
@@ -614,16 +663,48 @@ export default function AdminAnalytics() {
             supabase.from('events').select('*'),
             supabase.from('profiles').select('*'),
           ]);
+          if (regRes.data) regsToExport = regRes.data;
+          if (evtRes.data) eventsList = evtRes.data;
+          if (profRes.data) profsList = profRes.data;
+        } catch (e) {
+          console.warn('Supabase fetch registrations for export warning:', e);
+        }
+      }
 
-          if (regRes.data) {
-            regsToExport = regRes.data;
-          }
-          if (evtRes.data) {
-            eventsList = evtRes.data;
-          }
-          if (profRes.data) {
-            profsList = profRes.data;
-          }
+      exportEventRegistrationsCSV(regsToExport, eventsList, profsList);
+      setExportFeedback({
+        type: 'success',
+        message: `SmartSympo_All_Student_Registrations.csv downloaded (${regsToExport.length} records)!`,
+      });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } catch (err) {
+      console.error('Error exporting registrations CSV:', err);
+      setExportFeedback({ type: 'error', message: 'Failed to export registrations CSV.' });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } finally {
+      setExportingReport(null);
+    }
+  };
+
+  const handleExportEventRegistrationsExcel = async () => {
+    try {
+      setExportingReport('registrations-excel');
+      setExportFeedback(null);
+
+      let regsToExport = registrations || [];
+      let eventsList = events || [];
+      let profsList = profilesList || [];
+
+      if (!isMockMode) {
+        try {
+          const [regRes, evtRes, profRes] = await Promise.all([
+            supabase.from('registrations').select('*').order('registered_at', { ascending: false }),
+            supabase.from('events').select('*'),
+            supabase.from('profiles').select('*'),
+          ]);
+          if (regRes.data) regsToExport = regRes.data;
+          if (evtRes.data) eventsList = evtRes.data;
+          if (profRes.data) profsList = profRes.data;
         } catch (e) {
           console.warn('Supabase fetch registrations for export warning:', e);
         }
@@ -644,12 +725,83 @@ export default function AdminAnalytics() {
     }
   };
 
-  // 3. Export Overall Attendance Records (.xlsx) -> Live_Attendance_Report.xlsx
-  const handleExportAttendance = async () => {
+  // 3. Export Single Particular Event Roster (CSV & PDF)
+  const handleExportSingleEventCSV = (eventToExport) => {
+    if (!eventToExport) return;
     try {
-      setExportingReport('attendance');
+      setExportingReport(`event-csv-${eventToExport.id}`);
       setExportFeedback(null);
+      exportSingleEventRegistrationsCSV(eventToExport, registrations, profilesList);
+      const count = (registrations || []).filter((r) => r.event_id === eventToExport.id).length;
+      setExportFeedback({
+        type: 'success',
+        message: `"${eventToExport.title}" Student Roster CSV downloaded (${count} registered)!`,
+      });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } catch (err) {
+      console.error('Error exporting event roster CSV:', err);
+      setExportFeedback({ type: 'error', message: 'Failed to export event CSV.' });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } finally {
+      setExportingReport(null);
+    }
+  };
 
+  const handleExportSingleEventPDF = (eventToExport) => {
+    if (!eventToExport) return;
+    try {
+      const eventRegs = (registrations || []).filter((r) => r.event_id === eventToExport.id);
+      const studentProfiles = eventRegs.map((reg) => {
+        const profile = (profilesList || []).find((p) => p.id === reg.student_id);
+        return {
+          id: reg.id || reg.student_id,
+          student_id: reg.student_id,
+          registered_at: reg.registered_at,
+          name: profile?.full_name || profile?.name || `Student (${reg.student_id?.slice(0, 8)})`,
+          username: profile?.username || 'student',
+          email: profile?.email || 'N/A',
+          college_id: profile?.college_id || reg.student_id?.slice(0, 10),
+          role: profile?.role || 'student',
+        };
+      });
+      exportToPDF(eventToExport, studentProfiles);
+      setExportFeedback({
+        type: 'success',
+        message: `"${eventToExport.title}" PDF Roster downloaded (${studentProfiles.length} registered)!`,
+      });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } catch (err) {
+      console.error('Error exporting event roster PDF:', err);
+      setExportFeedback({ type: 'error', message: 'Failed to export event PDF.' });
+      setTimeout(() => setExportFeedback(null), 4000);
+    }
+  };
+
+  // 4. Export Overall Attendance (CSV & Excel)
+  const handleExportAttendanceCSV = () => {
+    try {
+      setExportingReport('attendance-csv');
+      setExportFeedback(null);
+      const recordsToUse = filteredAttendanceRecords.length > 0 ? filteredAttendanceRecords : joinedAttendanceRecords;
+      exportAttendanceCSV(recordsToUse, events, profilesList);
+      setExportFeedback({
+        type: 'success',
+        message: `SmartSympo_Student_Attendance.csv downloaded (${recordsToUse.length} records)!`,
+      });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } catch (err) {
+      console.error('Error exporting attendance CSV:', err);
+      setExportFeedback({ type: 'error', message: 'Failed to export attendance CSV.' });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } finally {
+      setExportingReport(null);
+    }
+  };
+
+  const handleExportAttendanceExcel = async () => {
+    try {
+      setExportingReport('attendance-excel');
+      setExportFeedback(null);
       exportAttendanceRecordsExcel(joinedAttendanceRecords, events, profilesList);
       setExportFeedback({
         type: 'success',
@@ -665,42 +817,34 @@ export default function AdminAnalytics() {
     }
   };
 
-  // 4. Export Email Dispatch Audit Log (.xlsx) -> Email_Dispatch_Audit_Report.xlsx
-  const handleExportEmailDispatch = async () => {
+  // 5. Export Email Dispatch Audit Log (CSV & Excel)
+  const handleExportEmailDispatchCSV = async () => {
     try {
-      setExportingReport('emails');
+      setExportingReport('emails-csv');
       setExportFeedback(null);
-
-      let regsToExport = registrations || [];
-      let eventsList = events || [];
-      let profsList = profilesList || [];
-
-      if (!isMockMode) {
-        try {
-          const [regRes, evtRes, profRes] = await Promise.all([
-            supabase.from('registrations').select('*').order('registered_at', { ascending: false }),
-            supabase.from('events').select('*'),
-            supabase.from('profiles').select('*'),
-          ]);
-
-          if (regRes.data) {
-            regsToExport = regRes.data;
-          }
-          if (evtRes.data) {
-            eventsList = evtRes.data;
-          }
-          if (profRes.data) {
-            profsList = profRes.data;
-          }
-        } catch (e) {
-          console.warn('Supabase fetch email audit log error:', e);
-        }
-      }
-
-      exportEmailDispatchExcel(regsToExport, eventsList, profsList);
+      exportEmailDispatchCSV(registrations, events, profilesList);
       setExportFeedback({
         type: 'success',
-        message: `Email_Dispatch_Audit_Report.xlsx exported successfully (${regsToExport.length} audit records)!`,
+        message: `SmartSympo_Email_Dispatch_Audit.csv downloaded (${(registrations || []).length} logs)!`,
+      });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } catch (err) {
+      console.error('Error exporting email dispatch CSV:', err);
+      setExportFeedback({ type: 'error', message: 'Failed to export email audit CSV.' });
+      setTimeout(() => setExportFeedback(null), 4000);
+    } finally {
+      setExportingReport(null);
+    }
+  };
+
+  const handleExportEmailDispatchExcel = async () => {
+    try {
+      setExportingReport('emails-excel');
+      setExportFeedback(null);
+      exportEmailDispatchExcel(registrations, events, profilesList);
+      setExportFeedback({
+        type: 'success',
+        message: `Email_Dispatch_Audit_Report.xlsx exported successfully (${(registrations || []).length} audit records)!`,
       });
       setTimeout(() => setExportFeedback(null), 4000);
     } catch (err) {
@@ -817,21 +961,8 @@ export default function AdminAnalytics() {
     attendanceLogs.filter((log) => log.guest_name || log.is_guest)
   );
 
-  const handleExportAttendanceCSV = () => {
-    const dataToExport = filteredAttendanceRecords.map((r) => ({
-      'Student Name': r.student_name,
-      'Roll No / College ID': r.roll_no,
-      'Email': r.email,
-      'College': r.college_name,
-      'Department': r.department || 'N/A',
-      'Event': r.event_title,
-      'Venue': r.hall_number,
-      'Category': r.category,
-      'Status': r.is_attended ? 'Verified' : 'Pending',
-      'Check-in Time': r.checked_in_at ? new Date(r.checked_in_at).toLocaleString() : 'Not Checked In',
-    }));
-    exportToCSVFile(dataToExport, `SmartSympo_Attendance_${new Date().toISOString().slice(0, 10)}.csv`);
-  };
+  const activeExportEvent = events.find((e) => e.id === (selectedExportEventId || events[0]?.id)) || events[0];
+  const activeExportEventRegs = activeExportEvent ? registrations.filter((r) => r.event_id === activeExportEvent.id) : [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -842,7 +973,7 @@ export default function AdminAnalytics() {
             Admin Console
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Attendance verification, event operations, and system user management
+            Attendance verification, event operations, reports export, and system user management
           </p>
         </div>
 
@@ -877,6 +1008,18 @@ export default function AdminAnalytics() {
           </button>
 
           <button
+            onClick={() => setAdminTab('reports')}
+            className={`px-3.5 py-2 font-semibold text-xs rounded-xl border shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+              adminTab === 'reports'
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Export Hub</span>
+          </button>
+
+          <button
             onClick={() => setShowAddCoordinatorModal(true)}
             className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
           >
@@ -893,6 +1036,32 @@ export default function AdminAnalytics() {
           </button>
         </div>
       </div>
+
+      {/* Export Feedback Live Banner */}
+      {exportFeedback && (
+        <div
+          className={`p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between border shadow-2xs transition-all animate-fadeIn ${
+            exportFeedback.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {exportFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <span>{exportFeedback.message}</span>
+          </div>
+          <button
+            onClick={() => setExportFeedback(null)}
+            className="text-slate-400 hover:text-slate-700 text-xs px-2 py-0.5 rounded cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* 2. Top Stats: 3 Minimalist Pastel Boxes */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -940,7 +1109,7 @@ export default function AdminAnalytics() {
       </div>
 
       {/* 3. Section Tabs: Clean Pill Navigation */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-1">
+      <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-1 flex-wrap sm:flex-nowrap">
         <button
           onClick={() => setAdminTab('attendance')}
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -972,6 +1141,18 @@ export default function AdminAnalytics() {
           }`}
         >
           User Governance ({(profilesList || []).length})
+        </button>
+
+        <button
+          onClick={() => setAdminTab('reports')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+            adminTab === 'reports'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'text-emerald-700 hover:text-emerald-800 bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200/60'
+          }`}
+        >
+          <FileSpreadsheet className="w-3.5 h-3.5" />
+          <span>CSV Reports & Export Hub</span>
         </button>
       </div>
 
@@ -1026,15 +1207,26 @@ export default function AdminAnalytics() {
               </button>
             </div>
 
-            {/* Export CSV Button */}
-            <button
-              onClick={handleExportAttendanceCSV}
-              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
-              title="Export Current Table Records to CSV/Excel"
-            >
-              <Download className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Export CSV</span>
-            </button>
+            {/* Export Actions */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={handleExportAttendanceCSV}
+                className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                title="Export Filtered Attendance Records to CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Export CSV</span>
+              </button>
+
+              <button
+                onClick={handleExportAttendanceExcel}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                title="Export Attendance Records to Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Excel</span>
+              </button>
+            </div>
           </div>
 
           {/* Simplified Clean Data Table */}
@@ -1201,14 +1393,22 @@ export default function AdminAnalytics() {
                     Roster ({regCount})
                   </button>
                   <button
+                    onClick={() => handleExportSingleEventCSV(evt)}
+                    className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-medium text-[11px] flex items-center justify-center gap-1 transition cursor-pointer border border-emerald-200/80"
+                    title={`Export ${evt.title} registered students to CSV`}
+                  >
+                    <Download className="w-3 h-3 text-emerald-600" />
+                    <span>CSV</span>
+                  </button>
+                  <button
                     onClick={() => handleEditClick(evt)}
-                    className="py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg font-medium text-[11px] transition cursor-pointer"
+                    className="py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg font-medium text-[11px] transition cursor-pointer"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleDeleteClick(evt)}
-                    className="py-1.5 px-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-medium text-[11px] transition cursor-pointer"
+                    className="py-1.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-medium text-[11px] transition cursor-pointer"
                   >
                     Delete
                   </button>
@@ -1222,20 +1422,38 @@ export default function AdminAnalytics() {
       {/* Tab 3: USER GOVERNANCE & ROLES */}
       {adminTab === 'users' && (
         <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900">User Accounts & Roles</h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 {adminCount}/5 Admins • {coordinatorCount} Coordinators • {studentCount} Students
               </p>
             </div>
-            <button
-              onClick={() => setShowAddCoordinatorModal(true)}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              Add Coordinator
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleExportStudentsCSV}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                title="Export Registered Students to CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Export Students CSV</span>
+              </button>
+              <button
+                onClick={handleExportCoordinatorsCSV}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                title="Export Coordinator Directory & Logins to CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-amber-600" />
+                <span>Export Coordinators CSV</span>
+              </button>
+              <button
+                onClick={() => setShowAddCoordinatorModal(true)}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Add Coordinator</span>
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-xl border border-slate-100">
@@ -1337,6 +1555,398 @@ export default function AdminAnalytics() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab 4: CSV REPORTS & EXPORT HUB */}
+      {adminTab === 'reports' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Hero Banner for Export Center */}
+          <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 text-white p-6 rounded-2xl border border-indigo-700 shadow-md">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <span className="text-[10px] font-bold tracking-wider uppercase bg-indigo-700/70 border border-indigo-500/50 px-2.5 py-0.5 rounded-md text-indigo-200 inline-block mb-1.5">
+                  Symposium Data & Analytics Center
+                </span>
+                <h2 className="text-xl font-bold tracking-tight">
+                  Export & Reporting Center
+                </h2>
+                <p className="text-xs text-indigo-200/90 mt-1 max-w-2xl">
+                  Generate dedicated UTF-8 encoded CSV spreadsheets and formatted reports for student attendance, registrations, coordinator logins, and specific event rosters.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleExportMultiSheetUsers}
+                  className="px-4 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 transition cursor-pointer border border-indigo-400"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>All-in-One Excel Workbook</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 1: Event-Specific Student Registration Exporter ("whose student register the particular event") */}
+          <div className="bg-white p-6 rounded-2xl border border-indigo-100 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700">
+                    <Users className="w-4 h-4" />
+                  </span>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Event-Specific Student Registrations
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Select any symposium event to inspect and export the exact list of registered students
+                </p>
+              </div>
+
+              {/* Event Selector Dropdown */}
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-slate-600">Select Event:</label>
+                <select
+                  value={selectedExportEventId || events[0]?.id || ''}
+                  onChange={(e) => setSelectedExportEventId(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-indigo-600 max-w-[220px] truncate"
+                >
+                  {events.map((evt) => (
+                    <option key={evt.id} value={evt.id}>
+                      {evt.title} ({registrations.filter((r) => r.event_id === evt.id).length} registered)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Selected Event Details & Direct Actions */}
+            {activeExportEvent ? (
+              <div className="space-y-4">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-900">{activeExportEvent.title}</span>
+                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                        {activeExportEvent.category}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 flex items-center gap-3">
+                      <span>Venue: <strong>{activeExportEvent.hall_number || 'Main Venue'}</strong></span>
+                      <span>•</span>
+                      <span>Total Registered: <strong className="text-indigo-700">{activeExportEventRegs.length}</strong> / {activeExportEvent.max_capacity || 100}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <button
+                      onClick={() => handleExportSingleEventCSV(activeExportEvent)}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                      title="Download CSV of students registered for this event"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export Event CSV</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleExportSingleEventPDF(activeExportEvent)}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1.5 transition cursor-pointer"
+                      title="Download PDF Roster of students registered for this event"
+                    >
+                      <FileDown className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Export PDF Roster</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setSelectedRosterEvent(activeExportEvent);
+                        setShowRosterModal(true);
+                      }}
+                      className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200 shadow-2xs flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Manage Roster</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Preview Table of Registered Students for this event */}
+                <div className="overflow-x-auto rounded-xl border border-slate-100">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-100">
+                      <tr>
+                        <th className="px-4 py-2.5">#</th>
+                        <th className="px-4 py-2.5">Student Name</th>
+                        <th className="px-4 py-2.5">Email</th>
+                        <th className="px-4 py-2.5">College / Institution</th>
+                        <th className="px-4 py-2.5">Registration Time</th>
+                        <th className="px-4 py-2.5">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {activeExportEventRegs.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                            No students have registered for "{activeExportEvent.title}" yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        activeExportEventRegs.slice(0, 5).map((reg, idx) => {
+                          const profile = (profilesList || []).find((p) => p.id === reg.student_id);
+                          const isAttended = Boolean(reg.attended || reg.is_attended);
+                          return (
+                            <tr key={reg.id || idx} className="hover:bg-slate-50/60">
+                              <td className="px-4 py-2.5 text-slate-400 font-mono">{idx + 1}</td>
+                              <td className="px-4 py-2.5 font-semibold text-slate-900">
+                                {reg.student_name || profile?.full_name || profile?.name || `Student (${reg.student_id?.slice(0, 8)})`}
+                              </td>
+                              <td className="px-4 py-2.5 text-slate-600">{reg.student_email || profile?.email || 'N/A'}</td>
+                              <td className="px-4 py-2.5 text-slate-600">{profile?.college_name || profile?.college || 'Main Campus'}</td>
+                              <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">
+                                {reg.registered_at ? new Date(reg.registered_at).toLocaleDateString() : 'N/A'}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                <span
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                    isAttended
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {isAttended ? 'Verified' : 'Pending'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                  {activeExportEventRegs.length > 5 && (
+                    <div className="p-2 bg-slate-50 text-center text-[11px] text-slate-500 border-t border-slate-100">
+                      Showing 5 of {activeExportEventRegs.length} registered students. Download the full CSV for complete details.
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Section 2: 6 Dedicated Export Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Card 1: Student Attendance Report */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </span>
+                  <span className="text-xs font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    {totalAttendedCount} Verified
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-slate-900">Student Attendance Report</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Full door check-in logs with verified attendee names, roll numbers, venues, exact timestamps, and verification status.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  onClick={handleExportAttendanceCSV}
+                  className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  onClick={handleExportAttendanceExcel}
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Excel</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Card 2: All Student Registrations */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="p-2 bg-indigo-50 text-indigo-700 rounded-xl">
+                    <Users className="w-5 h-5" />
+                  </span>
+                  <span className="text-xs font-mono font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                    {totalRegistrationsCount} Total
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-slate-900">All Student Registrations</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Master registry of all student registrations across all symposium sessions with pass codes, contact info, and status.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  onClick={handleExportAllRegistrationsCSV}
+                  className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  onClick={handleExportEventRegistrationsExcel}
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Excel</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Card 3: Coordinators & Login Presence */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="p-2 bg-amber-50 text-amber-700 rounded-xl">
+                    <UserCheck className="w-5 h-5" />
+                  </span>
+                  <span className="text-xs font-mono font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                    {coordinatorCount} Coords • {onlineCount} Online
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-slate-900">Coordinators & Logins</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Coordinator roster, assigned departments, contact info, live login status (online presence), and security passcode status.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  onClick={handleExportCoordinatorsCSV}
+                  className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  onClick={handleExportCoordinatorsExcel}
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Excel</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Card 4: Registered Students Directory */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="p-2 bg-sky-50 text-sky-700 rounded-xl">
+                    <Building className="w-5 h-5" />
+                  </span>
+                  <span className="text-xs font-mono font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200">
+                    {studentCount} Students
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-slate-900">Student Directory</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  All registered student profiles, colleges, departments, roll numbers, contact emails, and registration dates.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  onClick={handleExportStudentsCSV}
+                  className="flex-1 py-2 px-3 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  onClick={handleExportStudentsExcel}
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Excel</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Card 5: Email & Pass Dispatch Audit */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="p-2 bg-purple-50 text-purple-700 rounded-xl">
+                    <Mail className="w-5 h-5" />
+                  </span>
+                  <span className="text-xs font-mono font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                    {registrations.length} Passes Sent
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-slate-900">Email & Pass Delivery Log</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Audit trail of registration passes dispatched to students, including recipient email, timestamp, and delivery status.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  onClick={handleExportEmailDispatchCSV}
+                  className="flex-1 py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  onClick={handleExportEmailDispatchExcel}
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Excel</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Card 6: All System Users Directory */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="p-2 bg-slate-100 text-slate-700 rounded-xl">
+                    <ShieldCheck className="w-5 h-5" />
+                  </span>
+                  <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                    {(profilesList || []).length} Accounts
+                  </span>
+                </div>
+                <h4 className="text-sm font-bold text-slate-900">Master Users Directory</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Complete user directory of all accounts (students, coordinators, administrators) with permission roles and identifiers.
+                </p>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                <button
+                  onClick={handleExportAllUsersCSV}
+                  className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>CSV</span>
+                </button>
+                <button
+                  onClick={handleExportMultiSheetUsers}
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  title="Export multi-sheet Excel with tabs for Students, Coordinators, Admins"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Multi-Sheet</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
