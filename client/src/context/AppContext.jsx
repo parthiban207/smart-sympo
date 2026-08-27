@@ -243,6 +243,7 @@ export const AppProvider = ({ children }) => {
   const profileFetchingRef = useRef(new Set());
   const lastProfileFetchTimeRef = useRef({});
   const currentUserRef = useRef(currentUser);
+  const profilesEndpointFailedRef = useRef(false);
 
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -256,7 +257,7 @@ export const AppProvider = ({ children }) => {
     // Debounce: Prevent rapid concurrent or repeated calls for the same user
     const now = Date.now();
     if (profileFetchingRef.current.has(userId)) return;
-    if (!force && lastProfileFetchTimeRef.current[userId] && (now - lastProfileFetchTimeRef.current[userId] < 4000)) {
+    if (!force && lastProfileFetchTimeRef.current[userId] && (now - lastProfileFetchTimeRef.current[userId] < 10000)) {
       return;
     }
 
@@ -273,10 +274,16 @@ export const AppProvider = ({ children }) => {
       (a) => a.id === userId || (cleanEmail && a.email?.toLowerCase() === cleanEmail)
     );
 
-    if (!isValidUUID(userId)) {
-      if (localMatch) {
-        syncUserStorage(localMatch);
-      }
+    if (!isValidUUID(userId) || profilesEndpointFailedRef.current) {
+      const fallback = localMatch || {
+        id: userId,
+        email: cleanEmail,
+        name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
+        full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
+        role: 'student',
+        college_id: `STU-${userId.slice(0, 6).toUpperCase()}`,
+      };
+      syncUserStorage(fallback);
       profileFetchingRef.current.delete(userId);
       return;
     }
@@ -287,23 +294,26 @@ export const AppProvider = ({ children }) => {
         const merged = { ...(localMatch || {}), ...data };
         syncUserStorage(merged);
       } else {
+        if (error && (error.code === '500' || error.message?.includes('500') || error.status === 500)) {
+          profilesEndpointFailedRef.current = true;
+        }
         const fallback = localMatch || {
           id: userId,
           email: cleanEmail,
-          name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'Student Attendee',
-          full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'Student Attendee',
+          name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
+          full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
           role: 'student',
           college_id: `STU-${userId.slice(0, 6).toUpperCase()}`,
         };
         syncUserStorage(fallback);
       }
     } catch (err) {
-      console.warn('Error fetching profile (silent catch):', err);
+      profilesEndpointFailedRef.current = true;
       const fallback = localMatch || {
         id: userId,
         email: cleanEmail,
-        name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'Student Attendee',
-        full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'Student Attendee',
+        name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
+        full_name: cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User',
         role: 'student',
         college_id: `STU-${userId.slice(0, 6).toUpperCase()}`,
       };
