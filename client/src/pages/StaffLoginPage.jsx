@@ -5,8 +5,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import Auth from '../components/Auth';
 import { UserCheck, Shield, QrCode, Signal, ArrowRight, Lock, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react';
 
-export default function StaffLoginPage() {
+export default function StaffLoginPage({ defaultRole = 'coordinator' }) {
   const navigate = useNavigate();
+  const isAdminPortal = defaultRole === 'admin';
   const [passcode, setPasscode] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -27,16 +28,31 @@ export default function StaffLoginPage() {
         {/* Left column: Staff Value Props & Security Info */}
         <div className="space-y-6 hidden md:block text-left">
           <div className="space-y-2">
-            <span className="text-[11px] uppercase font-bold px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 tracking-wider inline-flex items-center gap-1.5">
-              <UserCheck className="w-3.5 h-3.5 text-amber-400" />
-              Protected Staff Governance Portal
+            <span className={`text-[11px] uppercase font-bold px-3 py-1 rounded-full tracking-wider inline-flex items-center gap-1.5 ${
+              isAdminPortal
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+            }`}>
+              {isAdminPortal ? <Shield className="w-3.5 h-3.5 text-rose-400" /> : <UserCheck className="w-3.5 h-3.5 text-amber-400" />}
+              {isAdminPortal ? 'Executive Admin Governance' : 'Protected Staff Governance Portal'}
             </span>
             <h1 className="text-3xl font-bold text-white leading-tight tracking-tight">
-              Coordinator & Admin <br />
-              <span className="text-amber-400">Operations Console</span>
+              {isAdminPortal ? (
+                <>
+                  System Administrator <br />
+                  <span className="text-rose-400">Executive Panel</span>
+                </>
+              ) : (
+                <>
+                  Coordinator & Admin <br />
+                  <span className="text-amber-400">Operations Console</span>
+                </>
+              )}
             </h1>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Protected portal requiring authorized staff security code. Verify attendee QR passes, monitor postgres live attendance, and broadcast emergency alerts.
+              {isAdminPortal
+                ? 'Authorized administrator management console. Manage user roles, system capacity autolock, emergency broadcasts, and comprehensive symposium analytics.'
+                : 'Protected portal requiring authorized staff security code. Verify attendee QR passes, monitor postgres live attendance, and broadcast emergency alerts.'}
             </p>
           </div>
 
@@ -157,11 +173,11 @@ export default function StaffLoginPage() {
               </div>
 
               <Auth
-                targetRole="staff"
+                targetRole={isAdminPortal ? 'admin' : 'staff'}
                 initialMode="login"
                 onSuccess={(user) => {
                   const role = (user?.role || '').toLowerCase();
-                  if (role === 'admin' || user?.email?.toLowerCase().includes('admin')) {
+                  if (role === 'admin' || user?.email?.toLowerCase().includes('admin') || isAdminPortal) {
                     navigate('/admin', { replace: true });
                   } else if (role === 'coordinator' || user?.email?.toLowerCase().includes('coord')) {
                     navigate('/coordinator', { replace: true });

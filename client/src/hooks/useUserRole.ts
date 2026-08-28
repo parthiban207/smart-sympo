@@ -26,7 +26,9 @@ export function useUserRole() {
     setLoading(true);
     try {
       const meta = userObj?.user_metadata || {};
-      const fallbackRole = (meta.role as UserRole) || (typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_active_role') as UserRole : null) || 'student';
+      const fallbackRole: UserRole = (userEmail?.toLowerCase().includes('admin') || meta.username === 'admin')
+        ? 'admin'
+        : (meta.role as UserRole) || (typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_active_role') as UserRole : null) || (userEmail?.toLowerCase().includes('coord') ? 'coordinator' : 'student');
       const fallbackName = meta.full_name || meta.name || userEmail?.split('@')[0] || 'User';
 
       setRole(fallbackRole);
@@ -52,7 +54,9 @@ export function useUserRole() {
           .maybeSingle();
 
         if (data && !error) {
-          const fetchedRole = (data.role as UserRole) || fallbackRole;
+          const fetchedRole = (userEmail?.toLowerCase().includes('admin') || meta.username === 'admin')
+            ? 'admin'
+            : ((data.role as UserRole) || fallbackRole);
           setRole(fetchedRole);
           setProfile({
             id: data.id,

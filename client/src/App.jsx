@@ -44,21 +44,6 @@ function AuthSyncListener() {
   const location = useLocation();
 
   useEffect(() => {
-    // 0. Global Session Cleanup on Mount (clear stale localStorage auth keys on fresh login entry)
-    try {
-      const isAuthRoute = ['/login', '/login/student', '/login/staff', '/signup'].includes(location.pathname);
-      const hasValidSbToken = Object.keys(localStorage).some(
-        (k) => (k.startsWith('sb-') && k.endsWith('-auth-token')) || k === 'sb-access-token'
-      );
-
-      if (!hasValidSbToken && isAuthRoute) {
-        localStorage.removeItem('smart_sympo_user');
-        localStorage.removeItem('smart_sympo_active_role');
-      }
-    } catch (e) {
-      console.warn('[Session Cleanup Warning]:', e);
-    }
-
     if (isMockMode) return;
 
     // 1. Intercept password recovery tokens in URL hash or search params on initial load
@@ -80,7 +65,7 @@ function AuthSyncListener() {
         // Force navigate user directly to the reset-password route
         navigate('/reset-password', { replace: true });
       } else if (event === 'SIGNED_OUT') {
-        const publicPaths = ['/login', '/login/student', '/login/staff', '/signup', '/reset-password'];
+        const publicPaths = ['/login', '/login/student', '/login/staff', '/login/admin', '/admin/login', '/signup', '/reset-password'];
         const currentPath = window.location.pathname;
 
         if (!publicPaths.includes(currentPath) && !window.location.hash.includes('type=recovery')) {
@@ -93,7 +78,7 @@ function AuthSyncListener() {
     // 3. Storage listener across tabs
     const handleStorageChange = (e) => {
       if (e.key === 'smart_sympo_user' && !e.newValue) {
-        const publicPaths = ['/login', '/login/student', '/login/staff', '/signup', '/reset-password'];
+        const publicPaths = ['/login', '/login/student', '/login/staff', '/login/admin', '/admin/login', '/signup', '/reset-password'];
         const currentPath = window.location.pathname;
         if (!publicPaths.includes(currentPath) && !window.location.hash.includes('type=recovery')) {
           navigate('/login', { replace: true });
@@ -125,7 +110,9 @@ export default function App() {
               <Route path="/" element={<RootRouteRedirect />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/login/student" element={<StudentLoginPage />} />
-              <Route path="/login/staff" element={<StaffLoginPage />} />
+              <Route path="/login/staff" element={<StaffLoginPage defaultRole="coordinator" />} />
+              <Route path="/login/admin" element={<StaffLoginPage defaultRole="admin" />} />
+              <Route path="/admin/login" element={<StaffLoginPage defaultRole="admin" />} />
               <Route path="/signup" element={<StudentLoginPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
 

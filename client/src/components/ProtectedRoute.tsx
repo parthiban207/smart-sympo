@@ -26,19 +26,24 @@ export default function ProtectedRoute({ allowedRoles, children }: ProtectedRout
 
     const verifyAccess = async () => {
       try {
-        let hasActiveSession = isAuthenticated || Boolean(currentUser?.id);
+        const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_user') : null;
+        let savedUser = null;
+        try {
+          if (savedUserStr) savedUser = JSON.parse(savedUserStr);
+        } catch (_) {}
+
+        let hasActiveSession = isAuthenticated || Boolean(currentUser?.id) || Boolean(savedUser?.id);
 
         if (!isMockMode) {
-          const { data: sessionData, error } = await supabase.auth.getSession();
-          if (error || !sessionData?.session) {
-            hasActiveSession = false;
-          } else if (sessionData.session?.user) {
-            hasActiveSession = true;
-          }
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            if (sessionData?.session?.user) {
+              hasActiveSession = true;
+            }
+          } catch (_) {}
         }
 
-        const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('smart_sympo_user') : null;
-        if (!hasActiveSession && !savedUserStr) {
+        if (!hasActiveSession) {
           if (isMounted) {
             setIsAuthorized(false);
             setIsChecking(false);
@@ -47,11 +52,11 @@ export default function ProtectedRoute({ allowedRoles, children }: ProtectedRout
         }
 
         const savedRole = (typeof localStorage !== 'undefined'
-          ? localStorage.getItem('smart_sympo_active_role')
-          : null) as UserRole | null;
+          ? (localStorage.getItem('smart_sympo_active_role') as UserRole | null)
+          : null);
 
         const effectiveRole: UserRole =
-          (currentUser?.role as UserRole) || savedRole || 'student';
+          (currentUser?.role as UserRole) || (savedUser?.role as UserRole) || savedRole || 'student';
 
         const roleAllowed = allowedRoles.includes(effectiveRole);
         const authorized = hasActiveSession && roleAllowed;
