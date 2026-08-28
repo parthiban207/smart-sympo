@@ -19,17 +19,30 @@ export default function ViewRegisteredStudentsModal({
   // Filter registrations for this specific event
   const eventRegs = registrations.filter((r) => r.event_id === event.id);
 
-  // Map to full student profile objects
+  // Map to full student profile objects with real student names & roll numbers
   const registeredStudents = eventRegs.map((reg) => {
-    const profile = profilesList.find((p) => p.id === reg.student_id);
+    const profile = reg.profiles || profilesList.find((p) => p.id === reg.student_id);
+    const resolvedName =
+      profile?.full_name ||
+      profile?.name ||
+      (profile?.email ? profile.email.split('@')[0] : null) ||
+      `Student (${reg.student_id?.slice(0, 8)})`;
+    const resolvedEmail = profile?.email || reg.student_email || 'N/A';
+    const resolvedRollNo = profile?.roll_no || profile?.college_id || reg.student_id?.slice(0, 10);
+    const resolvedCollege = profile?.college || profile?.college_name || 'Main Campus';
+
     return {
       id: reg.id || reg.student_id,
       student_id: reg.student_id,
       registered_at: reg.registered_at,
-      name: profile?.full_name || profile?.name || `Student (${reg.student_id?.slice(0, 8)})`,
-      username: profile?.username || 'student',
-      email: profile?.email || 'N/A',
-      college_id: profile?.college_id || reg.student_id?.slice(0, 10),
+      attended: Boolean(reg.attended),
+      checked_in_at: reg.checked_in_at || reg.attended_at,
+      name: resolvedName,
+      username: profile?.username || (profile?.email ? profile.email.split('@')[0] : 'student'),
+      email: resolvedEmail,
+      college_id: resolvedRollNo,
+      roll_no: resolvedRollNo,
+      college: resolvedCollege,
       role: profile?.role || 'student',
     };
   });
@@ -41,6 +54,8 @@ export default function ViewRegisteredStudentsModal({
       student.name.toLowerCase().includes(query) ||
       student.email.toLowerCase().includes(query) ||
       student.college_id.toLowerCase().includes(query) ||
+      student.roll_no.toLowerCase().includes(query) ||
+      student.college.toLowerCase().includes(query) ||
       student.username.toLowerCase().includes(query)
     );
   });
@@ -162,16 +177,27 @@ export default function ViewRegisteredStudentsModal({
 
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="text-right">
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                      <UserCheck className="w-3 h-3 text-emerald-600" />
-                      Confirmed
-                    </span>
-                    {student.registered_at && (
+                    {student.attended ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        <UserCheck className="w-3 h-3 text-emerald-600" />
+                        Checked-In
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                        Registered
+                      </span>
+                    )}
+                    {student.checked_in_at ? (
+                      <div className="text-[9px] text-emerald-600 font-mono mt-1 flex items-center justify-end gap-1 font-medium">
+                        <Calendar className="w-2.5 h-2.5" />
+                        {new Date(student.checked_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    ) : student.registered_at ? (
                       <div className="text-[9px] text-slate-400 font-mono mt-1 flex items-center justify-end gap-1">
                         <Calendar className="w-2.5 h-2.5" />
                         {new Date(student.registered_at).toLocaleDateString()}
                       </div>
-                    )}
+                    ) : null}
                   </div>
 
                   <button

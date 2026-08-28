@@ -1,7 +1,8 @@
-// agent-notes: { ctx: "Coordinator touch console with live attendance feed, student passcode guard and hall controls", deps: ["src/context/AppContext.jsx", "src/components/QRScannerModal.jsx", "src/components/PassCodeGuardModal.jsx", "src/components/StudentQRModal.jsx", "lucide-react"], state: "active", last: "antigravity@2026-07-31" }
+// agent-notes: { ctx: "Coordinator touch console with relational profile fetching, real student names, roll numbers, accurate stats, and realtime listener", deps: ["src/context/AppContext.jsx", "src/components/QRScannerModal.jsx", "src/components/PassCodeGuardModal.jsx", "src/components/StudentQRModal.jsx", "src/supabaseClient.ts", "lucide-react"], state: "active", last: "antigravity@2026-08-28" }
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import { supabase, isMockMode } from '../supabaseClient';
 import QRScannerModal from '../components/QRScannerModal';
 import PassCodeGuardModal from '../components/PassCodeGuardModal';
 import StudentQRModal from '../components/StudentQRModal';
@@ -27,6 +28,8 @@ import {
   Hash,
   Globe,
   StopCircle,
+  RefreshCw,
+  Calendar,
 } from 'lucide-react';
 
 export default function CoordinatorConsole() {
@@ -36,8 +39,13 @@ export default function CoordinatorConsole() {
     liveAlerts, clearGlobalEmergencyBroadcast
   } = useApp();
   const [selectedHall, setSelectedHall] = useState('Hall 1 (Main Auditorium)');
+  const [selectedEventId, setSelectedEventId] = useState('');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [nudgeStatus, setNudgeStatus] = useState(null);
+
+  // Relational Event Registrations and Live Stats State
+  const [eventRegistrations, setEventRegistrations] = useState([]);
+  const [isFetchingAttendance, setIsFetchingAttendance] = useState(false);
 
   useEffect(() => {
     fetchEvents();
@@ -80,29 +88,181 @@ export default function CoordinatorConsole() {
   // Available halls
   const halls = Array.from(new Set(events.map((e) => e.hall_number)));
 
-  // Current active event in selected hall
-  const activeEvent = events.find((e) => e.hall_number === selectedHall);
+  // Current active event for selected hall / selected event
+  const currentEvent =
+    events.find((e) => e.id === selectedEventId) ||
+    events.find((e) => e.hall_number === selectedHall) ||
+    events[0];
 
-  // Registered students for this event
-  const eventRegs = activeEvent ? registrations.filter((r) => r.event_id === activeEvent.id) : [];
+  // Helper to fetch registrations with relational profiles for currentEvent
+  const fetchRegistrationsAndStats = useCallback(async () => {
+    if (!currentEvent?.id) return;
+    try {
+      setIsFetchingAttendance(true);
+      let fetchedRows = null;
 
-  // Scanned in student IDs
-  const checkedInStudentIds = activeEvent
-    ? attendanceLogs
-        .filter((log) => log.event_id === activeEvent.id && log.status === 'Checked-In')
-        .map((log) => log.student_id)
-    : [];
+      if (!isMockMode) {
+        try {
+          const { data, error } = await supabase
+            .from('registrations')
+            .select(`
+              id,
+              attended,
+              checked_in_at,
+              attended_at,
+              student_id,
+              event_id,
+              registered_at,
+              profiles (
+                id,
+                full_name,
+                name,
+                email,
+                roll_no,
+                college_id,
+                college,
+                college_name
+              )
+            `)
+            .eq('event_id', currentEvent.id)
+            .order('checked_in_at', { ascending: false, nullsFirst: false });
 
-  // Missing students
-  const missingRegs = eventRegs.filter((r) => !checkedInStudentIds.includes(r.student_id));
+          if (!error && data) {
+            fetchedRows = data;
+          } else if (error) {
+            // If PostgREST relationship uses profiles:student_id syntax
+            const { data: fallbackData, error: fbError } = await supabase
+              .from('registrations')
+              .select(`
+                id,
+                attended,
+                checked_in_at,
+                attended_at,
+                student_id,
+                event_id,
+                registered_at,
+                profiles:student_id (
+                  id,
+                  full_name,
+                  name,
+                  email,
+                  roll_no,
+                  college_id,
+                  college,
+                  college_name
+                )
+              `)
+              .eq('event_id', currentEvent.id)
+              .order('checked_in_at', { ascending: false, nullsFirst: false });
 
-  // Live attendance log stream for active hall
-  const liveHallLogs = activeEvent
-    ? attendanceLogs.filter((log) => log.event_id === activeEvent.id || log.hall_number === selectedHall)
-    : attendanceLogs;
+            if (!fbError && fallbackData) {
+              fetchedRows = fallbackData;
+            }
+          }
+        } catch (dbErr) {
+          console.warn('[CoordinatorConsole Relational Fetch Error]:', dbErr);
+        }
+      }
+
+      if (fetchedRows) {
+        setEventRegistrations(fetchedRows);
+      } else {
+        // Fallback: build from context state + profilesList
+        const localMatched = (registrations || [])
+          .filter((r) => r.event_id === currentEvent.id)
+          .map((r) => {
+            const profile = (profilesList || []).find((p) => p.id === r.student_id);
+            return {
+              ...r,
+              profiles: r.profiles || profile || {
+                id: r.student_id,
+                full_name: r.student_name || 'Student Attendee',
+                email: r.student_email || '',
+                roll_no: r.roll_no || r.college_id || '',
+                college: r.college || 'Main Campus',
+              },
+            };
+          });
+        setEventRegistrations(localMatched);
+      }
+    } catch (err) {
+      console.error('CoordinatorConsole error loading stats & scans:', err);
+    } finally {
+      setIsFetchingAttendance(false);
+    }
+  }, [currentEvent?.id, registrations, profilesList]);
+
+  // Initial Fetch & Realtime Attendance Listener for the selected event
+  useEffect(() => {
+    if (!currentEvent?.id) return;
+    fetchRegistrationsAndStats();
+
+    if (!isMockMode) {
+      const channel = supabase
+        .channel(`coordinator:live-attendance:${currentEvent.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'registrations',
+            filter: `event_id=eq.${currentEvent.id}`,
+          },
+          () => {
+            fetchRegistrationsAndStats();
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'attendance_logs',
+            filter: `event_id=eq.${currentEvent.id}`,
+          },
+          () => {
+            fetchRegistrationsAndStats();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [currentEvent?.id, fetchRegistrationsAndStats]);
+
+  // Synchronize when global registrations state changes
+  useEffect(() => {
+    if (currentEvent?.id) {
+      fetchRegistrationsAndStats();
+    }
+  }, [registrations, currentEvent?.id, fetchRegistrationsAndStats]);
+
+  // 1. STATS CALCULATION FOR CURRENT SELECTED EVENT:
+  // Total Registered = Count of all rows in registrations for this event_id
+  const totalRegistered = eventRegistrations.length;
+
+  // Total Scanned = Count of rows where event_id = currentEvent.id AND attended = true
+  const totalScanned = eventRegistrations.filter((r) => Boolean(r.attended)).length;
+
+  // Pending Check-In = Total Registered - Total Scanned
+  const pendingCheckIn = Math.max(0, totalRegistered - totalScanned);
+
+  // Success Rate = Total Registered > 0 ? Math.round((Total Scanned / Total Registered) * 100) : 0
+  const successRate = totalRegistered > 0 ? Math.round((totalScanned / totalRegistered) * 100) : 0;
+
+  // 2. RECENT SCANS FOR CURRENT SELECTED EVENT (Ordered by scanned time descending)
+  const recentScans = eventRegistrations
+    .filter((r) => Boolean(r.attended))
+    .sort((a, b) => {
+      const timeA = new Date(a.checked_in_at || a.attended_at || 0).getTime();
+      const timeB = new Date(b.checked_in_at || b.attended_at || 0).getTime();
+      return timeB - timeA;
+    });
 
   const handleStartEvent = () => {
-    if (activeEvent) updateHallStatus(activeEvent.id, 'In Progress', 0);
+    if (currentEvent) updateHallStatus(currentEvent.id, 'In Progress', 0);
   };
 
   const handleAddSubmit = async (e) => {
@@ -164,14 +324,14 @@ export default function CoordinatorConsole() {
   };
 
   const handleDelayEvent = () => {
-    if (activeEvent) {
-      const currentDelay = activeEvent.delay_minutes || 0;
-      updateHallStatus(activeEvent.id, 'Delayed', currentDelay + 10);
+    if (currentEvent) {
+      const currentDelay = currentEvent.delay_minutes || 0;
+      updateHallStatus(currentEvent.id, 'Delayed', currentDelay + 10);
     }
   };
 
   const handleEndEvent = () => {
-    if (activeEvent) updateHallStatus(activeEvent.id, 'Completed', 0);
+    if (currentEvent) updateHallStatus(currentEvent.id, 'Completed', 0);
   };
 
   const handleNudgeMissing = (studentId) => {
@@ -188,14 +348,9 @@ export default function CoordinatorConsole() {
     setIsPassModalOpen(true);
   };
 
-  const totalRegisteredCount = eventRegs.length;
-  const totalScannedCount = checkedInStudentIds.length;
-  const pendingCount = missingRegs.length;
-  const successRate = totalRegisteredCount > 0 ? Math.round((totalScannedCount / totalRegisteredCount) * 100) : 0;
-
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-      {/* 1. Sleek Venue Control Header */}
+      {/* 1. Sleek Venue & Event Control Header */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold text-slate-900 tracking-tight">
@@ -207,12 +362,18 @@ export default function CoordinatorConsole() {
         </div>
 
         <div className="w-full sm:w-auto flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+          {/* Hall Selector */}
           <div className="flex items-center gap-2 flex-1 sm:flex-none">
             <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
             <select
               value={selectedHall}
-              onChange={(e) => setSelectedHall(e.target.value)}
-              className="w-full sm:w-56 bg-slate-50 border border-slate-200/90 text-slate-900 font-semibold text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
+              onChange={(e) => {
+                const newHall = e.target.value;
+                setSelectedHall(newHall);
+                const matchingEvent = events.find((ev) => ev.hall_number === newHall);
+                if (matchingEvent) setSelectedEventId(matchingEvent.id);
+              }}
+              className="w-full sm:w-52 bg-slate-50 border border-slate-200/90 text-slate-900 font-semibold text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
             >
               {halls.map((hall) => (
                 <option key={hall} value={hall}>
@@ -221,6 +382,39 @@ export default function CoordinatorConsole() {
               ))}
             </select>
           </div>
+
+          {/* Event Selector (if multiple events in hall or venue) */}
+          {events.length > 1 && (
+            <div className="flex items-center gap-2 flex-1 sm:flex-none">
+              <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+              <select
+                value={currentEvent?.id || ''}
+                onChange={(e) => {
+                  const evId = e.target.value;
+                  setSelectedEventId(evId);
+                  const evObj = events.find((ev) => ev.id === evId);
+                  if (evObj && evObj.hall_number) setSelectedHall(evObj.hall_number);
+                }}
+                className="w-full sm:w-52 bg-slate-50 border border-slate-200/90 text-slate-900 font-semibold text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
+              >
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.title} ({ev.hall_number})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Manual Refresh Button */}
+          <button
+            onClick={() => fetchRegistrationsAndStats()}
+            title="Refresh Attendance Stats"
+            disabled={isFetchingAttendance}
+            className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isFetchingAttendance ? 'animate-spin text-indigo-600' : ''}`} />
+          </button>
 
           <button
             onClick={() => setShowAddModal(true)}
@@ -241,21 +435,21 @@ export default function CoordinatorConsole() {
             <span>Total Scanned</span>
           </div>
           <div className="text-3xl font-extrabold text-emerald-950 font-mono tracking-tight">
-            {totalScannedCount}
+            {totalScanned}
           </div>
           <p className="text-[11px] text-emerald-700/80 font-medium">
-            Verified check-ins in {activeEvent?.title ? `"${activeEvent.title}"` : selectedHall}
+            Verified check-ins in {currentEvent?.title ? `"${currentEvent.title}"` : selectedHall}
           </p>
         </div>
 
-        {/* Stat 2: Pending */}
+        {/* Stat 2: Pending Check-In */}
         <div className="bg-amber-50/70 border border-amber-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
           <div className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
             <Clock className="w-4 h-4 text-amber-600" />
             <span>Pending Check-In</span>
           </div>
           <div className="text-3xl font-extrabold text-amber-950 font-mono tracking-tight">
-            {pendingCount}
+            {pendingCheckIn}
           </div>
           <p className="text-[11px] text-amber-700/80 font-medium">
             Registered students awaiting venue check-in
@@ -272,13 +466,13 @@ export default function CoordinatorConsole() {
             {successRate}%
           </div>
           <p className="text-[11px] text-indigo-700/80 font-medium">
-            {totalScannedCount} of {totalRegisteredCount} students present
+            {totalScanned} of {totalRegistered} students present
           </p>
         </div>
       </div>
 
       {/* 3. Main Body Grid: Scanner Card & Live Recent Scans */}
-      {!activeEvent ? (
+      {!currentEvent ? (
         <div className="bg-white p-12 rounded-2xl border border-slate-200/80 shadow-xs text-center text-slate-500 text-xs">
           No active symposium event is currently assigned to <strong className="text-slate-700">{selectedHall}</strong>.
         </div>
@@ -298,9 +492,14 @@ export default function CoordinatorConsole() {
                   </p>
                 </div>
 
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-mono">
-                  {selectedHall}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono truncate max-w-[180px]">
+                    {currentEvent.title}
+                  </span>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-mono">
+                    {currentEvent.hall_number || selectedHall}
+                  </span>
+                </div>
               </div>
 
               {/* Centered Clean Viewfinder Box */}
@@ -333,15 +532,15 @@ export default function CoordinatorConsole() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      setSelectedRosterEvent(activeEvent);
+                      setSelectedRosterEvent(currentEvent);
                       setShowRosterModal(true);
                     }}
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
                   >
-                    View Roster ({totalRegisteredCount})
+                    View Roster ({totalRegistered})
                   </button>
                   <button
-                    onClick={() => handleEditClick(activeEvent)}
+                    onClick={() => handleEditClick(currentEvent)}
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
                   >
                     Edit Event
@@ -372,7 +571,7 @@ export default function CoordinatorConsole() {
             </div>
           </div>
 
-          {/* Recent Scans Lightweight Feed (5 Cols) */}
+          {/* Recent Scans Relational Feed (5 Cols) */}
           <div className="lg:col-span-5 space-y-5">
             <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -380,45 +579,60 @@ export default function CoordinatorConsole() {
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   Recent Scans
                 </h3>
-                <span className="text-[11px] font-semibold text-slate-500 font-mono">
-                  {liveHallLogs.length} Scanned
+                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full font-mono">
+                  {recentScans.length} Scanned
                 </span>
               </div>
 
-              {/* Clean Lightweight Scans List (No excessive nested tags) */}
+              {/* Clean Lightweight Scans List with Real Student Names, Roll No, & Scanned Time */}
               <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-                {liveHallLogs.length === 0 ? (
+                {recentScans.length === 0 ? (
                   <div className="text-center py-10 text-xs text-slate-400">
-                    No scans recorded yet for this venue.
+                    No scans recorded yet for {currentEvent.title}.
                   </div>
                 ) : (
-                  liveHallLogs.slice(0, 15).map((log) => {
-                    const studentProfile = (profilesList || []).find((p) => p.id === log.student_id);
+                  recentScans.slice(0, 15).map((scan) => {
+                    const studentProfile = scan.profiles;
                     const studentName =
-                      log.guest_name ||
                       studentProfile?.full_name ||
                       studentProfile?.name ||
-                      (log.student_id ? `Student ${log.student_id.slice(0, 6)}` : 'Attendee');
-                    const timeString = log.check_in_time
-                      ? new Date(log.check_in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      (studentProfile?.email ? studentProfile.email.split('@')[0] : null) ||
+                      'Student Name';
+                    const rollNo = studentProfile?.roll_no || studentProfile?.college_id;
+                    const scannedTime = scan.checked_in_at || scan.attended_at;
+                    const timeString = scannedTime
+                      ? new Date(scannedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                       : 'Just now';
 
                     return (
                       <div
-                        key={log.id}
-                        className="py-2.5 px-3 bg-slate-50/80 hover:bg-slate-100/80 rounded-xl border border-slate-100 flex items-center justify-between text-xs transition-colors"
+                        key={scan.id}
+                        className="py-2.5 px-3.5 bg-slate-50/90 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs transition-colors"
                       >
-                        <div className="min-w-0 flex-1 pr-2">
-                          <div className="font-semibold text-slate-900 truncate">
-                            {studentName}
+                        <div className="min-w-0 flex-1 pr-3">
+                          <div className="font-bold text-slate-900 truncate flex items-center gap-1.5">
+                            <span>{studentName}</span>
+                            {studentProfile?.college && (
+                              <span className="text-[10px] text-slate-400 font-normal truncate">
+                                • {studentProfile.college}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[10px] text-slate-500 truncate">
-                            {activeEvent.title}
+                          <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                            {rollNo && (
+                              <span className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 text-[10px] font-semibold">
+                                {rollNo}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-slate-400 truncate">
+                              {currentEvent.title}
+                            </span>
                           </div>
                         </div>
 
-                        <div className="text-right shrink-0">
-                          <span className="text-[11px] font-mono text-slate-500">
+                        <div className="text-right shrink-0 flex flex-col items-end">
+                          <span className="text-[11px] font-mono font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             {timeString}
                           </span>
                         </div>
