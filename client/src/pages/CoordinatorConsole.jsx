@@ -650,7 +650,7 @@ export default function CoordinatorConsole() {
       <StudentQRModal
         isOpen={isPassModalOpen}
         onClose={() => setIsPassModalOpen(false)}
-        event={activeEvent}
+        event={currentEvent}
       />
 
       {/* Create Event Modal */}
