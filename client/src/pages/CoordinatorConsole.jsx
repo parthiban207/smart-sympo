@@ -43,7 +43,14 @@ export default function CoordinatorConsole() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [nudgeStatus, setNudgeStatus] = useState(null);
 
-  // Relational Event Registrations and Live Stats State
+  // Stats State & Recent Scans State for current event
+  const [stats, setStats] = useState({
+    totalRegistered: 0,
+    totalScanned: 0,
+    pendingCheckIn: 0,
+    successRate: 0,
+  });
+  const [recentScans, setRecentScans] = useState([]);
   const [eventRegistrations, setEventRegistrations] = useState([]);
   const [isFetchingAttendance, setIsFetchingAttendance] = useState(false);
 
@@ -94,82 +101,63 @@ export default function CoordinatorConsole() {
     events.find((e) => e.hall_number === selectedHall) ||
     events[0];
 
-  // Helper to fetch registrations with relational profiles for currentEvent
-  const fetchRegistrationsAndStats = useCallback(async () => {
-    if (!currentEvent?.id) return;
+  // 1. Fetch All Registrations for the Event (Both attended and pending)
+  const fetchEventStats = useCallback(async (eventId) => {
+    if (!eventId) return;
+
+    setIsFetchingAttendance(true);
     try {
-      setIsFetchingAttendance(true);
-      let fetchedRows = null;
+      let allRegistrations = null;
 
       if (!isMockMode) {
-        try {
-          const { data, error } = await supabase
+        const { data, error } = await supabase
+          .from('registrations')
+          .select(`
+            id,
+            attended,
+            checked_in_at,
+            student_id,
+            profiles (
+              id,
+              full_name,
+              email,
+              roll_no,
+              college
+            )
+          `)
+          .eq('event_id', eventId);
+
+        if (error) {
+          console.error("Error fetching stats:", error);
+          // Fallback relationship query syntax if PostgREST requires named FK
+          const { data: fallbackData, error: fbError } = await supabase
             .from('registrations')
             .select(`
               id,
               attended,
               checked_in_at,
-              attended_at,
               student_id,
-              event_id,
-              registered_at,
-              profiles (
+              profiles:student_id (
                 id,
                 full_name,
-                name,
                 email,
                 roll_no,
-                college_id,
-                college,
-                college_name
+                college
               )
             `)
-            .eq('event_id', currentEvent.id)
-            .order('checked_in_at', { ascending: false, nullsFirst: false });
+            .eq('event_id', eventId);
 
-          if (!error && data) {
-            fetchedRows = data;
-          } else if (error) {
-            // If PostgREST relationship uses profiles:student_id syntax
-            const { data: fallbackData, error: fbError } = await supabase
-              .from('registrations')
-              .select(`
-                id,
-                attended,
-                checked_in_at,
-                attended_at,
-                student_id,
-                event_id,
-                registered_at,
-                profiles:student_id (
-                  id,
-                  full_name,
-                  name,
-                  email,
-                  roll_no,
-                  college_id,
-                  college,
-                  college_name
-                )
-              `)
-              .eq('event_id', currentEvent.id)
-              .order('checked_in_at', { ascending: false, nullsFirst: false });
-
-            if (!fbError && fallbackData) {
-              fetchedRows = fallbackData;
-            }
+          if (!fbError && fallbackData) {
+            allRegistrations = fallbackData;
           }
-        } catch (dbErr) {
-          console.warn('[CoordinatorConsole Relational Fetch Error]:', dbErr);
+        } else {
+          allRegistrations = data;
         }
       }
 
-      if (fetchedRows) {
-        setEventRegistrations(fetchedRows);
-      } else {
-        // Fallback: build from context state + profilesList
-        const localMatched = (registrations || [])
-          .filter((r) => r.event_id === currentEvent.id)
+      if (!allRegistrations) {
+        allRegistrations = (registrations || [])
+          .filter((r) => r.event_id === eventId)
           .map((r) => {
             const profile = (profilesList || []).find((p) => p.id === r.student_id);
             return {
@@ -183,23 +171,41 @@ export default function CoordinatorConsole() {
               },
             };
           });
-        setEventRegistrations(localMatched);
       }
+
+      const total = allRegistrations?.length || 0;
+      const scanned = allRegistrations?.filter(r => r.attended === true || r.checked_in_at !== null).length || 0;
+      const pending = total - scanned;
+      const rate = total > 0 ? Math.round((scanned / total) * 100) : 0;
+
+      setStats({
+        totalRegistered: total,
+        totalScanned: scanned,
+        pendingCheckIn: pending >= 0 ? pending : 0,
+        successRate: rate,
+      });
+
+      // Recent scans sorted by checked_in_at
+      const attendedList = allRegistrations
+        ?.filter(r => r.attended === true)
+        ?.sort((a, b) => new Date(b.checked_in_at || 0) - new Date(a.checked_in_at || 0)) || [];
+      setRecentScans(attendedList);
+      setEventRegistrations(allRegistrations);
     } catch (err) {
-      console.error('CoordinatorConsole error loading stats & scans:', err);
+      console.error("Error in fetchEventStats:", err);
     } finally {
       setIsFetchingAttendance(false);
     }
-  }, [currentEvent?.id, registrations, profilesList]);
+  }, [registrations, profilesList]);
 
-  // Initial Fetch & Realtime Attendance Listener for the selected event
+  // 2. Real-time Subscription: listen on registrations channel for active event
   useEffect(() => {
     if (!currentEvent?.id) return;
-    fetchRegistrationsAndStats();
+    fetchEventStats(currentEvent.id);
 
     if (!isMockMode) {
       const channel = supabase
-        .channel(`coordinator:live-attendance:${currentEvent.id}`)
+        .channel(`coordinator:registrations:${currentEvent.id}`)
         .on(
           'postgres_changes',
           {
@@ -209,7 +215,7 @@ export default function CoordinatorConsole() {
             filter: `event_id=eq.${currentEvent.id}`,
           },
           () => {
-            fetchRegistrationsAndStats();
+            fetchEventStats(currentEvent.id);
           }
         )
         .on(
@@ -221,7 +227,7 @@ export default function CoordinatorConsole() {
             filter: `event_id=eq.${currentEvent.id}`,
           },
           () => {
-            fetchRegistrationsAndStats();
+            fetchEventStats(currentEvent.id);
           }
         )
         .subscribe();
@@ -230,36 +236,14 @@ export default function CoordinatorConsole() {
         supabase.removeChannel(channel);
       };
     }
-  }, [currentEvent?.id, fetchRegistrationsAndStats]);
+  }, [currentEvent?.id, fetchEventStats]);
 
   // Synchronize when global registrations state changes
   useEffect(() => {
     if (currentEvent?.id) {
-      fetchRegistrationsAndStats();
+      fetchEventStats(currentEvent.id);
     }
-  }, [registrations, currentEvent?.id, fetchRegistrationsAndStats]);
-
-  // 1. STATS CALCULATION FOR CURRENT SELECTED EVENT:
-  // Total Registered = Count of all rows in registrations for this event_id
-  const totalRegistered = eventRegistrations.length;
-
-  // Total Scanned = Count of rows where event_id = currentEvent.id AND attended = true
-  const totalScanned = eventRegistrations.filter((r) => Boolean(r.attended)).length;
-
-  // Pending Check-In = Total Registered - Total Scanned
-  const pendingCheckIn = Math.max(0, totalRegistered - totalScanned);
-
-  // Success Rate = Total Registered > 0 ? Math.round((Total Scanned / Total Registered) * 100) : 0
-  const successRate = totalRegistered > 0 ? Math.round((totalScanned / totalRegistered) * 100) : 0;
-
-  // 2. RECENT SCANS FOR CURRENT SELECTED EVENT (Ordered by scanned time descending)
-  const recentScans = eventRegistrations
-    .filter((r) => Boolean(r.attended))
-    .sort((a, b) => {
-      const timeA = new Date(a.checked_in_at || a.attended_at || 0).getTime();
-      const timeB = new Date(b.checked_in_at || b.attended_at || 0).getTime();
-      return timeB - timeA;
-    });
+  }, [registrations, currentEvent?.id, fetchEventStats]);
 
   const handleStartEvent = () => {
     if (currentEvent) updateHallStatus(currentEvent.id, 'In Progress', 0);
@@ -408,7 +392,7 @@ export default function CoordinatorConsole() {
 
           {/* Manual Refresh Button */}
           <button
-            onClick={() => fetchRegistrationsAndStats()}
+            onClick={() => fetchEventStats(currentEvent?.id)}
             title="Refresh Attendance Stats"
             disabled={isFetchingAttendance}
             className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl transition-colors cursor-pointer shrink-0 disabled:opacity-50"
@@ -435,7 +419,7 @@ export default function CoordinatorConsole() {
             <span>Total Scanned</span>
           </div>
           <div className="text-3xl font-extrabold text-emerald-950 font-mono tracking-tight">
-            {totalScanned}
+            {stats.totalScanned}
           </div>
           <p className="text-[11px] text-emerald-700/80 font-medium">
             Verified check-ins in {currentEvent?.title ? `"${currentEvent.title}"` : selectedHall}
@@ -449,10 +433,10 @@ export default function CoordinatorConsole() {
             <span>Pending Check-In</span>
           </div>
           <div className="text-3xl font-extrabold text-amber-950 font-mono tracking-tight">
-            {pendingCheckIn}
+            {stats.pendingCheckIn}
           </div>
           <p className="text-[11px] text-amber-700/80 font-medium">
-            Registered students awaiting venue check-in
+            {stats.pendingCheckIn} students awaiting venue check-in
           </p>
         </div>
 
@@ -463,10 +447,10 @@ export default function CoordinatorConsole() {
             <span>Success Rate</span>
           </div>
           <div className="text-3xl font-extrabold text-indigo-950 font-mono tracking-tight">
-            {successRate}%
+            {stats.successRate}%
           </div>
           <p className="text-[11px] text-indigo-700/80 font-medium">
-            {totalScanned} of {totalRegistered} students present
+            {stats.totalScanned} of {stats.totalRegistered} students present
           </p>
         </div>
       </div>
@@ -537,7 +521,7 @@ export default function CoordinatorConsole() {
                     }}
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
                   >
-                    View Roster ({totalRegistered})
+                    View Roster ({stats.totalRegistered})
                   </button>
                   <button
                     onClick={() => handleEditClick(currentEvent)}
