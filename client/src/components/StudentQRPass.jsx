@@ -35,17 +35,16 @@ export default function StudentQRPass({
     return () => clearInterval(timer);
   }, []);
 
-  // Generate payload encoding REAL student ID, registration ID, email, and timestamp token
+  // Generate streamlined payload encoding essential verification keys
   const payloadData = {
-    studentId: studentId || '',
     registrationId: registrationId || '',
+    studentId: studentId || '',
+    eventId: eventId || '',
     email: studentEmail || '',
     student_id: studentId || '',
     registration_id: registrationId || '',
-    user_id: studentId || '',
     event_id: eventId || '',
     timestamp: tokenTimestamp,
-    refresh_rate_sec: 15,
   };
 
   const qrPayloadString = JSON.stringify(payloadData);
@@ -54,12 +53,12 @@ export default function StudentQRPass({
   return (
     <div className="flex flex-col items-center w-full space-y-3.5">
       {/* 15-Second Refresh Status Header */}
-      <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs">
+      <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs">
         <div className="flex items-center gap-1.5">
           <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isRefreshing ? 'animate-spin' : ''}`} />
-          <span className="text-slate-600 font-medium">Dynamic TOTP</span>
+          <span className="text-slate-700 font-bold">Dynamic 15s Pass</span>
         </div>
-        <div className="flex items-center gap-1 font-mono font-bold text-indigo-600">
+        <div className="flex items-center gap-1 font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">
           <Clock className="w-3.5 h-3.5" />
           <span>{timeLeft}s</span>
         </div>
@@ -73,17 +72,18 @@ export default function StudentQRPass({
         ></div>
       </div>
 
-      {/* Centerpiece: Clean QR Code Card */}
-      <div className="relative bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-center">
+      {/* Centerpiece: Clean High-Contrast QR Code Card */}
+      <div className="relative bg-white p-5 rounded-2xl border-2 border-slate-200 shadow-sm flex items-center justify-center w-full max-w-[240px]">
         <QRCode
           value={qrPayloadString}
-          size={170}
+          size={190}
+          level="M"
           style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
           viewBox={`0 0 256 256`}
         />
         {isRefreshing && (
-          <div className="absolute inset-0 bg-slate-900/10 backdrop-blur-[1px] rounded-2xl flex items-center justify-center transition-opacity">
-            <RefreshCw className="w-7 h-7 text-indigo-600 animate-spin" />
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-[1px] rounded-2xl flex items-center justify-center transition-opacity">
+            <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
           </div>
         )}
       </div>

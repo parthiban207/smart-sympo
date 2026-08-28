@@ -81,14 +81,29 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
         await html5QrcodeRef.current.stop();
       }
 
-      const qrCodeScanner = new Html5Qrcode('qr-reader-target');
+      const qrCodeScanner = new Html5Qrcode('qr-reader-target', {
+        verbose: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+      });
       html5QrcodeRef.current = qrCodeScanner;
 
       await qrCodeScanner.start(
         { facingMode: mode },
         {
-          fps: 10,
-          qrbox: { width: 240, height: 240 },
+          fps: 25,
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const boxSize = Math.max(200, Math.floor(minEdge * 0.78));
+            return { width: boxSize, height: boxSize };
+          },
+          aspectRatio: 1.0,
+          videoConstraints: {
+            facingMode: mode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
         },
         async (decodedText) => {
           if (isProcessingScanRef.current) return;

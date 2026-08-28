@@ -1285,85 +1285,41 @@ export const AppProvider = ({ children }) => {
         };
       }
 
-      // 1. Locate registration from Supabase or local state
-      let matchedReg = null;
+      // 1. Locate registration: Check in-memory state FIRST for instant (0ms) response
+      let matchedReg = registrations.find((r) => {
+        if (registration_id && (r.id === registration_id || r.registration_id === registration_id)) return true;
+        if (pass_token && r.pass_token === pass_token) return true;
+        if (student_id && event_id && r.student_id === student_id && r.event_id === event_id) return true;
+        if (student_id && !event_id && r.student_id === student_id) return true;
+        return false;
+      });
+
       let dbStudentProfile = null;
       let dbEventObj = null;
 
-      if (!isMockMode) {
+      // If not found in in-memory state, query Supabase
+      if (!matchedReg && !isMockMode) {
         try {
-          // Attempt 1: Query by registration ID if provided and valid UUID
+          let query = supabase.from('registrations').select('*, profiles(*), events(*)');
           if (isValidUUID(registration_id)) {
-            const { data: regData } = await supabase
-              .from('registrations')
-              .select('*, profiles(*), events(*)')
-              .eq('id', registration_id)
-              .maybeSingle();
-            if (regData) {
-              matchedReg = regData;
-              dbStudentProfile = regData.profiles;
-              dbEventObj = regData.events;
-            }
+            query = query.eq('id', registration_id);
+          } else if (pass_token) {
+            query = query.eq('pass_token', pass_token);
+          } else if (isValidUUID(student_id) && isValidUUID(event_id)) {
+            query = query.eq('student_id', student_id).eq('event_id', event_id);
+          } else if (isValidUUID(student_id)) {
+            query = query.eq('student_id', student_id).limit(1);
           }
 
-          // Attempt 2: Query by pass_token if provided
-          if (!matchedReg && pass_token) {
-            const { data: regData } = await supabase
-              .from('registrations')
-              .select('*, profiles(*), events(*)')
-              .eq('pass_token', pass_token)
-              .maybeSingle();
-            if (regData) {
-              matchedReg = regData;
-              dbStudentProfile = regData.profiles;
-              dbEventObj = regData.events;
-            }
-          }
-
-          // Attempt 3: Query by student_id and event_id
-          if (!matchedReg && isValidUUID(student_id) && isValidUUID(event_id)) {
-            const { data: regData } = await supabase
-              .from('registrations')
-              .select('*, profiles(*), events(*)')
-              .eq('student_id', student_id)
-              .eq('event_id', event_id)
-              .maybeSingle();
-            if (regData) {
-              matchedReg = regData;
-              dbStudentProfile = regData.profiles;
-              dbEventObj = regData.events;
-            }
-          }
-
-          // Attempt 4: Query by student_id if only student_id is known
-          if (!matchedReg && isValidUUID(student_id)) {
-            const { data: regData } = await supabase
-              .from('registrations')
-              .select('*, profiles(*), events(*)')
-              .eq('student_id', student_id)
-              .order('registered_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            if (regData) {
-              matchedReg = regData;
-              dbStudentProfile = regData.profiles;
-              dbEventObj = regData.events;
-            }
+          const { data: regData } = await query.maybeSingle();
+          if (regData) {
+            matchedReg = regData;
+            dbStudentProfile = regData.profiles;
+            dbEventObj = regData.events;
           }
         } catch (dbErr) {
           console.warn('[Supabase Registration Query Catch]:', dbErr);
         }
-      }
-
-      // Fallback: Check in-memory / local registrations state
-      if (!matchedReg) {
-        matchedReg = registrations.find((r) => {
-          if (registration_id && (r.id === registration_id || r.registration_id === registration_id)) return true;
-          if (pass_token && r.pass_token === pass_token) return true;
-          if (student_id && event_id && r.student_id === student_id && r.event_id === event_id) return true;
-          if (student_id && !event_id && r.student_id === student_id) return true;
-          return false;
-        });
       }
 
       // IF INVALID QR / NOT REGISTERED:
@@ -1457,55 +1413,7 @@ export const AppProvider = ({ children }) => {
       const nowISO = new Date().toISOString();
       const coordinatorIdentifier = currentUser?.full_name || currentUser?.name || currentUser?.email || currentUser?.id || 'Coordinator';
 
-      // 1. Update Supabase
-      if (!isMockMode) {
-        try {
-          if (isValidUUID(matchedReg.id)) {
-            await supabase
-              .from('registrations')
-              .update({
-                attended: true,
-                checked_in_at: nowISO,
-                attended_at: nowISO,
-                scanned_by: coordinatorIdentifier,
-              })
-              .eq('id', matchedReg.id);
-          } else if (isValidUUID(regStudentId) && isValidUUID(regEventId)) {
-            await supabase
-              .from('registrations')
-              .update({
-                attended: true,
-                checked_in_at: nowISO,
-                attended_at: nowISO,
-                scanned_by: coordinatorIdentifier,
-              })
-              .eq('student_id', regStudentId)
-              .eq('event_id', regEventId);
-          }
-
-          const { data: dbLog } = await supabase
-            .from('attendance_logs')
-            .insert([
-              {
-                student_id: isValidUUID(regStudentId) ? regStudentId : null,
-                event_id: isValidUUID(regEventId) ? regEventId : null,
-                hall_number: eventHall,
-                check_in_time: nowISO,
-                status: 'Checked-In',
-              },
-            ])
-            .select()
-            .single();
-
-          if (dbLog) {
-            setAttendanceLogs((prev) => [dbLog, ...prev.filter((l) => l.id !== dbLog.id)]);
-          }
-        } catch (dbErr) {
-          console.warn('[Supabase Attendance Write Catch]:', dbErr);
-        }
-      }
-
-      // 2. Update local registrations state
+      // 1. Update local state immediately for 0ms visual feedback
       setRegistrations((prev) =>
         prev.map((r) => {
           if (
@@ -1524,7 +1432,6 @@ export const AppProvider = ({ children }) => {
         })
       );
 
-      // 3. Update local attendance logs if not already set
       const newAttendanceLog = {
         id: crypto.randomUUID ? crypto.randomUUID() : 'att-' + Date.now().toString(16),
         student_id: regStudentId,
@@ -1535,7 +1442,6 @@ export const AppProvider = ({ children }) => {
       };
       setAttendanceLogs((prev) => [newAttendanceLog, ...prev]);
 
-      // 4. Live alert notification
       setLiveAlerts((prev) => [
         {
           id: Date.now(),
@@ -1545,6 +1451,56 @@ export const AppProvider = ({ children }) => {
         },
         ...prev.slice(0, 4),
       ]);
+
+      // 2. Perform Supabase database persistence asynchronously in background
+      if (!isMockMode) {
+        (async () => {
+          try {
+            if (isValidUUID(matchedReg.id)) {
+              await supabase
+                .from('registrations')
+                .update({
+                  attended: true,
+                  checked_in_at: nowISO,
+                  attended_at: nowISO,
+                  scanned_by: coordinatorIdentifier,
+                })
+                .eq('id', matchedReg.id);
+            } else if (isValidUUID(regStudentId) && isValidUUID(regEventId)) {
+              await supabase
+                .from('registrations')
+                .update({
+                  attended: true,
+                  checked_in_at: nowISO,
+                  attended_at: nowISO,
+                  scanned_by: coordinatorIdentifier,
+                })
+                .eq('student_id', regStudentId)
+                .eq('event_id', regEventId);
+            }
+
+            const { data: dbLog } = await supabase
+              .from('attendance_logs')
+              .insert([
+                {
+                  student_id: isValidUUID(regStudentId) ? regStudentId : null,
+                  event_id: isValidUUID(regEventId) ? regEventId : null,
+                  hall_number: eventHall,
+                  check_in_time: nowISO,
+                  status: 'Checked-In',
+                },
+              ])
+              .select()
+              .single();
+
+            if (dbLog) {
+              setAttendanceLogs((prev) => [dbLog, ...prev.filter((l) => l.id !== dbLog.id && l.id !== newAttendanceLog.id)]);
+            }
+          } catch (dbErr) {
+            console.warn('[Supabase Attendance Background Write Catch]:', dbErr);
+          }
+        })();
+      }
 
       return {
         success: true,

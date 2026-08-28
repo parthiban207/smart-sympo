@@ -135,8 +135,8 @@ export default function CoordinatorScanner() {
       setOverlayState('error');
     }
 
-    // 3-Second Visual Countdown & Auto-Reset for Seamless Next Scan
-    setAutoResetCountdown(3);
+    // 2-Second Visual Countdown & Auto-Reset for Rapid Queue Scanning
+    setAutoResetCountdown(2);
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     countdownIntervalRef.current = setInterval(() => {
       setAutoResetCountdown((prev) => (prev && prev > 1 ? prev - 1 : null));
@@ -145,7 +145,7 @@ export default function CoordinatorScanner() {
     if (autoResetTimerRef.current) clearTimeout(autoResetTimerRef.current);
     autoResetTimerRef.current = setTimeout(() => {
       handleResetForNextScan();
-    }, 3000);
+    }, 2000);
   }, [handleResetForNextScan]);
 
   const startScanner = useCallback(async (mode: 'environment' | 'user') => {
@@ -154,12 +154,32 @@ export default function CoordinatorScanner() {
         await html5QrcodeRef.current.stop();
       }
 
-      const qrScanner = new Html5Qrcode('coordinator-qr-reader-target');
+      const qrScanner = new Html5Qrcode('coordinator-qr-reader-target', {
+        verbose: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+      });
       html5QrcodeRef.current = qrScanner;
 
       await qrScanner.start(
-        { facingMode: mode },
-        { fps: 10, qrbox: { width: 240, height: 240 } },
+        {
+          facingMode: mode,
+        },
+        {
+          fps: 25, // 25 fps for instantaneous barcode capture
+          qrbox: (viewfinderWidth, viewfinderHeight) => {
+            const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+            const boxSize = Math.max(200, Math.floor(minEdge * 0.78));
+            return { width: boxSize, height: boxSize };
+          },
+          aspectRatio: 1.0,
+          videoConstraints: {
+            facingMode: mode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
         async (decodedText: string) => {
           if (isProcessingScanRef.current) return;
           const res: ScanResultPayload = await verifyQRPass(decodedText, selectedHall);
@@ -175,7 +195,7 @@ export default function CoordinatorScanner() {
   useEffect(() => {
     const timer = setTimeout(() => {
       startScanner(facingMode);
-    }, 200);
+    }, 150);
 
     return () => {
       clearTimeout(timer);
