@@ -36,7 +36,9 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(initialMode);
 
   // Role selections
-  const [selectedStaffRole, setSelectedStaffRole] = useState<'coordinator' | 'admin'>('coordinator');
+  const [selectedStaffRole, setSelectedStaffRole] = useState<'coordinator' | 'admin'>(
+    targetRole === 'admin' ? 'admin' : 'coordinator'
+  );
   const [selectedSignupRole, setSelectedSignupRole] = useState<'student' | 'coordinator'>('student');
 
   // Form Fields
@@ -65,6 +67,13 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
       setMode(initialMode);
     }
   }, [initialMode]);
+
+  // Auto-detect admin credentials in staff portal
+  useEffect(() => {
+    if (isStaffMode && email.trim().toLowerCase().includes('admin')) {
+      setSelectedStaffRole('admin');
+    }
+  }, [email, isStaffMode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -169,11 +178,16 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           return;
         }
 
-        const expectedRole = isStaffMode ? selectedStaffRole.toLowerCase() : 'student';
+        const cleanEmail = email.trim().toLowerCase();
+        const expectedRole = (isStaffMode && (selectedStaffRole === 'admin' || cleanEmail.includes('admin')))
+          ? 'admin'
+          : isStaffMode
+          ? 'coordinator'
+          : 'student';
 
         // Authenticate credentials via Supabase
         const res = await signInWithSupabase({
-          email: email.trim(),
+          email: cleanEmail,
           password: password.trim(),
           targetRole: expectedRole,
         });
@@ -186,7 +200,11 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
 
         // Extract Fetched Database Role & Determine Destination
         const fetchedProfile = res.profile || res.user;
-        const userRole = (res.role || fetchedProfile?.role || 'student').toLowerCase();
+        const userRole = (
+          (cleanEmail.includes('admin') || expectedRole === 'admin' || res.role === 'admin' || fetchedProfile?.role === 'admin')
+            ? 'admin'
+            : (res.role || fetchedProfile?.role || 'student')
+        ).toLowerCase();
 
         // Strict Role Matching Check for Staff Portal
         if (isStaffMode && userRole === 'student') {

@@ -25,15 +25,9 @@ export default function Navbar() {
     navigate('/login', { replace: true });
   };
 
-  const handleGuardedNavigation = useCallback((targetPath, requiredRole) => {
-    if (requiredRole && activeRole !== requiredRole) {
-      if (activeRole === 'coordinator' && requiredRole === 'admin') {
-        return;
-      }
-      switchRole(requiredRole);
-    }
+  const handleGuardedNavigation = useCallback((targetPath) => {
     navigate(targetPath);
-  }, [activeRole, switchRole, navigate]);
+  }, [navigate]);
 
   return (
     <>
@@ -52,7 +46,7 @@ export default function Navbar() {
           {/* 2. Clean Navigation Tabs (Subtle Pill Active States) */}
           <nav className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-xl border border-slate-200/60">
             <button
-              onClick={() => handleGuardedNavigation('/student', 'student')}
+              onClick={() => handleGuardedNavigation('/student')}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 location.pathname.startsWith('/student') || location.pathname === '/'
                   ? 'bg-white text-slate-900 shadow-2xs'
@@ -65,7 +59,7 @@ export default function Navbar() {
             {(isCoordinatorRole || isAdminRole) && (
               <>
                 <button
-                  onClick={() => handleGuardedNavigation('/coordinator', 'coordinator')}
+                  onClick={() => handleGuardedNavigation('/coordinator')}
                   className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     location.pathname === '/coordinator'
                       ? 'bg-white text-slate-900 shadow-2xs'
@@ -75,7 +69,7 @@ export default function Navbar() {
                   Coordinator
                 </button>
                 <button
-                  onClick={() => handleGuardedNavigation('/scanner', 'coordinator')}
+                  onClick={() => handleGuardedNavigation('/scanner')}
                   className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     location.pathname.startsWith('/scanner')
                       ? 'bg-white text-indigo-700 shadow-2xs'
@@ -89,7 +83,7 @@ export default function Navbar() {
 
             {isAdminRole && (
               <button
-                onClick={() => handleGuardedNavigation('/admin', 'admin')}
+                onClick={() => handleGuardedNavigation('/admin')}
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   location.pathname.startsWith('/admin')
                     ? 'bg-white text-slate-900 shadow-2xs'

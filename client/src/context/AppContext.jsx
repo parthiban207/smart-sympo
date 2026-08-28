@@ -182,7 +182,14 @@ export const AppProvider = ({ children }) => {
 
     const emailStr = (userObj.email || '').trim().toLowerCase();
     const defaultName = emailStr.includes('@') ? emailStr.split('@')[0] : 'User';
-    const cleanRole = userObj.role || (emailStr.includes('admin') ? 'admin' : emailStr.includes('coord') ? 'coordinator' : 'student');
+    
+    // Explicitly identify admin vs coordinator vs student role
+    let cleanRole = userObj.role;
+    if (emailStr.includes('admin') || userObj.username === 'admin') {
+      cleanRole = 'admin';
+    } else if (!cleanRole) {
+      cleanRole = emailStr.includes('coord') ? 'coordinator' : 'student';
+    }
 
     const normalizedUser = {
       id: userObj.id || (crypto.randomUUID ? crypto.randomUUID() : 'user-' + Date.now().toString(16)),
@@ -190,7 +197,6 @@ export const AppProvider = ({ children }) => {
       full_name: userObj.full_name || userObj.name || defaultName,
       username: userObj.username || defaultName,
       email: emailStr,
-      role: cleanRole,
       college_id:
         userObj.college_id ||
         `${cleanRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -207,6 +213,7 @@ export const AppProvider = ({ children }) => {
       password: userObj.password || userObj.pass_code || 'student123',
       pass_code: userObj.pass_code || userObj.password || 'student123',
       ...userObj,
+      role: cleanRole, // Ensure role is always cleanRole and cannot be overwritten by stale userObj.role
     };
 
     setCurrentUser(normalizedUser);
@@ -261,9 +268,14 @@ export const AppProvider = ({ children }) => {
     );
 
     const meta = userObj?.user_metadata || {};
-    const effectiveRole = meta.role || localMatch?.role || 'student';
+    let effectiveRole = meta.role || localMatch?.role;
+    if (cleanEmail.includes('admin') || meta.username === 'admin') {
+      effectiveRole = 'admin';
+    } else if (!effectiveRole) {
+      effectiveRole = cleanEmail.includes('coord') ? 'coordinator' : 'student';
+    }
     const effectiveName = meta.full_name || meta.name || localMatch?.name || (cleanEmail.includes('@') ? cleanEmail.split('@')[0] : 'User');
-    const effectiveCollege = meta.college || meta.college_name || localMatch?.college || 'Symposium Campus';
+    const effectiveCollege = meta.college || meta.college_name || localMatch?.college || (effectiveRole === 'student' ? 'Main University / College' : 'Symposium Administration');
 
     const immediateProfile = {
       id: userId,
@@ -281,6 +293,8 @@ export const AppProvider = ({ children }) => {
       pass_code: meta.pass_code || localMatch?.pass_code || '2005',
       first_login: false,
       ...(localMatch || {}),
+      ...(meta || {}),
+      role: effectiveRole,
     };
 
     syncUserStorage(immediateProfile);
@@ -302,7 +316,16 @@ export const AppProvider = ({ children }) => {
     try {
       const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
       if (data && !error) {
-        const merged = { ...immediateProfile, ...data };
+        let dbDataRole = data.role;
+        if (cleanEmail.includes('admin') || meta.username === 'admin') {
+          dbDataRole = 'admin';
+          if (data.role !== 'admin') {
+            try {
+              await supabase.from('profiles').update({ role: 'admin' }).eq('id', userId);
+            } catch (_) {}
+          }
+        }
+        const merged = { ...immediateProfile, ...data, role: dbDataRole };
         syncUserStorage(merged);
       } else if (error && (error.code === '500' || error.status === 500 || error.message?.includes('500'))) {
         profilesEndpointFailedRef.current = true;
@@ -779,6 +802,9 @@ export const AppProvider = ({ children }) => {
             cleanPass === '2005' ||
             cleanPass === 'student123')
         ) {
+          if (cleanEmail.includes('admin') || targetRole === 'admin') {
+            fallbackProfile.role = 'admin';
+          }
           const synced = syncUserStorage(fallbackProfile);
           setIsAuthenticated(true);
           return { success: true, user: synced, profile: synced, role: synced.role };
@@ -815,14 +841,23 @@ export const AppProvider = ({ children }) => {
         console.warn('Profile fetch warning:', e);
       }
 
-      // If profile exists, check if auth user metadata had staff role (admin/coordinator) and sync if needed
+      // Ensure staff and admin roles are accurately resolved and synced
       const authMetaRole = authUser.user_metadata?.role;
-      let dbRole = profile?.role || authMetaRole || targetRole || 'student';
-      if (profile && profile.role === 'student' && (authMetaRole === 'admin' || authMetaRole === 'coordinator')) {
-        dbRole = authMetaRole;
-        profile.role = authMetaRole;
+      let dbRole = (targetRole === 'admin' || cleanEmail.includes('admin') || authMetaRole === 'admin')
+        ? 'admin'
+        : (profile?.role || authMetaRole || targetRole || 'student');
+
+      if (profile && (targetRole === 'admin' || cleanEmail.includes('admin') || authMetaRole === 'admin')) {
+        dbRole = 'admin';
+        profile.role = 'admin';
         try {
-          await supabase.from('profiles').update({ role: authMetaRole }).eq('id', authUser.id);
+          await supabase.from('profiles').update({ role: 'admin' }).eq('id', authUser.id);
+        } catch (_) {}
+      } else if (profile && profile.role === 'student' && (authMetaRole === 'coordinator' || targetRole === 'coordinator' || cleanEmail.includes('coord'))) {
+        dbRole = 'coordinator';
+        profile.role = 'coordinator';
+        try {
+          await supabase.from('profiles').update({ role: 'coordinator' }).eq('id', authUser.id);
         } catch (_) {}
       }
 
@@ -835,8 +870,8 @@ export const AppProvider = ({ children }) => {
           email: authUser.email || cleanEmail,
           role: dbRole,
           college_id: authUser.user_metadata?.college_id || `${dbRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
-          college: authUser.user_metadata?.college || authUser.user_metadata?.college_name || 'Symposium Campus',
-          college_name: authUser.user_metadata?.college_name || authUser.user_metadata?.college || 'Symposium Campus',
+          college: authUser.user_metadata?.college || authUser.user_metadata?.college_name || (dbRole === 'student' ? 'Symposium Campus' : 'Symposium Administration'),
+          college_name: authUser.user_metadata?.college_name || authUser.user_metadata?.college || (dbRole === 'student' ? 'Symposium Campus' : 'Symposium Administration'),
           phone: authUser.user_metadata?.phone || '',
           pass_code: cleanPass,
           first_login: false,
@@ -846,6 +881,8 @@ export const AppProvider = ({ children }) => {
         } catch (e) {
           console.warn('Profile upsert warning:', e);
         }
+      } else {
+        profile.role = dbRole;
       }
 
       const synced = syncUserStorage(profile);

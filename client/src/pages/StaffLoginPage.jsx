@@ -1,11 +1,12 @@
 // agent-notes: { ctx: "Dedicated Staff Login page with masked 2005 Security Passcode Gate", deps: ["src/components/Auth.tsx", "lucide-react"], state: "active", last: "antigravity@2026-08-13" }
 
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Auth from '../components/Auth';
 import { UserCheck, Shield, QrCode, Signal, ArrowRight, Lock, KeyRound, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function StaffLoginPage() {
+  const navigate = useNavigate();
   const [passcode, setPasscode] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -155,7 +156,20 @@ export default function StaffLoginPage() {
                 </button>
               </div>
 
-              <Auth targetRole="staff" initialMode="login" />
+              <Auth
+                targetRole="staff"
+                initialMode="login"
+                onSuccess={(user) => {
+                  const role = (user?.role || '').toLowerCase();
+                  if (role === 'admin' || user?.email?.toLowerCase().includes('admin')) {
+                    navigate('/admin', { replace: true });
+                  } else if (role === 'coordinator' || user?.email?.toLowerCase().includes('coord')) {
+                    navigate('/coordinator', { replace: true });
+                  } else {
+                    navigate('/student', { replace: true });
+                  }
+                }}
+              />
             </div>
           )}
         </div>
