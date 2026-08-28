@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Coordinator touch console with relational profile fetching, real student names, roll numbers, accurate stats, and realtime listener", deps: ["src/context/AppContext.jsx", "src/components/QRScannerModal.jsx", "src/components/PassCodeGuardModal.jsx", "src/components/StudentQRModal.jsx", "src/supabaseClient.ts", "lucide-react"], state: "active", last: "antigravity@2026-08-28" }
+// agent-notes: { ctx: "Coordinator touch console with relational profile fetching, real student names, roll numbers, accurate stats, safe initial states and loading guards", deps: ["src/context/AppContext.jsx", "src/components/QRScannerModal.jsx", "src/components/PassCodeGuardModal.jsx", "src/components/StudentQRModal.jsx", "src/supabaseClient.ts", "lucide-react"], state: "active", last: "antigravity@2026-08-28" }
 
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
@@ -30,6 +30,7 @@ import {
   StopCircle,
   RefreshCw,
   Calendar,
+  Loader2,
 } from 'lucide-react';
 
 export default function CoordinatorConsole() {
@@ -43,7 +44,7 @@ export default function CoordinatorConsole() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [nudgeStatus, setNudgeStatus] = useState(null);
 
-  // Stats State & Recent Scans State for current event
+  // 1. Safe Initial States
   const [stats, setStats] = useState({
     totalRegistered: 0,
     totalScanned: 0,
@@ -51,11 +52,28 @@ export default function CoordinatorConsole() {
     successRate: 0,
   });
   const [recentScans, setRecentScans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [currentEvent, setCurrentEvent] = useState(null);
   const [eventRegistrations, setEventRegistrations] = useState([]);
   const [isFetchingAttendance, setIsFetchingAttendance] = useState(false);
 
   useEffect(() => {
-    fetchEvents();
+    let isMounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        if (typeof fetchEvents === 'function') {
+          await fetchEvents();
+        }
+      } catch (err) {
+        console.warn('CoordinatorConsole fetchEvents catch:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Modals state
@@ -92,14 +110,23 @@ export default function CoordinatorConsole() {
     max_capacity: 100,
   });
 
-  // Available halls
-  const halls = Array.from(new Set(events.map((e) => e.hall_number)));
+  // Available halls with safe fallback
+  const halls = Array.from(new Set((events || []).map((e) => e?.hall_number).filter(Boolean)));
+  const safeHalls = halls.length > 0 ? halls : ['Hall 1 (Main Auditorium)', 'Hall 2 (Seminar Hall)', 'Hall 3 (Conference Room)'];
 
-  // Current active event for selected hall / selected event
-  const currentEvent =
-    events.find((e) => e.id === selectedEventId) ||
-    events.find((e) => e.hall_number === selectedHall) ||
-    events[0];
+  // Safely resolve and sync current active event
+  useEffect(() => {
+    if (Array.isArray(events) && events.length > 0) {
+      const matched =
+        (selectedEventId ? events.find((e) => e?.id === selectedEventId) : null) ||
+        (selectedHall ? events.find((e) => e?.hall_number === selectedHall) : null) ||
+        events[0];
+      setCurrentEvent(matched || null);
+      setLoading(false);
+    } else if (events && events.length === 0) {
+      setCurrentEvent(null);
+    }
+  }, [events, selectedEventId, selectedHall]);
 
   // 1. Fetch All Registrations for the Event (Both attended and pending)
   const fetchEventStats = useCallback(async (eventId) => {
@@ -110,34 +137,15 @@ export default function CoordinatorConsole() {
       let allRegistrations = null;
 
       if (!isMockMode) {
-        const { data, error } = await supabase
-          .from('registrations')
-          .select(`
-            id,
-            attended,
-            checked_in_at,
-            student_id,
-            profiles (
-              id,
-              full_name,
-              email,
-              roll_no,
-              college
-            )
-          `)
-          .eq('event_id', eventId);
-
-        if (error) {
-          console.error("Error fetching stats:", error);
-          // Fallback relationship query syntax if PostgREST requires named FK
-          const { data: fallbackData, error: fbError } = await supabase
+        try {
+          const { data, error } = await supabase
             .from('registrations')
             .select(`
               id,
               attended,
               checked_in_at,
               student_id,
-              profiles:student_id (
+              profiles (
                 id,
                 full_name,
                 email,
@@ -147,34 +155,57 @@ export default function CoordinatorConsole() {
             `)
             .eq('event_id', eventId);
 
-          if (!fbError && fallbackData) {
-            allRegistrations = fallbackData;
+          if (error) {
+            console.error("Error fetching stats:", error);
+            // Fallback relationship query syntax if PostgREST requires named FK
+            const { data: fallbackData, error: fbError } = await supabase
+              .from('registrations')
+              .select(`
+                id,
+                attended,
+                checked_in_at,
+                student_id,
+                profiles:student_id (
+                  id,
+                  full_name,
+                  email,
+                  roll_no,
+                  college
+                )
+              `)
+              .eq('event_id', eventId);
+
+            if (!fbError && fallbackData) {
+              allRegistrations = fallbackData;
+            }
+          } else {
+            allRegistrations = data;
           }
-        } else {
-          allRegistrations = data;
+        } catch (queryErr) {
+          console.warn('Supabase fetchEventStats catch:', queryErr);
         }
       }
 
       if (!allRegistrations) {
         allRegistrations = (registrations || [])
-          .filter((r) => r.event_id === eventId)
+          .filter((r) => r && r.event_id === eventId)
           .map((r) => {
-            const profile = (profilesList || []).find((p) => p.id === r.student_id);
+            const profile = (profilesList || []).find((p) => p && p.id === r.student_id);
             return {
               ...r,
-              profiles: r.profiles || profile || {
-                id: r.student_id,
-                full_name: r.student_name || 'Student Attendee',
-                email: r.student_email || '',
-                roll_no: r.roll_no || r.college_id || '',
-                college: r.college || 'Main Campus',
+              profiles: r?.profiles || profile || {
+                id: r?.student_id,
+                full_name: r?.student_name || 'Student Attendee',
+                email: r?.student_email || '',
+                roll_no: r?.roll_no || r?.college_id || '',
+                college: r?.college || 'Main Campus',
               },
             };
           });
       }
 
       const total = allRegistrations?.length || 0;
-      const scanned = allRegistrations?.filter(r => r.attended === true || r.checked_in_at !== null).length || 0;
+      const scanned = allRegistrations?.filter((r) => r && (r.attended === true || r.checked_in_at !== null)).length || 0;
       const pending = total - scanned;
       const rate = total > 0 ? Math.round((scanned / total) * 100) : 0;
 
@@ -187,8 +218,8 @@ export default function CoordinatorConsole() {
 
       // Recent scans sorted by checked_in_at
       const attendedList = allRegistrations
-        ?.filter(r => r.attended === true)
-        ?.sort((a, b) => new Date(b.checked_in_at || 0) - new Date(a.checked_in_at || 0)) || [];
+        ?.filter((r) => r && r.attended === true)
+        ?.sort((a, b) => new Date(b?.checked_in_at || 0) - new Date(a?.checked_in_at || 0)) || [];
       setRecentScans(attendedList);
       setEventRegistrations(allRegistrations);
     } catch (err) {
@@ -246,7 +277,7 @@ export default function CoordinatorConsole() {
   }, [registrations, currentEvent?.id, fetchEventStats]);
 
   const handleStartEvent = () => {
-    if (currentEvent) updateHallStatus(currentEvent.id, 'In Progress', 0);
+    if (currentEvent?.id) updateHallStatus(currentEvent.id, 'In Progress', 0);
   };
 
   const handleAddSubmit = async (e) => {
@@ -277,6 +308,7 @@ export default function CoordinatorConsole() {
   };
 
   const handleEditClick = (evt) => {
+    if (!evt) return;
     setEditingEvent(evt);
     setEditFormData({
       title: evt.title || '',
@@ -292,7 +324,7 @@ export default function CoordinatorConsole() {
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
-    if (!editingEvent) return;
+    if (!editingEvent?.id) return;
     await updateEvent(editingEvent.id, {
       ...editFormData,
       max_seats: editFormData.max_capacity,
@@ -302,23 +334,25 @@ export default function CoordinatorConsole() {
   };
 
   const handleDeleteClick = async (evt) => {
+    if (!evt?.id) return;
     if (window.confirm(`Are you sure you want to permanently delete event "${evt.title}"?`)) {
       await deleteEvent(evt.id);
     }
   };
 
   const handleDelayEvent = () => {
-    if (currentEvent) {
+    if (currentEvent?.id) {
       const currentDelay = currentEvent.delay_minutes || 0;
       updateHallStatus(currentEvent.id, 'Delayed', currentDelay + 10);
     }
   };
 
   const handleEndEvent = () => {
-    if (currentEvent) updateHallStatus(currentEvent.id, 'Completed', 0);
+    if (currentEvent?.id) updateHallStatus(currentEvent.id, 'Completed', 0);
   };
 
   const handleNudgeMissing = (studentId) => {
+    if (!studentId) return;
     setNudgeStatus(`Sent Real-Time Routing Alert Nudge to Student ${studentId.slice(0, 8)}!`);
     setTimeout(() => setNudgeStatus(null), 3500);
   };
@@ -354,12 +388,12 @@ export default function CoordinatorConsole() {
               onChange={(e) => {
                 const newHall = e.target.value;
                 setSelectedHall(newHall);
-                const matchingEvent = events.find((ev) => ev.hall_number === newHall);
-                if (matchingEvent) setSelectedEventId(matchingEvent.id);
+                const matchingEvent = (events || []).find((ev) => ev?.hall_number === newHall);
+                if (matchingEvent?.id) setSelectedEventId(matchingEvent.id);
               }}
               className="w-full sm:w-52 bg-slate-50 border border-slate-200/90 text-slate-900 font-semibold text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
             >
-              {halls.map((hall) => (
+              {safeHalls.map((hall) => (
                 <option key={hall} value={hall}>
                   {hall}
                 </option>
@@ -368,7 +402,7 @@ export default function CoordinatorConsole() {
           </div>
 
           {/* Event Selector (if multiple events in hall or venue) */}
-          {events.length > 1 && (
+          {(events || []).length > 1 && (
             <div className="flex items-center gap-2 flex-1 sm:flex-none">
               <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
               <select
@@ -376,12 +410,12 @@ export default function CoordinatorConsole() {
                 onChange={(e) => {
                   const evId = e.target.value;
                   setSelectedEventId(evId);
-                  const evObj = events.find((ev) => ev.id === evId);
-                  if (evObj && evObj.hall_number) setSelectedHall(evObj.hall_number);
+                  const evObj = (events || []).find((ev) => ev?.id === evId);
+                  if (evObj?.hall_number) setSelectedHall(evObj.hall_number);
                 }}
                 className="w-full sm:w-52 bg-slate-50 border border-slate-200/90 text-slate-900 font-semibold text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
               >
-                {events.map((ev) => (
+                {(events || []).map((ev) => (
                   <option key={ev.id} value={ev.id}>
                     {ev.title} ({ev.hall_number})
                   </option>
@@ -392,9 +426,9 @@ export default function CoordinatorConsole() {
 
           {/* Manual Refresh Button */}
           <button
-            onClick={() => fetchEventStats(currentEvent?.id)}
+            onClick={() => currentEvent?.id && fetchEventStats(currentEvent.id)}
             title="Refresh Attendance Stats"
-            disabled={isFetchingAttendance}
+            disabled={isFetchingAttendance || !currentEvent?.id}
             className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl transition-colors cursor-pointer shrink-0 disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${isFetchingAttendance ? 'animate-spin text-indigo-600' : ''}`} />
@@ -410,7 +444,7 @@ export default function CoordinatorConsole() {
         </div>
       </div>
 
-      {/* 2. Top Stats: 3 Minimalist Pastel Stat Boxes */}
+      {/* 2. Top Stats: 3 Minimalist Pastel Stat Boxes with Safe Optional Chaining */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Stat 1: Total Scanned */}
         <div className="bg-emerald-50/70 border border-emerald-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
@@ -419,7 +453,7 @@ export default function CoordinatorConsole() {
             <span>Total Scanned</span>
           </div>
           <div className="text-3xl font-extrabold text-emerald-950 font-mono tracking-tight">
-            {stats.totalScanned}
+            {stats?.totalScanned ?? 0}
           </div>
           <p className="text-[11px] text-emerald-700/80 font-medium">
             Verified check-ins in {currentEvent?.title ? `"${currentEvent.title}"` : selectedHall}
@@ -433,10 +467,10 @@ export default function CoordinatorConsole() {
             <span>Pending Check-In</span>
           </div>
           <div className="text-3xl font-extrabold text-amber-950 font-mono tracking-tight">
-            {stats.pendingCheckIn}
+            {stats?.pendingCheckIn ?? 0}
           </div>
           <p className="text-[11px] text-amber-700/80 font-medium">
-            {stats.pendingCheckIn} students awaiting venue check-in
+            {stats?.pendingCheckIn ?? 0} students awaiting venue check-in
           </p>
         </div>
 
@@ -447,18 +481,24 @@ export default function CoordinatorConsole() {
             <span>Success Rate</span>
           </div>
           <div className="text-3xl font-extrabold text-indigo-950 font-mono tracking-tight">
-            {stats.successRate}%
+            {stats?.successRate ?? 0}%
           </div>
           <p className="text-[11px] text-indigo-700/80 font-medium">
-            {stats.totalScanned} of {stats.totalRegistered} students present
+            {stats?.totalScanned ?? 0} of {stats?.totalRegistered ?? 0} students present
           </p>
         </div>
       </div>
 
-      {/* 3. Main Body Grid: Scanner Card & Live Recent Scans */}
-      {!currentEvent ? (
-        <div className="bg-white p-12 rounded-2xl border border-slate-200/80 shadow-xs text-center text-slate-500 text-xs">
-          No active symposium event is currently assigned to <strong className="text-slate-700">{selectedHall}</strong>.
+      {/* 3. Main Body Grid: Loading / Empty State or Scanner Card & Live Recent Scans */}
+      {loading ? (
+        <div className="bg-white p-12 rounded-2xl border border-slate-200/80 shadow-xs text-center space-y-3">
+          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-xs font-medium text-slate-500">Loading coordinator console & venue events...</p>
+        </div>
+      ) : !currentEvent ? (
+        <div className="bg-white p-12 rounded-2xl border border-slate-200/80 shadow-xs text-center text-slate-500 text-xs space-y-2">
+          <p className="font-semibold text-slate-700">No active symposium event assigned to <strong className="text-slate-900">{selectedHall}</strong>.</p>
+          <p className="text-[11px] text-slate-400">Please create an event or select another venue hall above.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -478,10 +518,10 @@ export default function CoordinatorConsole() {
 
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono truncate max-w-[180px]">
-                    {currentEvent.title}
+                    {currentEvent?.title || 'Event'}
                   </span>
                   <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-mono">
-                    {currentEvent.hall_number || selectedHall}
+                    {currentEvent?.hall_number || selectedHall}
                   </span>
                 </div>
               </div>
@@ -521,7 +561,7 @@ export default function CoordinatorConsole() {
                     }}
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
                   >
-                    View Roster ({stats.totalRegistered})
+                    View Roster ({stats?.totalRegistered ?? 0})
                   </button>
                   <button
                     onClick={() => handleEditClick(currentEvent)}
@@ -564,33 +604,34 @@ export default function CoordinatorConsole() {
                   Recent Scans
                 </h3>
                 <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full font-mono">
-                  {recentScans.length} Scanned
+                  {(recentScans || []).length} Scanned
                 </span>
               </div>
 
               {/* Clean Lightweight Scans List with Real Student Names, Roll No, & Scanned Time */}
               <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
-                {recentScans.length === 0 ? (
+                {(recentScans || []).length === 0 ? (
                   <div className="text-center py-10 text-xs text-slate-400">
-                    No scans recorded yet for {currentEvent.title}.
+                    No scans recorded yet for {currentEvent?.title || 'this event'}.
                   </div>
                 ) : (
-                  recentScans.slice(0, 15).map((scan) => {
+                  (recentScans || []).slice(0, 15).map((scan) => {
+                    if (!scan) return null;
                     const studentProfile = scan.profiles;
                     const studentName =
                       studentProfile?.full_name ||
                       studentProfile?.name ||
                       (studentProfile?.email ? studentProfile.email.split('@')[0] : null) ||
-                      'Student Name';
+                      'Student';
                     const rollNo = studentProfile?.roll_no || studentProfile?.college_id;
                     const scannedTime = scan.checked_in_at || scan.attended_at;
                     const timeString = scannedTime
                       ? new Date(scannedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                      : 'Just now';
+                      : '';
 
                     return (
                       <div
-                        key={scan.id}
+                        key={scan.id || Math.random()}
                         className="py-2.5 px-3.5 bg-slate-50/90 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs transition-colors"
                       >
                         <div className="min-w-0 flex-1 pr-3">
@@ -609,7 +650,7 @@ export default function CoordinatorConsole() {
                               </span>
                             )}
                             <span className="text-[10px] text-slate-400 truncate">
-                              {currentEvent.title}
+                              {currentEvent?.title || 'Symposium Event'}
                             </span>
                           </div>
                         </div>
@@ -617,7 +658,7 @@ export default function CoordinatorConsole() {
                         <div className="text-right shrink-0 flex flex-col items-end">
                           <span className="text-[11px] font-mono font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            {timeString}
+                            {timeString || 'Checked-In'}
                           </span>
                         </div>
                       </div>
