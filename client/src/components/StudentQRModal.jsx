@@ -1,7 +1,7 @@
-// agent-notes: { ctx: "Clean Student QR Pass Modal with backdrop click-to-close, Esc key listener, and top-right close affordance", deps: ["src/components/StudentQRPass.jsx", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
+// agent-notes: { ctx: "Neo-Glass Student Entry Pass Modal with frosted backdrop, lanyard badge holder, Esc listener, and responsive viewport sizing", deps: ["src/components/StudentQRPass.jsx", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
 
 import { useEffect, useState } from 'react';
-import { X, QrCode } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { supabase, isMockMode, isValidUUID } from '../supabaseClient';
 import StudentQRPass from './StudentQRPass';
@@ -64,41 +64,35 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0F19]/80 backdrop-blur-md animate-fadeIn"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-white w-full max-w-sm rounded-3xl border border-slate-200/90 p-7 shadow-2xl text-center relative overflow-hidden animate-slideUp"
+        className="w-full max-w-sm relative text-center animate-slideUp"
       >
-        {/* Prominent Close ('✕') Button */}
+        {/* Floating Top-Right Close ('✕') Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200/80 hover:border-rose-200 transition-all cursor-pointer shadow-2xs"
+          className="absolute -top-12 right-0 p-2 rounded-xl bg-slate-900/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700/80 hover:border-rose-500/40 transition-all cursor-pointer shadow-lg backdrop-blur-md z-20"
           title="Close Pass (Esc)"
         >
           <X className="w-4 h-4" />
         </button>
 
-        {/* Modal Header */}
-        <div className="flex flex-col items-center mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mb-2 shadow-xs">
-            <QrCode className="w-6 h-6" />
-          </div>
-          <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Symposium Entry Badge</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Show this QR code at the entrance to check in</p>
-        </div>
-
-        {/* Dynamic Refreshing QR Pass Component */}
+        {/* Dynamic Refreshing Conference Lanyard Pass */}
         <StudentQRPass
           studentId={validStudentId}
           eventId={validEventId}
           registrationId={registrationId}
           studentName={currentUser?.full_name || currentUser?.name || 'Student Attendee'}
           studentEmail={currentUser?.email || ''}
-          collegeId={currentUser?.college_id}
-          collegeName={currentUser?.college_name || currentUser?.college}
+          collegeId={currentUser?.roll_no || currentUser?.college_id || 'N/A'}
+          collegeName={currentUser?.college_name || currentUser?.college || ''}
+          department={currentUser?.department || 'CSE'}
           eventTitle={event.title}
           hallNumber={event.hall_number}
+          user={currentUser}
+          profile={currentUser}
         />
       </div>
     </div>

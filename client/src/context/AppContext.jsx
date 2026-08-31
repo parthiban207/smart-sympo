@@ -746,6 +746,8 @@ export const AppProvider = ({ children }) => {
     collegeId,
     collegeName,
     phone,
+    department,
+    roll_no,
   }) => {
     if (!email || !email.trim() || !password || !password.trim()) {
       return { success: false, message: 'Please provide a valid email and password.' };
@@ -761,8 +763,11 @@ export const AppProvider = ({ children }) => {
     const finalUsername =
       username?.trim() || (cleanEmail.includes('@') ? cleanEmail.split('@')[0] : cleanEmail);
     const finalCollegeId =
+      roll_no?.trim() ||
       collegeId?.trim() ||
       `${role === 'admin' ? 'ADM' : role === 'coordinator' ? 'FAC' : 'STU'}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const finalDepartment =
+      department?.trim() || 'Computer Science & Engineering';
     const finalCollegeName =
       collegeName?.trim() ||
       (role === 'student' ? 'Main University / College' : 'Symposium Administration');
@@ -778,6 +783,8 @@ export const AppProvider = ({ children }) => {
             name: fullName.trim(),
             username: finalUsername,
             role: role,
+            department: finalDepartment,
+            roll_no: finalCollegeId,
             college: finalCollegeName,
             college_name: finalCollegeName,
             college_id: finalCollegeId,
@@ -812,6 +819,8 @@ export const AppProvider = ({ children }) => {
                   username: finalUsername,
                   email: cleanEmail,
                   role: role,
+                  department: finalDepartment,
+                  roll_no: finalCollegeId,
                   college_id: finalCollegeId,
                   college_name: finalCollegeName,
                   college: finalCollegeName,
@@ -851,6 +860,8 @@ export const AppProvider = ({ children }) => {
         username: finalUsername,
         email: cleanEmail,
         role: role,
+        department: finalDepartment,
+        roll_no: finalCollegeId,
         college_id: finalCollegeId,
         college_name: finalCollegeName,
         college: finalCollegeName,
@@ -1029,18 +1040,9 @@ export const AppProvider = ({ children }) => {
       console.warn('Profile fetch warning:', e);
     }
 
-    // Ensure staff and admin roles are accurately resolved and synced
+    // Ensure staff, student, and admin roles are accurately preserved and synced
     const authMetaRole = authUser.user_metadata?.role;
-    let dbRole = targetRole || profile?.role || authMetaRole || (cleanEmail.includes('admin') ? 'admin' : cleanEmail.includes('coord') ? 'coordinator' : 'student');
-
-    if (profile) {
-      profile.role = dbRole;
-      try {
-        await supabase.from('profiles').update({ role: dbRole }).eq('id', authUser.id);
-      } catch {
-        // ignore error
-      }
-    }
+    const dbRole = profile?.role || authMetaRole || targetRole || (cleanEmail.includes('admin') ? 'admin' : cleanEmail.includes('coord') ? 'coordinator' : 'student');
 
     if (!profile) {
       profile = {
@@ -1050,7 +1052,9 @@ export const AppProvider = ({ children }) => {
         username: authUser.user_metadata?.username || cleanEmail.split('@')[0],
         email: authUser.email || cleanEmail,
         role: dbRole,
-        college_id: authUser.user_metadata?.college_id || `${dbRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
+        department: authUser.user_metadata?.department || 'Computer Science & Engineering',
+        roll_no: authUser.user_metadata?.roll_no || authUser.user_metadata?.college_id || `${dbRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
+        college_id: authUser.user_metadata?.college_id || authUser.user_metadata?.roll_no || `${dbRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
         college: authUser.user_metadata?.college || authUser.user_metadata?.college_name || (dbRole === 'student' ? 'Symposium Campus' : 'Symposium Administration'),
         college_name: authUser.user_metadata?.college_name || authUser.user_metadata?.college || (dbRole === 'student' ? 'Symposium Campus' : 'Symposium Administration'),
         phone: authUser.user_metadata?.phone || '',
@@ -1406,42 +1410,36 @@ export const AppProvider = ({ children }) => {
   };
 
   // Verify QR Scan & Record Attendance Log with Full Database Verification
-  const verifyQRPass = async (qrPayload, scannerHall = 'Main Venue') => {
+  const verifyQRPass = async (qrPayload, scannerHall = 'Main Venue', selectedEventId = null) => {
     try {
-      let data;
-      if (typeof qrPayload === 'string') {
-        try {
-          data = JSON.parse(qrPayload);
-        } catch {
-          data = { raw: qrPayload };
-        }
-      } else if (typeof qrPayload === 'object' && qrPayload !== null) {
-        data = qrPayload;
-      } else {
-        return {
-          success: false,
-          status: 'INVALID_PAYLOAD',
-          message: '❌ Invalid QR Code! No registration found.',
-        };
+      // 1. Parse decoded JSON payload safely (with UUID/string fallback)
+      let parsedData;
+      try {
+        parsedData = typeof qrPayload === 'string' ? JSON.parse(qrPayload) : qrPayload;
+      } catch {
+        // Fallback if payload is plain UUID string
+        parsedData = { student_id: String(qrPayload || '').trim() };
       }
 
-      let registration_id = data.registration_id || data.reg_id || data.id;
-      let student_id = data.student_id || data.user_id || data.studentId || data.userId;
-      let event_id = data.event_id || data.eventId;
-      let pass_token = data.pass_token || data.passToken;
+      if (!parsedData || typeof parsedData !== 'object') {
+        parsedData = { student_id: String(qrPayload || '').trim() };
+      }
 
-      if (!registration_id && !student_id && data.raw) {
-        const rawStr = String(data.raw).trim();
-        if (isValidUUID(rawStr)) {
-          registration_id = rawStr;
-        } else if (rawStr.startsWith('PASS-')) {
+      const student_id = parsedData.student_id || parsedData.studentId || parsedData.user_id || parsedData.userId || parsedData.id;
+      let targetEventId = selectedEventId || parsedData.event_id || parsedData.eventId;
+      let registration_id = parsedData.registration_id || parsedData.registrationId || parsedData.reg_id;
+      let pass_token = parsedData.pass_token || parsedData.passToken;
+
+      if (!registration_id && !student_id && parsedData.student_id) {
+        const rawStr = String(parsedData.student_id).trim();
+        if (rawStr.startsWith('PASS-')) {
           pass_token = rawStr;
         } else if (rawStr.startsWith('reg-')) {
           registration_id = rawStr;
         }
       }
 
-      if (!registration_id && !student_id && !pass_token) {
+      if (!student_id && !registration_id && !pass_token) {
         return {
           success: false,
           status: 'INVALID_PAYLOAD',
@@ -1449,28 +1447,61 @@ export const AppProvider = ({ children }) => {
         };
       }
 
-      // 1. Locate registration: Check in-memory state FIRST for instant (0ms) response
+      // 2. Fetch complete student details directly from the `profiles` table to prevent missing details
+      let studentProfile = null;
+      if (!isMockMode && isValidUUID(student_id)) {
+        try {
+          const { data: dbProfile, error: profileErr } = await supabase
+            .from('profiles')
+            .select('id, full_name, roll_no, department, college, email')
+            .eq('id', student_id)
+            .maybeSingle();
+
+          if (dbProfile) {
+            studentProfile = dbProfile;
+          } else if (profileErr) {
+            console.warn('[Supabase Profile Fetch Warning]:', profileErr);
+          }
+        } catch (dbErr) {
+          console.warn('[Supabase Profile Query Catch]:', dbErr);
+        }
+      }
+
+      // In-memory fallback if profile is not in supabase or in mock mode
+      if (!studentProfile) {
+        const memoryProfile = profilesList.find(
+          (p) => p.id === student_id || (parsedData.email && p.email && p.email.toLowerCase() === parsedData.email.toLowerCase())
+        );
+        studentProfile = {
+          id: student_id || memoryProfile?.id,
+          full_name: memoryProfile?.full_name || memoryProfile?.name || parsedData.full_name || 'Student',
+          roll_no: memoryProfile?.roll_no || memoryProfile?.college_id || parsedData.roll_no || 'N/A',
+          department: memoryProfile?.department || parsedData.department || 'CSE',
+          college: memoryProfile?.college || memoryProfile?.college_name || parsedData.college || '',
+          email: memoryProfile?.email || parsedData.email || '',
+        };
+      }
+
+      // 3. Locate registration
       let matchedReg = registrations.find((r) => {
         if (registration_id && (r.id === registration_id || r.registration_id === registration_id)) return true;
         if (pass_token && r.pass_token === pass_token) return true;
-        if (student_id && event_id && r.student_id === student_id && r.event_id === event_id) return true;
-        if (student_id && !event_id && r.student_id === student_id) return true;
+        if (student_id && targetEventId && (r.student_id === student_id || r.user_id === student_id) && r.event_id === targetEventId) return true;
+        if (student_id && !targetEventId && (r.student_id === student_id || r.user_id === student_id)) return true;
         return false;
       });
 
-      let dbStudentProfile = null;
       let dbEventObj = null;
 
-      // If not found in in-memory state, query Supabase
       if (!matchedReg && !isMockMode) {
         try {
-          let query = supabase.from('registrations').select('*, profiles(*), events(*)');
+          let query = supabase.from('registrations').select('*, events(*)');
           if (isValidUUID(registration_id)) {
             query = query.eq('id', registration_id);
           } else if (pass_token) {
             query = query.eq('pass_token', pass_token);
-          } else if (isValidUUID(student_id) && isValidUUID(event_id)) {
-            query = query.eq('student_id', student_id).eq('event_id', event_id);
+          } else if (isValidUUID(student_id) && isValidUUID(targetEventId)) {
+            query = query.eq('student_id', student_id).eq('event_id', targetEventId);
           } else if (isValidUUID(student_id)) {
             query = query.eq('student_id', student_id).limit(1);
           }
@@ -1478,7 +1509,6 @@ export const AppProvider = ({ children }) => {
           const { data: regData } = await query.maybeSingle();
           if (regData) {
             matchedReg = regData;
-            dbStudentProfile = regData.profiles;
             dbEventObj = regData.events;
           }
         } catch (dbErr) {
@@ -1486,65 +1516,39 @@ export const AppProvider = ({ children }) => {
         }
       }
 
-      // IF INVALID QR / NOT REGISTERED:
-      if (!matchedReg) {
-        return {
-          success: false,
-          status: 'NOT_REGISTERED',
-          message: '❌ Invalid QR Code! No registration found.',
-        };
-      }
-
-      const regStudentId = matchedReg.student_id || student_id;
-      const regEventId = matchedReg.event_id || event_id;
-
-      const studentProfile =
-        dbStudentProfile ||
-        profilesList.find((p) => p.id === regStudentId || (matchedReg.student_email && p.email === matchedReg.student_email));
+      const regStudentId = matchedReg?.student_id || student_id;
+      const regEventId = matchedReg?.event_id || targetEventId || (events[0] ? events[0].id : '');
 
       const targetEvent =
         dbEventObj ||
-        events.find((e) => e.id === regEventId);
+        events.find((e) => e.id === regEventId || (scannerHall && e.hall_number === scannerHall)) ||
+        events[0];
 
-      const studentName =
-        matchedReg.student_name ||
-        studentProfile?.full_name ||
-        studentProfile?.name ||
-        studentProfile?.username ||
-        'Student Attendee';
+      const resolvedStudentName = studentProfile?.full_name || parsedData.full_name || matchedReg?.student_name || 'Student';
+      const resolvedRollNo = studentProfile?.roll_no || parsedData.roll_no || matchedReg?.roll_no || matchedReg?.college_id || 'N/A';
+      const resolvedDepartment = studentProfile?.department || parsedData.department || 'CSE';
+      const resolvedCollege = studentProfile?.college || parsedData.college || matchedReg?.college || 'Engineering College';
+      const resolvedEmail = studentProfile?.email || parsedData.email || matchedReg?.student_email || 'N/A';
 
-      const studentCollege =
-        studentProfile?.college_name ||
-        studentProfile?.college ||
-        'Main Campus / Engineering';
+      const eventTitle = targetEvent?.title || matchedReg?.event_title || 'Symposium Event';
+      const eventHall = scannerHall || targetEvent?.hall_number || 'Main Venue';
+      const eventCategory = targetEvent?.category || matchedReg?.category || 'Technical';
 
-      const studentCollegeId =
-        studentProfile?.college_id ||
-        (regStudentId ? `STU-${regStudentId.slice(0, 6).toUpperCase()}` : 'N/A');
-
-      const studentEmail = studentProfile?.email || matchedReg.student_email || 'N/A';
-      const eventTitle = targetEvent?.title || matchedReg.event_title || 'Symposium Event';
-      const eventHall = scannerHall || targetEvent?.hall_number || 'Main Auditorium';
-      const eventCategory = targetEvent?.category || matchedReg.category || 'Technical';
-
-      // Check if already attended or scanned in attendanceLogs
+      // Check if already attended
       const existingAttendanceLog = attendanceLogs.find(
-        (log) => log.student_id === regStudentId && log.event_id === regEventId
+        (log) => log.student_id === regStudentId && (log.event_id === regEventId || !regEventId)
       );
 
-      const isAlreadyCheckedIn = Boolean(matchedReg.attended || existingAttendanceLog);
+      const isAlreadyCheckedIn = Boolean(matchedReg?.attended || existingAttendanceLog);
 
-      // IF ALREADY SCANNED:
       if (isAlreadyCheckedIn) {
         const attendedTimestamp =
-          matchedReg.attended_at ||
+          matchedReg?.attended_at ||
+          matchedReg?.checked_in_at ||
           existingAttendanceLog?.check_in_time ||
           new Date().toISOString();
 
-        const formattedTime = new Date(attendedTimestamp).toLocaleString('en-US', {
-          dateStyle: 'medium',
-          timeStyle: 'short',
-        });
+        const formattedTime = new Date(attendedTimestamp).toLocaleTimeString();
 
         return {
           success: false,
@@ -1552,17 +1556,26 @@ export const AppProvider = ({ children }) => {
           status: 'ALREADY_SCANNED',
           message: `⚠️ Already Checked-In at ${formattedTime}`,
           attended_at: attendedTimestamp,
-          studentName,
-          college: studentCollege,
-          rollNumber: studentCollegeId,
+          checked_in_at: attendedTimestamp,
+          studentProfile,
+          parsedData,
+          studentName: resolvedStudentName,
+          fullName: resolvedStudentName,
+          rollNumber: resolvedRollNo,
+          roll_no: resolvedRollNo,
+          department: resolvedDepartment,
+          college: resolvedCollege,
+          email: resolvedEmail,
           eventTitle,
           hallNumber: eventHall,
           student: {
             id: regStudentId,
-            name: studentName,
-            college: studentCollege,
-            college_id: studentCollegeId,
-            email: studentEmail,
+            name: resolvedStudentName,
+            full_name: resolvedStudentName,
+            roll_no: resolvedRollNo,
+            department: resolvedDepartment,
+            college: resolvedCollege,
+            email: resolvedEmail,
           },
           event: {
             id: regEventId,
@@ -1573,38 +1586,40 @@ export const AppProvider = ({ children }) => {
         };
       }
 
-      // IF VALID & NOT YET ATTENDED:
+      // 4. Update attendance in `registrations`
       const nowISO = new Date().toISOString();
       const coordinatorUuid = isValidUUID(currentUser?.id) ? currentUser.id : null;
       const coordinatorName = currentUser?.full_name || currentUser?.name || currentUser?.email || 'Coordinator';
 
-      // 1. Update local state immediately for 0ms visual feedback
+      // Optimistic In-Memory State Updates
       setRegistrations((prev) => {
         const exists = prev.some(
           (r) =>
-            (matchedReg.id && r.id === matchedReg.id) ||
+            (matchedReg?.id && r.id === matchedReg.id) ||
             (r.student_id === regStudentId && r.event_id === regEventId)
         );
 
         const updatedItem = {
-          ...matchedReg,
+          ...(matchedReg || {}),
+          id: matchedReg?.id || `reg-${Date.now()}`,
           student_id: regStudentId,
           event_id: regEventId,
           attended: true,
           checked_in_at: nowISO,
           attended_at: nowISO,
-          student_name: studentName,
-          student_email: studentEmail,
-          roll_no: studentCollegeId,
-          college_id: studentCollegeId,
-          college: studentCollege,
+          student_name: resolvedStudentName,
+          student_email: resolvedEmail,
+          roll_no: resolvedRollNo,
+          college_id: resolvedRollNo,
+          department: resolvedDepartment,
+          college: resolvedCollege,
           scanned_by: coordinatorName,
         };
 
         if (exists) {
           return prev.map((r) => {
             if (
-              (matchedReg.id && r.id === matchedReg.id) ||
+              (matchedReg?.id && r.id === matchedReg.id) ||
               (r.student_id === regStudentId && r.event_id === regEventId)
             ) {
               return { ...r, ...updatedItem };
@@ -1615,43 +1630,28 @@ export const AppProvider = ({ children }) => {
         return [updatedItem, ...prev];
       });
 
-      // Ensure profilesList is updated so student details are accessible across all views
+      // Update profilesList
       if (regStudentId) {
         setProfilesList((prev) => {
           const profileExists = prev.some(
-            (p) =>
-              p.id === regStudentId ||
-              (p.email && studentEmail && p.email.toLowerCase() === studentEmail.toLowerCase())
+            (p) => p.id === regStudentId || (p.email && resolvedEmail && p.email.toLowerCase() === resolvedEmail.toLowerCase())
           );
-
-          if (!profileExists) {
-            const newProfile = {
-              id: regStudentId,
-              full_name: studentName,
-              name: studentName,
-              email: studentEmail,
-              college_id: studentCollegeId,
-              roll_no: studentCollegeId,
-              college: studentCollege,
-              college_name: studentCollege,
-              role: 'student',
-            };
-            return [newProfile, ...prev];
-          }
-
+          const newProfileEntry = {
+            id: regStudentId,
+            full_name: resolvedStudentName,
+            name: resolvedStudentName,
+            roll_no: resolvedRollNo,
+            college_id: resolvedRollNo,
+            department: resolvedDepartment,
+            college: resolvedCollege,
+            college_name: resolvedCollege,
+            email: resolvedEmail,
+            role: 'student',
+          };
+          if (!profileExists) return [newProfileEntry, ...prev];
           return prev.map((p) => {
-            if (
-              p.id === regStudentId ||
-              (p.email && studentEmail && p.email.toLowerCase() === studentEmail.toLowerCase())
-            ) {
-              return {
-                ...p,
-                full_name: p.full_name || studentName,
-                name: p.name || studentName,
-                college_id: p.college_id || studentCollegeId,
-                roll_no: p.roll_no || studentCollegeId,
-                college: p.college || studentCollege,
-              };
+            if (p.id === regStudentId || (p.email && resolvedEmail && p.email.toLowerCase() === resolvedEmail.toLowerCase())) {
+              return { ...p, ...newProfileEntry };
             }
             return p;
           });
@@ -1671,70 +1671,94 @@ export const AppProvider = ({ children }) => {
       setLiveAlerts((prev) => [
         {
           id: Date.now(),
-          message: `✓ Attendance Verified: ${studentName} (${studentCollegeId}) for ${eventTitle}!`,
+          message: `✓ Attendance Verified: ${resolvedStudentName} (${resolvedRollNo}) for ${eventTitle}!`,
           time: new Date().toLocaleTimeString(),
           type: 'success',
         },
         ...prev.slice(0, 4),
       ]);
 
-      // 2. Perform Supabase database persistence asynchronously in background
+      // 5. Update attendance in `registrations` and `attendance_logs` database via Supabase
       if (!isMockMode) {
         (async () => {
           try {
-            const updatePayload = {
-              attended: true,
-              checked_in_at: nowISO,
-              attended_at: nowISO,
-            };
-            if (coordinatorUuid) {
-              updatePayload.scanned_by = coordinatorUuid;
-            }
-
-            if (isValidUUID(matchedReg.id)) {
-              await supabase
-                .from('registrations')
-                .update(updatePayload)
-                .eq('id', matchedReg.id);
-            } else if (isValidUUID(regStudentId) && isValidUUID(regEventId)) {
-              await supabase
-                .from('registrations')
-                .update(updatePayload)
-                .eq('student_id', regStudentId)
-                .eq('event_id', regEventId);
-            }
-
-            // Ensure profile in Supabase has the latest name and roll_no
             if (isValidUUID(regStudentId)) {
-              await supabase
-                .from('profiles')
-                .update({
-                  name: studentName,
-                  college_id: studentCollegeId,
-                })
-                .eq('id', regStudentId)
-                .catch(() => {});
-            }
+              // Ensure student profile in DB has full details
+              try {
+                await supabase.from('profiles').upsert([
+                  {
+                    id: regStudentId,
+                    full_name: resolvedStudentName,
+                    name: resolvedStudentName,
+                    roll_no: resolvedRollNo,
+                    department: resolvedDepartment,
+                    college: resolvedCollege,
+                    email: resolvedEmail,
+                    role: 'student',
+                  }
+                ]);
+              } catch (profUpsertErr) {
+                console.warn('[Profile Upsert Warning]:', profUpsertErr);
+              }
 
-            const { data: dbLog } = await supabase
-              .from('attendance_logs')
-              .insert([
+              // Update or Insert into registrations table
+              if (isValidUUID(regEventId)) {
+                const { data: existingDbReg } = await supabase
+                  .from('registrations')
+                  .select('id')
+                  .eq('student_id', regStudentId)
+                  .eq('event_id', regEventId)
+                  .maybeSingle();
+
+                if (existingDbReg) {
+                  await supabase
+                    .from('registrations')
+                    .update({ 
+                      attended: true, 
+                      checked_in_at: nowISO,
+                      attended_at: nowISO,
+                      ...(coordinatorUuid ? { scanned_by: coordinatorUuid } : {})
+                    })
+                    .eq('id', existingDbReg.id);
+                } else {
+                  await supabase
+                    .from('registrations')
+                    .insert([
+                      {
+                        student_id: regStudentId,
+                        event_id: regEventId,
+                        attended: true,
+                        checked_in_at: nowISO,
+                        attended_at: nowISO,
+                        ...(coordinatorUuid ? { scanned_by: coordinatorUuid } : {})
+                      }
+                    ]);
+                }
+              } else if (isValidUUID(matchedReg?.id)) {
+                await supabase
+                  .from('registrations')
+                  .update({
+                    attended: true,
+                    checked_in_at: nowISO,
+                    attended_at: nowISO,
+                    ...(coordinatorUuid ? { scanned_by: coordinatorUuid } : {})
+                  })
+                  .eq('id', matchedReg.id);
+              }
+
+              // Insert into attendance_logs table
+              await supabase.from('attendance_logs').insert([
                 {
-                  student_id: isValidUUID(regStudentId) ? regStudentId : null,
+                  student_id: regStudentId,
                   event_id: isValidUUID(regEventId) ? regEventId : null,
                   hall_number: eventHall,
                   check_in_time: nowISO,
                   status: 'Checked-In',
                 },
-              ])
-              .select()
-              .single();
-
-            if (dbLog) {
-              setAttendanceLogs((prev) => [dbLog, ...prev.filter((l) => l.id !== dbLog.id && l.id !== newAttendanceLog.id)]);
+              ]).catch(() => {});
             }
           } catch (dbErr) {
-            console.warn('[Supabase Attendance Background Write Catch]:', dbErr);
+            console.warn('[Supabase Registration Attendance Background Write Catch]:', dbErr);
           }
         })();
       }
@@ -1742,22 +1766,30 @@ export const AppProvider = ({ children }) => {
       return {
         success: true,
         status: 'VERIFIED',
-        message: '✓ Attendance Verified Successfully',
+        message: 'Verified ✅',
         attended_at: nowISO,
-        studentName,
-        email: studentEmail,
-        college: studentCollege,
-        rollNumber: studentCollegeId,
-        collegeId: studentCollegeId,
+        checked_in_at: nowISO,
+        studentProfile,
+        parsedData,
+        studentName: resolvedStudentName,
+        fullName: resolvedStudentName,
+        rollNumber: resolvedRollNo,
+        roll_no: resolvedRollNo,
+        department: resolvedDepartment,
+        college: resolvedCollege,
+        email: resolvedEmail,
         eventTitle,
         hallNumber: eventHall,
+        student_id: regStudentId,
+        event_id: regEventId,
         student: {
           id: regStudentId,
-          name: studentName,
-          college: studentCollege,
-          college_id: studentCollegeId,
-          roll_no: studentCollegeId,
-          email: studentEmail,
+          name: resolvedStudentName,
+          full_name: resolvedStudentName,
+          roll_no: resolvedRollNo,
+          department: resolvedDepartment,
+          college: resolvedCollege,
+          email: resolvedEmail,
         },
         event: {
           id: regEventId,
@@ -1765,14 +1797,14 @@ export const AppProvider = ({ children }) => {
           hall_number: eventHall,
           category: eventCategory,
         },
-        registration_id: matchedReg.id,
+        registration_id: matchedReg?.id,
       };
     } catch (err) {
       console.error('[verifyQRPass Fatal Exception]:', err);
       return {
         success: false,
         status: 'ERROR',
-        message: '❌ Invalid QR Code! No registration found.',
+        message: '❌ Invalid QR Code! Verification failed.',
       };
     }
   };

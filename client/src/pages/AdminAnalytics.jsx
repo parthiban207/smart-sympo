@@ -998,74 +998,97 @@ export default function AdminAnalytics() {
         </div>
       )}
 
-      {/* 2. Top Stats: 4 Minimal KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Stat 1: Total Registered */}
-        <div className="bg-white dark:bg-[#14161F] p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+      {/* 2. Top Stats: 3 Clean Bento Stat Cards + System Presence */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {/* Stat 1: Total Registered Bento Card */}
+        <div className="neo-glass-card p-5 space-y-2 relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Registered</span>
-            <Users className="w-4 h-4 text-slate-400" />
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-mono">Total Registered</span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+              <Users className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <div className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             {totalRegistrationsCount}
           </div>
-          <p className="text-[11px] text-slate-400">
-            Across all sessions
-          </p>
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+            <span>Across all tracks & sessions</span>
+            <span className="font-mono font-bold text-indigo-400">{events.length} Events</span>
+          </div>
         </div>
 
-        {/* Stat 2: Verified Attendance */}
-        <div className="bg-white dark:bg-[#14161F] p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+        {/* Stat 2: Verified Check-In Bento Card with Live Progress Bar */}
+        <div className="neo-glass-card p-5 space-y-2 relative overflow-hidden group md:col-span-1 lg:col-span-1 border-emerald-500/30">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Verified Attendance</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-mono">Checked-In</span>
+            </div>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            {totalAttendedCount}
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+              {totalAttendedCount}
+            </span>
+            <span className="text-xs font-bold text-emerald-500 dark:text-emerald-400 font-mono">
+              ({liveAttendanceRate}%)
+            </span>
           </div>
-          <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
-            {liveAttendanceRate}% turnout
-          </p>
+          {/* Visual Turnout Progress Bar */}
+          <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden mt-1">
+            <div
+              className="bg-gradient-to-r from-emerald-500 to-cyan-400 h-2 rounded-full transition-all duration-700 ease-out"
+              style={{ width: `${Math.min(100, liveAttendanceRate)}%` }}
+            ></div>
+          </div>
         </div>
 
-        {/* Stat 3: Pending Check-In */}
-        <div className="bg-white dark:bg-[#14161F] p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+        {/* Stat 3: Pending Check-In Bento Card */}
+        <div className="neo-glass-card p-5 space-y-2 relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Pending Check-In</span>
-            <Clock className="w-4 h-4 text-amber-500" />
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-mono">Pending</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+              <Clock className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <div className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             {pendingAttendanceCount}
           </div>
-          <p className="text-[11px] text-slate-400">
-            Awaiting scan verification
-          </p>
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+            <span>Awaiting scanner verification</span>
+            <span className="font-mono text-amber-400 font-bold">{100 - liveAttendanceRate}% Remaining</span>
+          </div>
         </div>
 
-        {/* Stat 4: System Presence */}
-        <div className="bg-white dark:bg-[#14161F] p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+        {/* Stat 4: System Presence & Coordinator Node Stats */}
+        <div className="neo-glass-card p-5 space-y-2 relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">System Presence</span>
-            <UserCheck className="w-4 h-4 text-slate-400" />
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider font-mono">Live Nodes</span>
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center border border-cyan-500/20">
+              <UserCheck className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+          <div className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
             <span>{onlineCount}</span>
-            <span className="text-xs font-normal text-slate-400">online</span>
+            <span className="text-xs font-normal text-slate-400">Online</span>
           </div>
-          <p className="text-[11px] text-slate-400">
-            {coordinatorCount} coordinators active
-          </p>
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1">
+            <span>{coordinatorCount} Coordinators Active</span>
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+          </div>
         </div>
       </div>
 
       {/* 3. Section Tabs: Clean Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-1 flex-wrap sm:flex-nowrap">
+      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 flex-wrap sm:flex-nowrap">
         <button
           onClick={() => setAdminTab('attendance')}
           className={`px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             adminTab === 'attendance'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
           }`}
         >
           Live Attendance ({joinedAttendanceRecords.length})
@@ -1075,8 +1098,8 @@ export default function AdminAnalytics() {
           onClick={() => setAdminTab('events')}
           className={`px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             adminTab === 'events'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
           }`}
         >
           Events & Venues ({events.length})
@@ -1086,8 +1109,8 @@ export default function AdminAnalytics() {
           onClick={() => setAdminTab('users')}
           className={`px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             adminTab === 'users'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
           }`}
         >
           Users & Students ({(profilesList || []).length})
@@ -1097,8 +1120,8 @@ export default function AdminAnalytics() {
           onClick={() => setAdminTab('reports')}
           className={`px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
             adminTab === 'reports'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
+              ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+              : 'text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20'
           }`}
         >
           <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -1108,7 +1131,7 @@ export default function AdminAnalytics() {
 
       {/* Tab 1: ATTENDANCE FEED & CLEAN FILTER TABLE */}
       {adminTab === 'attendance' && (
-        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-6">
+        <div className="neo-glass-card p-6 sm:p-7 space-y-6">
           {/* Clean Filter Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
             {/* Single Search Bar */}
@@ -1119,18 +1142,18 @@ export default function AdminAnalytics() {
                 placeholder="Search by student name, roll number, college, or event..."
                 value={attendanceSearchQuery}
                 onChange={(e) => setAttendanceSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-10 pr-3.5 py-2 text-xs focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-medium"
+                className="w-full bg-slate-100 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl pl-10 pr-3.5 py-2 text-xs focus:outline-none focus:border-indigo-500 transition-all font-medium"
               />
             </div>
 
             {/* Status Toggle Tabs */}
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 text-xs font-bold">
+            <div className="flex bg-slate-100 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0 text-xs font-bold">
               <button
                 onClick={() => setAttendanceStatusFilter('ALL')}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   attendanceStatusFilter === 'ALL'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 All ({joinedAttendanceRecords.length})
@@ -1139,8 +1162,8 @@ export default function AdminAnalytics() {
                 onClick={() => setAttendanceStatusFilter('ATTENDED')}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   attendanceStatusFilter === 'ATTENDED'
-                    ? 'bg-white text-emerald-800 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 Verified ({totalAttendedCount})
@@ -1149,50 +1172,50 @@ export default function AdminAnalytics() {
                 onClick={() => setAttendanceStatusFilter('PENDING')}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   attendanceStatusFilter === 'PENDING'
-                    ? 'bg-white text-slate-800 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 Pending ({pendingAttendanceCount})
               </button>
             </div>
 
-            {/* Export Actions */}
+            {/* Direct Export Actions */}
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={handleExportAttendanceCSV}
-                className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                className="px-3.5 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs rounded-xl border border-emerald-500/30 shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 title="Export Filtered Attendance Records to CSV"
               >
-                <Download className="w-3.5 h-3.5 text-emerald-600" />
+                <Download className="w-3.5 h-3.5" />
                 <span>Export CSV</span>
               </button>
 
               <button
                 onClick={handleExportAttendanceExcel}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                className="px-3.5 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 font-bold text-xs rounded-xl border border-indigo-500/30 shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 title="Export Attendance Records to Excel (.xlsx)"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                <FileSpreadsheet className="w-3.5 h-3.5" />
                 <span>Excel</span>
               </button>
             </div>
           </div>
 
-          {/* Clean Data Table */}
-          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          {/* Clean Data Table with Row Hover Cards */}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
-                  <th className="py-3 px-4">Student & Roll No</th>
-                  <th className="py-3 px-4">Event Track</th>
-                  <th className="py-3 px-4">College</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Check-in Time</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                <tr className="bg-slate-100/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800">
+                  <th className="py-3.5 px-4 font-mono uppercase text-[11px] tracking-wider">Student & Roll No</th>
+                  <th className="py-3.5 px-4 font-mono uppercase text-[11px] tracking-wider">Event Track</th>
+                  <th className="py-3.5 px-4 font-mono uppercase text-[11px] tracking-wider">College & Dept</th>
+                  <th className="py-3.5 px-4 font-mono uppercase text-[11px] tracking-wider">Status</th>
+                  <th className="py-3.5 px-4 font-mono uppercase text-[11px] tracking-wider">Check-in Time</th>
+                  <th className="py-3.5 px-4 text-right font-mono uppercase text-[11px] tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                 {filteredAttendanceRecords.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
@@ -1203,66 +1226,71 @@ export default function AdminAnalytics() {
                   </tr>
                 ) : (
                   filteredAttendanceRecords.map((record) => (
-                    <tr key={record.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={record.id} className="hover:bg-slate-100/50 dark:hover:bg-slate-800/40 transition-colors">
                       {/* Column 1: Student Name & Roll No */}
-                      <td className="py-3.5 px-4 font-semibold text-slate-900">
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">
                         <div className="flex items-center gap-2.5">
                           <img
                             src={`https://api.dicebear.com/7.x/bottts/svg?seed=${record.student_id}`}
                             alt=""
-                            className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 p-0.5 shrink-0"
+                            className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-0.5 shrink-0"
                           />
                           <div>
-                            <div className="font-bold text-slate-900">{record.student_name}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">
-                              {record.roll_no} • {record.email}
+                            <div className="font-bold text-slate-900 dark:text-white">{record.student_name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5">
+                              <span className="px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-bold">
+                                {record.roll_no}
+                              </span>
+                              <span>{record.email}</span>
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* Column 2: Event */}
-                      <td className="py-3.5 px-4 text-slate-800">
-                        <div className="font-semibold text-slate-900 truncate max-w-[200px]">
+                      {/* Column 2: Event Track */}
+                      <td className="py-3.5 px-4 text-slate-800 dark:text-slate-200">
+                        <div className="font-semibold text-slate-900 dark:text-white truncate max-w-[200px]">
                           {record.event_title}
                         </div>
-                        <div className="text-[10px] text-slate-500">
+                        <div className="text-[10px] text-cyan-400 font-mono mt-0.5">
                           {record.hall_number}
                         </div>
                       </td>
 
-                      {/* Column 3: College */}
-                      <td className="py-3.5 px-4 text-slate-600">
-                        <div className="font-medium truncate max-w-[180px]">{record.college_name}</div>
+                      {/* Column 3: College & Department */}
+                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400">
+                        <div className="font-medium truncate max-w-[180px] text-slate-700 dark:text-slate-300">{record.college_name}</div>
                         {record.department && (
-                          <div className="text-[10px] text-slate-400">{record.department}</div>
+                          <div className="text-[10px] text-slate-500">{record.department}</div>
                         )}
                       </td>
 
                       {/* Column 4: Status Badge */}
                       <td className="py-3.5 px-4">
                         {record.is_attended ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            Verified
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Verified ✅
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            Pending
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            Pending ⏳
                           </span>
                         )}
                       </td>
 
                       {/* Column 5: Check-in Time */}
-                      <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px]">
+                      <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
                         {record.checked_in_at ? (
-                          new Date(record.checked_in_at).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
+                          <span className="text-emerald-400 font-bold">
+                            {new Date(record.checked_in_at).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
                         ) : (
-                          <span className="text-slate-300">—</span>
+                          <span className="text-slate-600">—</span>
                         )}
                       </td>
 
@@ -1270,7 +1298,7 @@ export default function AdminAnalytics() {
                       <td className="py-3.5 px-4 text-right">
                         <button
                           onClick={() => handleAdminUnregister(record.event_id, record.student_id, record.student_name, record.event_title)}
-                          className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold"
+                          className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold"
                           title="Remove this registration"
                         >
                           <Trash2 className="w-3.5 h-3.5" />

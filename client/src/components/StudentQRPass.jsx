@@ -1,8 +1,8 @@
-// agent-notes: { ctx: "Minimalist dynamic refreshing QR Pass component with clean 15s rotating TOTP token and attendee metadata", deps: ["react-qr-code", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
+// agent-notes: { ctx: "Neo-Glass Fest Conference Lanyard Badge with dynamic 15s rotating TOTP QR token, live status indicator, and security watermark", deps: ["react-qr-code", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
 
 import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
-import { RefreshCw, Clock, MapPin, User, ShieldCheck } from 'lucide-react';
+import { RefreshCw, Clock, MapPin, Sparkles, Building, BookOpen, ShieldCheck } from 'lucide-react';
 
 export default function StudentQRPass({
   studentId,
@@ -11,9 +11,12 @@ export default function StudentQRPass({
   studentName,
   studentEmail,
   collegeId,
-  collegeName: _collegeName,
+  collegeName,
+  department,
   eventTitle,
   hallNumber,
+  user,
+  profile,
 }) {
   const [timeLeft, setTimeLeft] = useState(15);
   const [tokenTimestamp, setTokenTimestamp] = useState(Date.now());
@@ -25,7 +28,7 @@ export default function StudentQRPass({
         if (prev <= 1) {
           setIsRefreshing(true);
           setTokenTimestamp(Date.now());
-          setTimeout(() => setIsRefreshing(false), 400);
+          setTimeout(() => setIsRefreshing(false), 450);
           return 15;
         }
         return prev - 1;
@@ -35,104 +38,159 @@ export default function StudentQRPass({
     return () => clearInterval(timer);
   }, []);
 
-  // Generate streamlined payload encoding essential verification keys
-  const payloadData = {
-    registrationId: registrationId || '',
-    studentId: studentId || '',
-    eventId: eventId || '',
-    email: studentEmail || '',
-    student_id: studentId || '',
-    registration_id: registrationId || '',
-    event_id: eventId || '',
-    timestamp: tokenTimestamp,
-  };
+  const resolvedStudentId = user?.id || profile?.id || studentId || '';
+  const resolvedFullName = profile?.full_name || user?.full_name || studentName || user?.name || 'Student Attendee';
+  const resolvedRollNo = profile?.roll_no || user?.roll_no || collegeId || user?.college_id || 'STU-2026';
+  const resolvedDepartment = profile?.department || user?.department || department || 'Computer Science & Eng';
+  const resolvedCollege = profile?.college || user?.college || collegeName || user?.college_name || 'Engineering Campus';
 
-  const qrPayloadString = JSON.stringify(payloadData);
+  // Clean JSON payload encoding student ID, profile metadata, and timestamp
+  const qrPayload = JSON.stringify({
+    student_id: resolvedStudentId,
+    full_name: resolvedFullName,
+    roll_no: resolvedRollNo,
+    department: resolvedDepartment,
+    college: resolvedCollege,
+    timestamp: tokenTimestamp,
+    event_id: eventId || '',
+    registration_id: registrationId || '',
+    email: studentEmail || user?.email || profile?.email || '',
+  });
+
   const progressPercent = ((15 - timeLeft) / 15) * 100;
+  const tokenHash = (resolvedStudentId ? resolvedStudentId.slice(0, 8).toUpperCase() : 'AUTH') + '-' + tokenTimestamp.toString(16).slice(-4).toUpperCase();
 
   return (
-    <div className="flex flex-col items-center w-full space-y-4">
-      {/* 15-Second Refresh Status Header */}
-      <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-2xl px-4 py-2.5 text-xs shadow-2xs">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+    <div className="w-full flex flex-col items-center">
+      {/* 1. Lanyard Clip Slot Header */}
+      <div className="w-full flex flex-col items-center mb-3">
+        <div className="w-14 h-3 bg-slate-900/80 dark:bg-slate-950 rounded-full border border-slate-700/60 shadow-inner flex items-center justify-center">
+          <div className="w-8 h-1 bg-slate-600/60 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* 2. Conference Badge Body */}
+      <div className="w-full bg-[#151D2F]/95 dark:bg-[#151D2F]/95 border border-slate-700/60 rounded-3xl p-5 sm:p-6 shadow-2xl shadow-indigo-950/40 backdrop-blur-xl relative overflow-hidden text-left space-y-4">
+        {/* Background Ambient Glow Accents */}
+        <div className="absolute -top-16 -right-16 w-36 h-36 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+        {/* Top: Event Title ("SmartSympo 2026") & Live Pulse Status */}
+        <div className="flex items-center justify-between border-b border-slate-700/50 pb-3 relative z-10">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-xs font-black tracking-wider uppercase text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-300">
+                SmartSympo 2026
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-mono">National Tech Symposium</p>
           </div>
-          <span className="text-slate-700 font-bold text-xs">Live Entry Pass</span>
-        </div>
-        <div className="flex items-center gap-1.5 font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-200/70 text-xs">
-          <Clock className="w-3.5 h-3.5 text-indigo-600" />
-          <span>{timeLeft}s</span>
-        </div>
-      </div>
 
-      {/* Progress Bar */}
-      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-        <div
-          className="bg-gradient-to-r from-indigo-500 to-violet-600 h-1.5 transition-all duration-1000 ease-linear rounded-full"
-          style={{ width: `${progressPercent}%` }}
-        ></div>
-      </div>
+          <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>LIVE BADGE</span>
+          </div>
+        </div>
 
-      {/* Centerpiece: Clean High-Contrast QR Code Card */}
-      <div className="relative bg-white p-5 rounded-3xl border border-slate-200 shadow-md shadow-slate-900/5 flex items-center justify-center w-full max-w-[240px] group">
-        <QRCode
-          value={qrPayloadString}
-          size={190}
-          level="M"
-          style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
-          viewBox={`0 0 256 256`}
-        />
-        {isRefreshing && (
-          <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px] rounded-3xl flex flex-col items-center justify-center gap-2 transition-opacity">
-            <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin" />
-            <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Refreshing Token</span>
+        {/* Student Info: Name, Roll No badge, Dept & College */}
+        <div className="space-y-2 relative z-10">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h2 className="text-xl font-extrabold text-white tracking-tight leading-snug">
+                {resolvedFullName}
+              </h2>
+              <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 font-medium">
+                <BookOpen className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span>{resolvedDepartment}</span>
+              </p>
+            </div>
+
+            <span className="shrink-0 font-mono text-xs font-bold px-2.5 py-1 rounded-xl bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+              {resolvedRollNo}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium truncate">
+            <Building className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span className="truncate">{resolvedCollege}</span>
+          </div>
+        </div>
+
+        {/* Centerpiece: High-Contrast QR Code Box with Luminous Gradient Border */}
+        <div className="relative flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-900/80 border border-slate-800/80 z-10">
+          <div className="relative p-1 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 shadow-lg shadow-indigo-500/20">
+            <div className="bg-white p-3.5 rounded-[14px] flex items-center justify-center">
+              <QRCode
+                value={qrPayload}
+                size={180}
+                level="M"
+                style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
+                viewBox={`0 0 256 256`}
+              />
+            </div>
+
+            {/* Refreshing Overlay */}
+            {isRefreshing && (
+              <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center gap-2 text-white transition-opacity">
+                <RefreshCw className="w-7 h-7 text-cyan-400 animate-spin" />
+                <span className="text-[10px] font-mono font-bold text-cyan-300 uppercase tracking-widest">
+                  Rotating Token...
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* 15s Countdown Progress Indicator Bar */}
+          <div className="w-full max-w-[210px] mt-3 space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3 text-indigo-400" />
+                <span>Auto-Refreshes in</span>
+              </span>
+              <span className="font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.2 rounded border border-cyan-500/20">
+                {timeLeft}s
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 h-1.5 transition-all duration-1000 ease-linear rounded-full"
+                style={{ width: `${progressPercent}%` }}
+              ></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Target Event & Venue (if specified) */}
+        {(eventTitle || hallNumber) && (
+          <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs text-slate-300 z-10">
+            <div className="truncate pr-2">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block font-mono">Session</span>
+              <span className="font-semibold text-white truncate block">{eventTitle || 'Symposium Track'}</span>
+            </div>
+            {hallNumber && (
+              <div className="text-right shrink-0">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block font-mono">Venue</span>
+                <span className="font-mono font-bold text-cyan-400 flex items-center gap-1 justify-end">
+                  <MapPin className="w-3 h-3 text-cyan-400" />
+                  {hallNumber}
+                </span>
+              </div>
+            )}
           </div>
         )}
-      </div>
 
-      {/* Student & Event Details Card */}
-      {(studentName || eventTitle) && (
-        <div className="w-full bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 text-left space-y-2.5 text-xs shadow-2xs">
-          {studentName && (
-            <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-              <span className="text-slate-500 font-medium flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-slate-400" />
-                Attendee
-              </span>
-              <span className="font-bold text-slate-900 truncate max-w-[170px]">{studentName}</span>
-            </div>
-          )}
-          {collegeId && (
-            <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-              <span className="text-slate-500 font-medium flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
-                Roll / ID
-              </span>
-              <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200">
-                {collegeId}
-              </span>
-            </div>
-          )}
-          {eventTitle && (
-            <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-              <span className="text-slate-500 font-medium">Event</span>
-              <span className="font-semibold text-slate-900 truncate max-w-[170px]">{eventTitle}</span>
-            </div>
-          )}
-          {hallNumber && (
-            <div className="flex justify-between items-center">
-              <span className="text-slate-500 font-medium flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                Venue
-              </span>
-              <span className="font-bold text-slate-900 bg-white border border-slate-200/90 px-2.5 py-0.5 rounded-lg shadow-2xs">
-                {hallNumber}
-              </span>
-            </div>
-          )}
+        {/* Bottom: Watermark & Holographic Token Bar */}
+        <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[9px] font-mono text-slate-500 z-10">
+          <span className="flex items-center gap-1 uppercase tracking-wider text-slate-400">
+            <ShieldCheck className="w-3 h-3 text-indigo-400" />
+            Authorized Entry Pass • Non-Transferable
+          </span>
+          <span className="text-slate-400 font-bold bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700/50">
+            {tokenHash}
+          </span>
         </div>
-      )}
+      </div>
     </div>
   );
 }

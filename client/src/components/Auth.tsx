@@ -48,6 +48,8 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
+  const [department, setDepartment] = useState('');
+  const [rollNo, setRollNo] = useState('');
   const [collegeName, setCollegeName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [collegeIdInput, setCollegeIdInput] = useState('');
@@ -68,8 +70,6 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
       setMode(initialMode);
     }
   }, [initialMode]);
-
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,6 +128,11 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
         }
 
         const assignedRole: UserRole = isStaffMode ? selectedStaffRole : selectedSignupRole;
+        const generatedId = assignedRole === 'admin'
+          ? `ADM-${Math.floor(1000 + Math.random() * 9000)}`
+          : assignedRole === 'coordinator'
+          ? `FAC-${Math.floor(1000 + Math.random() * 9000)}`
+          : `STU-${Math.floor(1000 + Math.random() * 9000)}`;
 
         const result = await signUpWithSupabase({
           email: email.trim(),
@@ -135,14 +140,10 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           fullName: fullName.trim(),
           username: username.trim() || (email.includes('@') ? email.split('@')[0] : email),
           role: assignedRole,
+          department: department.trim() || 'Computer Science & Engineering',
+          roll_no: rollNo.trim() || collegeIdInput.trim() || generatedId,
           collegeName: collegeName.trim(),
-          collegeId: collegeIdInput.trim() || (
-            assignedRole === 'admin'
-              ? `ADM-${Math.floor(1000 + Math.random() * 9000)}`
-              : assignedRole === 'coordinator'
-              ? `FAC-${Math.floor(1000 + Math.random() * 9000)}`
-              : `STU-${Math.floor(1000 + Math.random() * 9000)}`
-          ),
+          collegeId: rollNo.trim() || collegeIdInput.trim() || generatedId,
           phone: phoneNumber.trim(),
         });
 
@@ -364,6 +365,40 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
                     placeholder="e.g. Sarah Chen"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-10 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Roll Number / Register No. */}
+              <div>
+                <label className="text-slate-700 font-bold block mb-1">
+                  {isStaffMode ? 'Faculty / Staff ID' : 'Roll Number / Register No.'}
+                </label>
+                <div className="relative">
+                  <GraduationCap className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    placeholder={isStaffMode ? 'e.g. FAC-102' : 'e.g. 22CS104 / STU-2026'}
+                    value={rollNo}
+                    onChange={(e) => setRollNo(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-10 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-mono font-medium uppercase"
+                  />
+                </div>
+              </div>
+
+              {/* Department */}
+              <div>
+                <label className="text-slate-700 font-bold block mb-1">
+                  Department / Branch
+                </label>
+                <div className="relative">
+                  <UserCheck className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    placeholder="e.g. Computer Science & Engineering (CSE)"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-10 pr-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-medium"
                   />
                 </div>

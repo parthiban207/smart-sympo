@@ -107,22 +107,22 @@ export default function StudentDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* 1. Academic Credential Header */}
-      <div className="academic-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-[#E7E3D8] dark:border-[#2A2E38] relative overflow-hidden">
+      {/* 1. Delegate Credential Header Card */}
+      <div className="neo-glass-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
         <div className="flex items-start sm:items-center gap-4 sm:gap-5">
-          <div className="w-14 h-14 rounded-lg bg-[#8B1E24] text-white flex items-center justify-center font-serif font-bold text-2xl shadow-xs shrink-0">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 text-white flex items-center justify-center font-extrabold text-2xl shadow-lg shadow-indigo-500/25 shrink-0">
             {(currentUser.name || currentUser.full_name || 'A').charAt(0)}
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight">
+              <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                 {currentUser.name || currentUser.full_name}
               </h1>
-              <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-[#8B1E24]/10 text-[#8B1E24] dark:bg-[#8B1E24]/20 dark:text-red-300 border border-[#8B1E24]/20">
-                {currentUser.college_id}
+              <span className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                {currentUser.college_id || currentUser.roll_no || 'STU-2026'}
               </span>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
                 Verified Delegate
               </span>
             </div>
@@ -131,15 +131,15 @@ export default function StudentDashboard() {
               {currentUser.college && (
                 <>
                   <span>•</span>
-                  <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1 font-serif">
+                  <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1">
                     <School className="w-3.5 h-3.5 text-slate-400" />
                     {currentUser.college}
                   </span>
                 </>
               )}
               <span>•</span>
-              <span className="text-[#8B1E24] dark:text-red-300 font-mono font-bold bg-[#8B1E24]/10 px-2 py-0.5 rounded">
-                {registeredEvents.length} Registered Events
+              <span className="text-indigo-600 dark:text-indigo-400 font-mono font-bold bg-indigo-500/10 px-2.5 py-0.5 rounded-md">
+                {registeredEvents.length} Registered Sessions
               </span>
             </p>
           </div>
@@ -148,10 +148,10 @@ export default function StudentDashboard() {
         {registeredEvents.length > 0 && (
           <button
             onClick={() => handleOpenQRPass(registeredEvents[0])}
-            className="w-full md:w-auto px-5 py-3 bg-[#8B1E24] hover:bg-[#73181d] text-white font-semibold text-xs rounded-lg shadow-xs flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
+            className="w-full md:w-auto px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-500/25 flex items-center justify-center gap-2 transition cursor-pointer shrink-0 active:scale-95"
           >
             <QrCode className="w-4 h-4" />
-            <span>Symposium Entry Badge</span>
+            <span>Digital Ticket Pass</span>
           </button>
         )}
       </div>
@@ -159,16 +159,16 @@ export default function StudentDashboard() {
       {/* Feedback Toast */}
       {feedback && (
         <div
-          className={`p-4 rounded-lg flex items-center gap-3 text-xs font-medium border shadow-xs animate-fadeIn ${
+          className={`p-4 rounded-xl flex items-center gap-3 text-xs font-medium border shadow-xs animate-fadeIn ${
             feedback.success
-              ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
-              : 'bg-rose-50 text-rose-900 dark:bg-rose-950 dark:text-rose-200 border-rose-200 dark:border-rose-800'
+              ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/30'
+              : 'bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/30'
           }`}
         >
           {feedback.success ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
           ) : (
-            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
           )}
           <span>{feedback.message}</span>
         </div>
@@ -178,24 +178,24 @@ export default function StudentDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column: Registered Session Matrix (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#E7E3D8] dark:border-[#2A2E38] pb-3">
-            <h2 className="text-xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-[#8B1E24] dark:text-red-400" />
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h2 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-indigo-500" />
               <span>My Schedule</span>
             </h2>
             <span className="text-xs font-mono text-slate-500 dark:text-slate-400 font-semibold">
-              {registeredEvents.length} Registered Sessions
+              {registeredEvents.length} Registered Tracks
             </span>
           </div>
 
           {registeredEvents.length === 0 ? (
-            <div className="academic-card p-10 text-center space-y-3">
-              <div className="w-12 h-12 rounded-lg bg-[#8B1E24]/10 text-[#8B1E24] dark:text-red-400 flex items-center justify-center mx-auto">
+            <div className="neo-glass-card p-10 text-center space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center mx-auto border border-indigo-500/20">
                 <FileText className="w-6 h-6" />
               </div>
-              <p className="font-serif font-bold text-[#1E293B] dark:text-slate-200 text-lg">No events registered yet.</p>
+              <p className="font-bold text-slate-900 dark:text-white text-base">No sessions registered yet.</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Browse available events on the right to register.
+                Browse available tracks on the right to claim your pass.
               </p>
             </div>
           ) : (
@@ -204,66 +204,66 @@ export default function StudentDashboard() {
                 const regCount = registrations.filter((r) => r.event_id === event.id).length;
                 const maxCap = event.max_capacity || 100;
                 const capPct = Math.min(100, Math.round((regCount / maxCap) * 100));
-                const paperCode = `PAPER-${2026}-${String(idx + 1).padStart(2, '0')}`;
+                const paperCode = `TRACK-${2026}-${String(idx + 1).padStart(2, '0')}`;
 
                 return (
                   <div
                     key={event.id}
-                    className="academic-card p-5 space-y-4 hover:border-[#8B1E24]/40 transition-all"
+                    className="neo-glass-card p-5 space-y-3.5 hover:border-indigo-500/40 transition-all"
                   >
-                    {/* Top Row: Paper Code, Category & Status */}
+                    {/* Top Row: Track Code, Category & Status */}
                     <div className="flex items-start justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                          <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                             {paperCode}
                           </span>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#8B1E24]/10 text-[#8B1E24] dark:bg-[#8B1E24]/20 dark:text-red-300 font-mono">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-mono">
                             {event.category || 'Technical Session'}
                           </span>
                           {getStatusBadge(event.status, event.delay_minutes || 0)}
                         </div>
 
-                        <h3 className="text-lg font-serif font-bold text-[#1E293B] dark:text-white tracking-tight mt-1">
+                        <h3 className="text-base font-extrabold text-slate-900 dark:text-white tracking-tight mt-1">
                           {event.title}
                         </h3>
                       </div>
 
                       <button
                         onClick={() => handleOpenQRPass(event)}
-                        className="px-3 py-1.5 rounded bg-[#8B1E24]/10 hover:bg-[#8B1E24]/20 text-[#8B1E24] dark:text-red-300 border border-[#8B1E24]/20 text-xs font-bold font-mono transition cursor-pointer shrink-0 flex items-center gap-1.5"
+                        className="px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-bold font-mono transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs"
                       >
-                        <QrCode className="w-4 h-4" />
-                        <span>Entry Badge</span>
+                        <QrCode className="w-3.5 h-3.5" />
+                        <span>Pass</span>
                       </button>
                     </div>
 
-                    {/* Paper Abstract Preview */}
-                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
+                    {/* Description */}
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
                       {event.description}
                     </p>
 
                     {/* Meta Bar: Time, Hall, Occupancy & Actions */}
-                    <div className="pt-3 border-t border-[#E7E3D8] dark:border-[#2A2E38] flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 flex-wrap gap-2">
+                    <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 flex-wrap gap-2">
                       <div className="flex items-center gap-4 flex-wrap">
-                        <span className="flex items-center gap-1 font-mono text-[11px] font-medium">
-                          <Clock className="w-3.5 h-3.5 text-[#8B1E24] dark:text-red-400" />
+                        <span className="flex items-center gap-1 font-mono text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                          <Clock className="w-3.5 h-3.5 text-indigo-500" />
                           {formatTime(event.start_time)} – {formatTime(event.end_time)}
                         </span>
-                        <span className="flex items-center gap-1 font-mono text-[11px] font-medium">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="flex items-center gap-1 font-mono text-[11px] font-medium text-cyan-500 dark:text-cyan-400">
+                          <MapPin className="w-3.5 h-3.5" />
                           {event.hall_number}
                         </span>
                         <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                          {capPct}% Filled ({regCount}/{maxCap})
+                          {capPct}% ({regCount}/{maxCap})
                         </span>
                       </div>
 
                       <button
                         onClick={() => handleUnregister(event.id)}
-                        className="text-[11px] font-mono text-rose-700 dark:text-rose-400 hover:underline font-semibold cursor-pointer"
+                        className="text-[11px] font-mono text-rose-500 hover:text-rose-400 hover:underline font-semibold cursor-pointer"
                       >
-                        Cancel Registration
+                        Cancel
                       </button>
                     </div>
                   </div>
@@ -275,9 +275,9 @@ export default function StudentDashboard() {
 
         {/* Right Column: Open Proceedings & Enrolment (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#E7E3D8] dark:border-[#2A2E38] pb-3">
-            <h2 className="text-xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight flex items-center gap-2">
-              <Bookmark className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h2 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+              <Bookmark className="w-5 h-5 text-cyan-500" />
               <span>Browse Events</span>
             </h2>
             <span className="text-xs font-mono text-slate-500 dark:text-slate-400 font-semibold">
@@ -286,9 +286,9 @@ export default function StudentDashboard() {
           </div>
 
           {availableEvents.length === 0 ? (
-            <div className="academic-card p-8 text-center space-y-2">
-              <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-              <p className="font-serif font-bold text-[#1E293B] dark:text-slate-200 text-sm">Registered for all available events.</p>
+            <div className="neo-glass-card p-8 text-center space-y-2">
+              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+              <p className="font-bold text-slate-900 dark:text-white text-sm">Registered for all available tracks.</p>
             </div>
           ) : (
             <div className="space-y-3.5">
@@ -300,14 +300,14 @@ export default function StudentDashboard() {
                 return (
                   <div
                     key={event.id}
-                    className="academic-card p-4 space-y-3 hover:border-slate-400 transition-all"
+                    className="neo-glass-card p-4 space-y-3 hover:border-indigo-500/30 transition-all"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
-                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
                           {event.category || 'Technical Session'}
                         </span>
-                        <h4 className="text-sm font-serif font-bold text-[#1E293B] dark:text-white">
+                        <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">
                           {event.title}
                         </h4>
                       </div>
@@ -315,10 +315,10 @@ export default function StudentDashboard() {
                       <button
                         onClick={() => handleRegister(event.id)}
                         disabled={isFull}
-                        className={`px-3 py-1.5 rounded font-bold text-xs transition cursor-pointer shrink-0 font-mono shadow-xs ${
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer shrink-0 font-mono shadow-xs ${
                           isFull
                             ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                            : 'bg-[#8B1E24] hover:bg-[#73181d] text-white'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20'
                         }`}
                       >
                         {isFull ? 'Full' : 'Register'}
@@ -329,8 +329,8 @@ export default function StudentDashboard() {
                       {event.description}
                     </p>
 
-                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-2 border-t border-[#E7E3D8] dark:border-[#2A2E38]">
-                      <span>{event.hall_number}</span>
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800">
+                      <span className="text-cyan-500 dark:text-cyan-400 font-semibold">{event.hall_number}</span>
                       <span>{formatTime(event.start_time)}</span>
                       <span className="font-bold text-slate-700 dark:text-slate-300">
                         {regCount}/{maxCap} Seats

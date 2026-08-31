@@ -357,28 +357,27 @@ export default function CoordinatorConsole() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* 1. Venue & Event Control Top Header */}
-      {/* 1. Academic Lecture Hall Header */}
-      <div className="academic-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 transition-colors">
+      {/* 1. Operations & Hall Management Header */}
+      <div className="neo-glass-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 transition-colors">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight">
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
               Venues & Halls
             </h1>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#8B1E24]/10 text-[#8B1E24] dark:bg-[#8B1E24]/20 dark:text-red-300 border border-[#8B1E24]/20 uppercase">
-              Operations
+            <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 uppercase tracking-wider">
+              Coordinator Live Console
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
-            Scan and verify student attendance in real time
+            Scan and verify student attendance in real time across venues
           </p>
         </div>
 
         <div className="w-full md:w-auto flex items-center gap-3 flex-wrap sm:flex-nowrap">
           {/* Hall Selector */}
           <div className="flex items-center gap-2 flex-1 sm:flex-none">
-            <div className="flex items-center gap-2 bg-[#F5F1E8] dark:bg-[#1A1D24] border border-[#E7E3D8] dark:border-[#2A2E38] px-3.5 py-2 rounded-lg text-xs font-mono font-bold text-[#1E293B] dark:text-slate-200">
-              <MapPin className="w-3.5 h-3.5 text-[#8B1E24] shrink-0" />
+            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 px-3.5 py-2 rounded-xl text-xs font-mono font-bold text-slate-800 dark:text-slate-200 shadow-xs">
+              <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <select
                 value={selectedHall}
                 onChange={(e) => {
@@ -390,7 +389,7 @@ export default function CoordinatorConsole() {
                 className="bg-transparent focus:outline-none cursor-pointer"
               >
                 {safeHalls.map((hall) => (
-                  <option key={hall} value={hall}>
+                  <option key={hall} value={hall} className="bg-slate-900 text-white">
                     {hall}
                   </option>
                 ))}
@@ -401,8 +400,8 @@ export default function CoordinatorConsole() {
           {/* Event Selector */}
           {(events || []).length > 1 && (
             <div className="flex items-center gap-2 flex-1 sm:flex-none">
-              <div className="flex items-center gap-2 bg-[#F5F1E8] dark:bg-[#1A1D24] border border-[#E7E3D8] dark:border-[#2A2E38] px-3.5 py-2 rounded-lg text-xs font-mono font-bold text-[#1E293B] dark:text-slate-200">
-                <Calendar className="w-3.5 h-3.5 text-[#8B1E24] shrink-0" />
+              <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 px-3.5 py-2 rounded-xl text-xs font-mono font-bold text-slate-800 dark:text-slate-200 shadow-xs">
+                <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                 <select
                   value={currentEvent?.id || ''}
                   onChange={(e) => {
@@ -414,7 +413,7 @@ export default function CoordinatorConsole() {
                   className="bg-transparent focus:outline-none cursor-pointer max-w-[160px] truncate"
                 >
                   {(events || []).map((ev) => (
-                    <option key={ev.id} value={ev.id}>
+                    <option key={ev.id} value={ev.id} className="bg-slate-900 text-white">
                       {ev.title}
                     </option>
                   ))}
@@ -428,23 +427,23 @@ export default function CoordinatorConsole() {
             onClick={() => currentEvent?.id && fetchEventStats(currentEvent.id)}
             title="Refresh Attendance Stats"
             disabled={isFetchingAttendance || !currentEvent?.id}
-            className="p-2.5 bg-[#F5F1E8] dark:bg-[#1A1D24] hover:bg-[#EAE5D7] dark:hover:bg-[#252832] text-slate-700 dark:text-slate-300 border border-[#E7E3D8] dark:border-[#2A2E38] rounded-lg transition cursor-pointer shrink-0 disabled:opacity-50"
+            className="p-2.5 bg-slate-100 dark:bg-slate-900/90 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 rounded-xl transition cursor-pointer shrink-0 disabled:opacity-50 shadow-xs"
           >
-            <RefreshCw className={`w-4 h-4 ${isFetchingAttendance ? 'animate-spin text-[#8B1E24]' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isFetchingAttendance ? 'animate-spin text-indigo-500' : ''}`} />
           </button>
 
           {/* Emergency Alert Trigger */}
           <button
             onClick={() => setShowEmergencyModal(true)}
-            className="px-3.5 py-2.5 bg-rose-50 dark:bg-rose-950/80 hover:bg-rose-100 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-bold text-xs rounded-lg transition cursor-pointer shrink-0 flex items-center gap-1.5"
+            className="px-3.5 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 font-bold text-xs rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs"
           >
-            <Radio className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-            <span className="hidden sm:inline">Emergency Alert</span>
+            <Radio className="w-3.5 h-3.5 text-rose-500" />
+            <span className="hidden sm:inline">Emergency Broadcast</span>
           </button>
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2.5 bg-[#8B1E24] hover:bg-[#73181d] text-white font-bold text-xs rounded-lg shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-500/25 flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 active:scale-95"
           >
             <PlusCircle className="w-4 h-4" />
             <span>Create Session</span>
@@ -452,62 +451,65 @@ export default function CoordinatorConsole() {
         </div>
       </div>
 
-      {/* 2. Top Stats: 4 Academic KPI Ledgers */}
+      {/* 2. Top Stats: 4 Clean Bento KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Stat 1: Total Registered */}
-        <div className="academic-card p-5 space-y-2">
-          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
+        <div className="neo-glass-card p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             <span>Total Enrolled</span>
-            <div className="w-8 h-8 rounded-lg bg-[#8B1E24]/10 text-[#8B1E24] dark:text-red-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center border border-indigo-500/20">
               <UserCheck className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight">
+          <div className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             {stats?.totalRegistered ?? 0}
           </div>
           <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">Delegates registered for hall</p>
         </div>
 
         {/* Stat 2: Total Scanned / Checked-In */}
-        <div className="academic-card p-5 space-y-2">
-          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
-            <span>Verified Present</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 flex items-center justify-center">
+        <div className="neo-glass-card p-5 space-y-2 border-emerald-500/30">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              Verified Present
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-serif font-bold text-emerald-700 dark:text-emerald-400 tracking-tight">
+          <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight">
             {stats?.totalScanned ?? 0}
           </div>
-          <p className="text-[11px] font-mono text-emerald-800 dark:text-emerald-300">Verified attendance badges</p>
+          <p className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400">Verified attendance badges</p>
         </div>
 
         {/* Stat 3: Pending Check-In */}
-        <div className="academic-card p-5 space-y-2">
-          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
+        <div className="neo-glass-card p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             <span>Pending Check-In</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
               <Clock className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-serif font-bold text-amber-700 dark:text-amber-400 tracking-tight">
+          <div className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight">
             {stats?.pendingCheckIn ?? 0}
           </div>
-          <p className="text-[11px] font-mono text-amber-800 dark:text-amber-300">Awaiting entrance verification</p>
+          <p className="text-[11px] font-mono text-amber-600 dark:text-amber-400">Awaiting entrance verification</p>
         </div>
 
         {/* Stat 4: Attendance Rate */}
-        <div className="academic-card p-5 space-y-2">
-          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
-            <span>Hall Turnout Rate</span>
-            <div className="w-8 h-8 rounded-lg bg-[#8B1E24]/10 text-[#8B1E24] dark:text-red-400 flex items-center justify-center">
+        <div className="neo-glass-card p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <span>Turnout Rate</span>
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center border border-cyan-500/20">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-3xl font-serif font-bold text-[#8B1E24] dark:text-red-400 tracking-tight">
+          <div className="text-3xl font-extrabold text-cyan-600 dark:text-cyan-400 tracking-tight">
             {stats?.successRate ?? 0}%
           </div>
-          <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">Live lecture turnout</p>
+          <p className="text-[11px] font-mono text-cyan-600 dark:text-cyan-400">Live lecture turnout</p>
         </div>
       </div>
 

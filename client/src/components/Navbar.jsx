@@ -51,8 +51,8 @@ export default function Navbar({ onToggleMobileMenu }) {
 
   return (
     <>
-      {/* Clean Top Header */}
-      <header className="sticky top-0 z-20 bg-white/90 dark:bg-[#121417]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
+      {/* Clean Neo-Glass Top Header */}
+      <header className="sticky top-0 z-20 bg-white/80 dark:bg-[#0B0F19]/85 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 gap-4">
 
@@ -60,18 +60,20 @@ export default function Navbar({ onToggleMobileMenu }) {
             <div className="flex items-center gap-3">
               <button
                 onClick={onToggleMobileMenu}
-                className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition cursor-pointer"
+                className="md:hidden p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition cursor-pointer"
                 title="Open Mobile Navigation"
               >
                 <Menu className="w-5 h-5" />
               </button>
 
               <div className="flex items-center gap-2 text-sm font-medium text-slate-500 dark:text-slate-400">
-                <Link to="/" className="hover:text-slate-900 dark:hover:text-slate-200 flex items-center gap-2 transition">
-                  <div className="w-7 h-7 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 flex items-center justify-center font-bold text-xs">
+                <Link to="/" className="hover:text-slate-900 dark:hover:text-slate-200 flex items-center gap-2.5 transition">
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-500 to-cyan-400 text-white flex items-center justify-center font-extrabold text-xs shadow-xs">
                     S
                   </div>
-                  <span className="hidden sm:inline font-semibold text-slate-900 dark:text-white">SmartSympo</span>
+                  <span className="hidden sm:inline font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400">
+                    SmartSympo
+                  </span>
                 </Link>
                 <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600" />
                 <span className="font-semibold text-slate-900 dark:text-white">
@@ -89,9 +91,9 @@ export default function Navbar({ onToggleMobileMenu }) {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search sessions, delegates..."
-                  className="w-full pl-9 pr-8 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-900 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 dark:focus:ring-slate-400/10 focus:border-slate-300 dark:focus:border-slate-700 transition"
+                  className="w-full pl-9 pr-8 py-1.5 bg-slate-100/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition"
                 />
-                <kbd className="hidden lg:inline-block absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">
+                <kbd className="hidden lg:inline-block absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-400 border border-slate-300 dark:border-slate-700">
                   ⌘K
                 </kbd>
               </div>
@@ -103,10 +105,10 @@ export default function Navbar({ onToggleMobileMenu }) {
               <button
                 onClick={toggleDarkMode}
                 title="Toggle Theme"
-                className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition cursor-pointer"
+                className="p-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 transition cursor-pointer"
               >
                 {isDarkMode ? (
-                  <Sun className="w-4 h-4 text-amber-500" />
+                  <Sun className="w-4 h-4 text-amber-400" />
                 ) : (
                   <Moon className="w-4 h-4" />
                 )}
