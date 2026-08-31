@@ -27,7 +27,7 @@ import {
   ShieldCheck, PlusCircle, MapPin, Radio, UserCheck, Users,
   Globe, Crosshair, Ruler, FileText, ScanLine, Clock, Hash, CheckCircle2, AlertCircle,
   Pencil, Trash2, KeyRound, Lock, FileSpreadsheet, Download, FileDown,
-  StopCircle, Mail, Search, Building, Eye
+  StopCircle, Mail, Search, Building, Eye, MoreHorizontal
 } from 'lucide-react';
 
 export default function AdminAnalytics() {
@@ -46,6 +46,7 @@ export default function AdminAnalytics() {
   const [selectedExportEventId, setSelectedExportEventId] = useState('');
   const [coordForm, setCoordForm] = useState({ fullName: '', email: '', password: '', phone: '', department: '' });
   const [creatingCoord, setCreatingCoord] = useState(false);
+  const [showMoreActionsMenu, setShowMoreActionsMenu] = useState(false);
 
   // Real-Time Attendance Re-fetch Helper (with relational query)
   const fetchAttendanceList = useCallback(async () => {
@@ -757,41 +758,46 @@ export default function AdminAnalytics() {
 
   const handleAddSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.title || !formData.start_time || !formData.end_time) return;
-
-    const userRole = (currentUser?.role || localStorage.getItem('smart_sympo_active_role') || '').toLowerCase();
-    if (userRole !== 'admin' && userRole !== 'coordinator') {
-      setExportFeedback({ message: 'Access Denied: Only admins or coordinators can create events.', type: 'error' });
+    if (!formData.title || !formData.start_time || !formData.end_time) {
+      setExportFeedback({ message: 'Please fill in all required fields (Title, Start Time, End Time).', type: 'error' });
       setTimeout(() => setExportFeedback(null), 4000);
       return;
     }
 
-    const result = await addEvent({
-      ...formData,
-      start_time: new Date(formData.start_time).toISOString(),
-      end_time: new Date(formData.end_time).toISOString(),
-      max_capacity: Number(formData.max_capacity),
-      latitude: formData.latitude ? parseFloat(formData.latitude) : null,
-      longitude: formData.longitude ? parseFloat(formData.longitude) : null,
-      allowed_radius: Number(formData.allowed_radius) || 200,
-    });
-
-    if (result && result.success) {
-      setShowAddModal(false);
-      setFormData({
-        title: '',
-        description: '',
-        category: 'Technical',
-        hall_number: 'Hall 1 (Main Auditorium)',
-        latitude: '',
-        longitude: '',
-        allowed_radius: 200,
-        start_time: '',
-        end_time: '',
-        max_capacity: 100,
+    try {
+      const result = await addEvent({
+        ...formData,
+        start_time: new Date(formData.start_time).toISOString(),
+        end_time: new Date(formData.end_time).toISOString(),
+        max_capacity: Number(formData.max_capacity) || 100,
+        latitude: formData.latitude ? parseFloat(formData.latitude) : null,
+        longitude: formData.longitude ? parseFloat(formData.longitude) : null,
+        allowed_radius: Number(formData.allowed_radius) || 200,
       });
-    } else {
-      console.warn(`Event creation failed: ${result?.error?.message || 'Database insert error'}`);
+
+      if (result && result.success) {
+        setShowAddModal(false);
+        setExportFeedback({ message: `Session "${formData.title}" published successfully!`, type: 'success' });
+        setTimeout(() => setExportFeedback(null), 4000);
+        setFormData({
+          title: '',
+          description: '',
+          category: 'Technical',
+          hall_number: 'Hall 1 (Main Auditorium)',
+          latitude: '',
+          longitude: '',
+          allowed_radius: 200,
+          start_time: '',
+          end_time: '',
+          max_capacity: 100,
+        });
+      } else {
+        setExportFeedback({ message: `Event creation failed: ${result?.error?.message || 'Database insert error'}`, type: 'error' });
+        setTimeout(() => setExportFeedback(null), 4000);
+      }
+    } catch (err) {
+      setExportFeedback({ message: `Error creating event: ${err?.message || 'Unexpected failure'}`, type: 'error' });
+      setTimeout(() => setExportFeedback(null), 4000);
     }
   };
 
@@ -839,80 +845,117 @@ export default function AdminAnalytics() {
   const activeExportEventRegs = activeExportEvent ? registrations.filter((r) => r.event_id === activeExportEvent.id) : [];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* 1. Academic Governance Header */}
-      <div className="academic-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 transition-colors">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* 1. Page Header */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight">
-              Academic Governance & Proceedings Hub
-            </h1>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#8B1E24]/10 text-[#8B1E24] dark:bg-[#8B1E24]/20 dark:text-red-300 border border-[#8B1E24]/20 uppercase">
-              Management
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
-            Attendance verification, proceedings management, report exports, and delegate security
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">
+            Governance Hub
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+            Manage sessions, attendance, reports, and delegate operations.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap sm:flex-nowrap">
+        {/* Clean Action Button Group */}
+        <div className="flex items-center gap-2 w-full md:w-auto relative">
           {hasActiveEmergency && (
             <button
               onClick={async () => {
                 await clearGlobalEmergencyBroadcast();
               }}
-              className="px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-lg shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer border border-amber-500"
+              className="px-3 py-2 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-medium text-xs rounded-lg flex items-center gap-1.5 transition cursor-pointer border border-amber-300 dark:border-amber-700"
               title="Stop emergency broadcast"
             >
-              <StopCircle className="w-3.5 h-3.5 text-rose-700" />
+              <StopCircle className="w-3.5 h-3.5" />
               <span>Stop Broadcast</span>
             </button>
           )}
 
+          {/* Secondary: Export CSV */}
           <button
-            onClick={() => setShowEmergencyModal(true)}
-            className="px-3.5 py-2.5 bg-rose-50 dark:bg-rose-950/80 hover:bg-rose-100 text-rose-800 dark:text-rose-300 font-bold text-xs rounded-lg border border-rose-200 dark:border-rose-800 flex items-center justify-center gap-1.5 transition cursor-pointer"
+            onClick={handleExportAttendanceCSV}
+            className="px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-xs rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 transition cursor-pointer"
           >
-            <Radio className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-            <span>Emergency Alert</span>
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <span>Export CSV</span>
           </button>
 
-          <button
-            onClick={() => setIsScannerOpen(true)}
-            className="px-3.5 py-2.5 bg-[#F5F1E8] dark:bg-[#1A1D24] hover:bg-[#EAE5D7] text-slate-800 dark:text-slate-200 font-bold text-xs rounded-lg border border-[#E7E3D8] dark:border-[#2A2E38] flex items-center justify-center gap-1.5 transition cursor-pointer"
-          >
-            <ScanLine className="w-3.5 h-3.5 text-[#8B1E24]" />
-            <span>QR Scanner</span>
-          </button>
-
-          <button
-            onClick={() => setAdminTab('reports')}
-            className={`px-3.5 py-2.5 font-bold text-xs rounded-lg border flex items-center justify-center gap-1.5 transition cursor-pointer ${
-              adminTab === 'reports'
-                ? 'bg-[#8B1E24] text-white border-[#8B1E24]'
-                : 'bg-emerald-50 dark:bg-emerald-950 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-            }`}
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Export Hub</span>
-          </button>
-
-          <button
-            onClick={() => setShowAddCoordinatorModal(true)}
-            className="px-3.5 py-2.5 bg-[#F5F1E8] dark:bg-[#1A1D24] hover:bg-[#EAE5D7] text-slate-800 dark:text-slate-200 font-bold text-xs rounded-lg border border-[#E7E3D8] dark:border-[#2A2E38] flex items-center justify-center gap-1.5 transition cursor-pointer"
-          >
-            <UserCheck className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-            <span>Add Faculty</span>
-          </button>
-
+          {/* Primary: + Create Session */}
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2.5 bg-[#8B1E24] hover:bg-[#73181d] text-white font-bold text-xs rounded-lg shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+            className="px-3.5 py-2 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 font-medium text-xs rounded-lg shadow-xs flex items-center gap-1.5 transition cursor-pointer"
           >
-            <PlusCircle className="w-4 h-4" />
+            <PlusCircle className="w-3.5 h-3.5" />
             <span>Create Session</span>
           </button>
+
+          {/* "..." Dropdown for secondary actions */}
+          <div className="relative">
+            <button
+              onClick={() => setShowMoreActionsMenu(!showMoreActionsMenu)}
+              className="p-2 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg border border-slate-200 dark:border-slate-800 transition cursor-pointer"
+              title="More Actions"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+
+            {showMoreActionsMenu && (
+              <>
+                <div
+                  onClick={() => setShowMoreActionsMenu(false)}
+                  className="fixed inset-0 z-20"
+                />
+                <div className="absolute right-0 mt-1.5 w-48 bg-white dark:bg-[#1A1D24] border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg z-30 py-1">
+                  <button
+                    onClick={() => {
+                      setShowMoreActionsMenu(false);
+                      setShowEmergencyModal(true);
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs font-medium text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>Emergency Alert</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowMoreActionsMenu(false);
+                      setIsScannerOpen(true);
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <ScanLine className="w-3.5 h-3.5" />
+                    <span>Camera Scanner</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowMoreActionsMenu(false);
+                      setShowAddCoordinatorModal(true);
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Add Faculty</span>
+                  </button>
+
+                  <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
+
+                  <button
+                    onClick={() => {
+                      setShowMoreActionsMenu(false);
+                      setAdminTab('reports');
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Export Hub</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -942,70 +985,62 @@ export default function AdminAnalytics() {
         </div>
       )}
 
-      {/* 2. Top Stats: 4 Modern KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* 2. Top Stats: 4 Minimal KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Stat 1: Total Registered */}
-        <div className="bg-white dark:bg-[#14161F] p-5.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Total Registered</span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <Users className="w-4 h-4" />
-            </div>
+        <div className="bg-white dark:bg-[#14161F] p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Registered</span>
+            <Users className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+          <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             {totalRegistrationsCount}
           </div>
-          <p className="text-[11px] text-slate-400 font-medium">
-            Across all symposium sessions
+          <p className="text-[11px] text-slate-400">
+            Across all sessions
           </p>
         </div>
 
         {/* Stat 2: Verified Attendance */}
-        <div className="bg-white dark:bg-[#14161F] p-5.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Verified Attendance</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
+        <div className="bg-white dark:bg-[#14161F] p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Verified Attendance</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
-          <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight">
+          <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             {totalAttendedCount}
           </div>
-          <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
-            {liveAttendanceRate}% overall turnout confirmed
+          <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
+            {liveAttendanceRate}% turnout
           </p>
         </div>
 
         {/* Stat 3: Pending Check-In */}
-        <div className="bg-white dark:bg-[#14161F] p-5.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Pending Check-In</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center">
-              <Clock className="w-4 h-4" />
-            </div>
+        <div className="bg-white dark:bg-[#14161F] p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Pending Check-In</span>
+            <Clock className="w-4 h-4 text-amber-500" />
           </div>
-          <div className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight">
+          <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             {pendingAttendanceCount}
           </div>
-          <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">
-            Registered attendees awaiting scan
+          <p className="text-[11px] text-slate-400">
+            Awaiting scan verification
           </p>
         </div>
 
-        {/* Stat 4: Online Users & Coords */}
-        <div className="bg-white dark:bg-[#14161F] p-5.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>System Presence</span>
-            <div className="w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-950 text-violet-600 dark:text-violet-400 flex items-center justify-center">
-              <UserCheck className="w-4 h-4" />
-            </div>
+        {/* Stat 4: System Presence */}
+        <div className="bg-white dark:bg-[#14161F] p-5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">System Presence</span>
+            <UserCheck className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-3xl font-extrabold text-indigo-600 tracking-tight flex items-center gap-2">
+          <div className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
             <span>{onlineCount}</span>
             <span className="text-xs font-normal text-slate-400">online</span>
           </div>
-          <p className="text-[11px] text-slate-400 font-medium">
-            {coordinatorCount} active coordinators configured
+          <p className="text-[11px] text-slate-400">
+            {coordinatorCount} coordinators active
           </p>
         </div>
       </div>

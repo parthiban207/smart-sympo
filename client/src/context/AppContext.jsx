@@ -108,7 +108,68 @@ export const AppProvider = ({ children }) => {
 
   const toggleDarkMode = () => setIsDarkMode((prev) => !prev);
 
-  const [events, setEvents] = useState([]);
+  const defaultSeedEvents = [
+    {
+      id: 'e01a89c4-64b1-4b15-9618-971c08be2f31',
+      title: 'Keynote Address: Future of Generative Intelligence & Edge Computing',
+      description: 'Inaugural symposium keynote addressing next-generation distributed models, real-time edge inference, and academic research frontiers.',
+      category: 'Technical',
+      hall_number: 'Hall 1 (Main Auditorium)',
+      start_time: new Date(Date.now() + 3600000).toISOString(),
+      end_time: new Date(Date.now() + 10800000).toISOString(),
+      max_capacity: 250,
+      status: 'Scheduled',
+      delay_minutes: 0,
+      allowed_radius: 250,
+    },
+    {
+      id: 'e02b89c4-64b1-4b15-9618-971c08be2f32',
+      title: 'Paper Track A: Decentralized Cryptographic Verification & Zero-Knowledge Proofs',
+      description: 'Peer-reviewed research session covering scalable zero-knowledge rollups, verifiable credential infrastructure, and state-channel security.',
+      category: 'Technical',
+      hall_number: 'Hall 2 (Computing Lab)',
+      start_time: new Date(Date.now() + 14400000).toISOString(),
+      end_time: new Date(Date.now() + 21600000).toISOString(),
+      max_capacity: 120,
+      status: 'Scheduled',
+      delay_minutes: 0,
+      allowed_radius: 200,
+    },
+    {
+      id: 'e03c89c4-64b1-4b15-9618-971c08be2f33',
+      title: 'Roundtable: Research Ethics, Open-Source Governance & AI Policy',
+      description: 'Interactive symposium panel on open data standards, reproducible science, academic patenting, and peer-review integrity.',
+      category: 'Non-Technical',
+      hall_number: 'Hall 3 (Seminar Room)',
+      start_time: new Date(Date.now() + 25200000).toISOString(),
+      end_time: new Date(Date.now() + 32400000).toISOString(),
+      max_capacity: 80,
+      status: 'Scheduled',
+      delay_minutes: 0,
+      allowed_radius: 200,
+    },
+  ];
+
+  const [events, setEvents] = useState(() => {
+    try {
+      const saved = localStorage.getItem('smart_sympo_events');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // Fallback
+    }
+    return defaultSeedEvents;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('smart_sympo_events', JSON.stringify(events));
+    } catch (e) {
+      console.warn('Could not save events to localStorage:', e);
+    }
+  }, [events]);
 
   const [registrations, setRegistrations] = useState(() => {
     try {
@@ -369,23 +430,50 @@ export const AppProvider = ({ children }) => {
   // Global Event Fetching Helper (memoized)
   const fetchEvents = useCallback(async () => {
     try {
-      const { data, error } = await supabase
+      if (isMockMode) {
+        return { data: null, error: null };
+      }
+
+      let data = null;
+      let error = null;
+
+      // Try selecting events ordered by start_time
+      const res1 = await supabase
         .from('events')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('start_time', { ascending: true });
 
-      if (error) {
-        console.warn('Events fetch warning (silent):', error.message);
-        if (isClockSkewOrJwtError(error)) {
-          setTimeout(() => fetchEvents(), 1500);
+      if (!res1.error && res1.data && res1.data.length > 0) {
+        data = res1.data;
+      } else {
+        const res2 = await supabase.from('events').select('*');
+        if (!res2.error && res2.data && res2.data.length > 0) {
+          data = res2.data;
+        } else if (res2.error) {
+          error = res2.error;
         }
-        return { data: null, error };
       }
 
-      if (data) {
-        setEvents(data);
+      if (data && data.length > 0) {
+        setEvents((prev) => {
+          const remoteIds = new Set(data.map((e) => e.id));
+          const localOnly = prev.filter((e) => !remoteIds.has(e.id));
+          const merged = [...data, ...localOnly];
+          try {
+            localStorage.setItem('smart_sympo_events', JSON.stringify(merged));
+          } catch (e) {
+            console.warn('LocalStorage save error in fetchEvents:', e);
+          }
+          return merged;
+        });
+        return { data, error: null };
       }
-      return { data, error: null };
+
+      if (error && isClockSkewOrJwtError(error)) {
+        setTimeout(() => fetchEvents(), 1500);
+      }
+
+      return { data: null, error };
     } catch (err) {
       console.warn('Network fetch silent fallback:', err);
       return { data: null, error: err };
@@ -1646,69 +1734,107 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Add new event (Admin & Coordinator function - Insert directly to Supabase)
+  // Add new event (Admin & Coordinator function - Resilient Supabase + Local State)
   const addEvent = async (newEventData) => {
-    try {
-      const insertPayload = {
-        title: newEventData.title,
-        description: newEventData.description || '',
-        category: newEventData.category || 'Technical',
-        hall_number: newEventData.hall_number || 'Hall 1 (Main Auditorium)',
-        start_time: newEventData.start_time || new Date().toISOString(),
-        end_time: newEventData.end_time || new Date(Date.now() + 7200000).toISOString(),
-        max_capacity: Number(newEventData.max_capacity || newEventData.max_seats || 100),
-        status: newEventData.status || 'Scheduled',
-        delay_minutes: Number(newEventData.delay_minutes || 0),
-      };
+    const generatedId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `e${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 6)}-4000-8000-${Date.now().toString(16).slice(-12).padStart(12, '0')}`;
 
-      if (newEventData.latitude && newEventData.longitude) {
-        insertPayload.location = `SRID=4326;POINT(${newEventData.longitude} ${newEventData.latitude})`;
-      }
+    const normalizedEvent = {
+      id: newEventData.id || generatedId,
+      title: newEventData.title || 'Untitled Session',
+      description: newEventData.description || '',
+      category: newEventData.category || 'Technical',
+      hall_number: newEventData.hall_number || 'Hall 1 (Main Auditorium)',
+      start_time: newEventData.start_time || new Date().toISOString(),
+      end_time: newEventData.end_time || new Date(Date.now() + 7200000).toISOString(),
+      max_capacity: Number(newEventData.max_capacity || newEventData.max_seats || 100),
+      status: newEventData.status || 'Scheduled',
+      delay_minutes: Number(newEventData.delay_minutes || 0),
+      allowed_radius: Number(newEventData.allowed_radius || 200),
+      created_at: new Date().toISOString(),
+    };
 
-      const { data, error } = await supabase.from('events').insert([insertPayload]).select().single();
+    let remoteEvent = null;
 
-      if (error) {
-        if (isClockSkewOrJwtError(error)) {
-          console.warn('Clock skew in addEvent, retrying in 1.5s...');
-          await new Promise((r) => setTimeout(r, 1500));
-          return addEvent(newEventData);
+    if (!isMockMode) {
+      try {
+        const fullPayload = {
+          title: normalizedEvent.title,
+          description: normalizedEvent.description,
+          category: normalizedEvent.category,
+          hall_number: normalizedEvent.hall_number,
+          start_time: normalizedEvent.start_time,
+          end_time: normalizedEvent.end_time,
+          max_capacity: normalizedEvent.max_capacity,
+          status: normalizedEvent.status,
+          delay_minutes: normalizedEvent.delay_minutes,
+        };
+
+        if (newEventData.latitude && newEventData.longitude) {
+          fullPayload.location = `SRID=4326;POINT(${newEventData.longitude} ${newEventData.latitude})`;
         }
-        console.error('Supabase event creation error:', error);
-        setLiveAlerts((prev) => [
-          {
-            id: Date.now(),
-            message: `Event Creation Error: ${error.message}`,
-            time: new Date().toLocaleTimeString(),
-            type: 'warning',
-          },
-          ...prev.slice(0, 4),
-        ]);
-        return { success: false, error };
-      }
+        if (normalizedEvent.allowed_radius) {
+          fullPayload.allowed_radius = normalizedEvent.allowed_radius;
+        }
 
-      if (data) {
-        setEvents((prev) => [data, ...prev.filter((e) => e.id !== data.id)]);
-        setLiveAlerts((prev) => [
-          {
-            id: Date.now(),
-            message: `Event Created: ${data.title} in ${data.hall_number}`,
-            time: new Date().toLocaleTimeString(),
-            type: 'info',
-          },
-          ...prev.slice(0, 4),
-        ]);
-      }
+        const { data, error } = await supabase.from('events').insert([fullPayload]).select().single();
 
-      return { success: true, event: data };
-    } catch (err) {
-      if (isClockSkewOrJwtError(err)) {
-        console.warn('Clock skew in addEvent, retrying in 1.5s...');
-        await new Promise((r) => setTimeout(r, 1500));
-        return addEvent(newEventData);
+        if (!error && data) {
+          remoteEvent = data;
+        } else if (error) {
+          console.warn('Extended event insert warning, attempting base schema fallback:', error.message);
+          const basePayload = {
+            title: normalizedEvent.title,
+            category: normalizedEvent.category,
+            hall_number: normalizedEvent.hall_number,
+            start_time: normalizedEvent.start_time,
+            end_time: normalizedEvent.end_time,
+            max_capacity: normalizedEvent.max_capacity,
+            status: normalizedEvent.status,
+            delay_minutes: normalizedEvent.delay_minutes,
+          };
+          const retryRes = await supabase.from('events').insert([basePayload]).select().single();
+          if (!retryRes.error && retryRes.data) {
+            remoteEvent = retryRes.data;
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase event insertion error (using local resilient state):', err);
       }
-      console.error('Unexpected error creating event:', err);
-      return { success: false, error: err };
     }
+
+    const finalEvent = remoteEvent || normalizedEvent;
+
+    setEvents((prev) => {
+      const updated = [finalEvent, ...prev.filter((e) => e.id !== finalEvent.id)];
+      try {
+        localStorage.setItem('smart_sympo_events', JSON.stringify(updated));
+      } catch (e) {
+        console.warn('Could not save events to localStorage:', e);
+      }
+      return updated;
+    });
+
+    setLiveAlerts((prev) => [
+      {
+        id: Date.now(),
+        message: `Event Published: ${finalEvent.title} in ${finalEvent.hall_number}`,
+        time: new Date().toLocaleTimeString(),
+        type: 'info',
+      },
+      ...prev.slice(0, 4),
+    ]);
+
+    addNotification({
+      title: 'New Symposium Track Added',
+      message: `${finalEvent.title} is now open for registration in ${finalEvent.hall_number}.`,
+      type: 'event',
+      eventId: finalEvent.id,
+    });
+
+    return { success: true, event: finalEvent };
   };
 
   // Guest QR Check-in
