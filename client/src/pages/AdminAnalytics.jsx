@@ -186,48 +186,61 @@ export default function AdminAnalytics() {
 
   // Combined Real-Time Joined Attendance Table
   const joinedAttendanceRecords = (registrations || []).map((reg) => {
-    const matchedProfile = reg.profiles || (profilesList || []).find((p) => p.id === reg.student_id);
+    const matchedProfile =
+      reg.profiles ||
+      (profilesList || []).find(
+        (p) =>
+          p.id === reg.student_id ||
+          (p.email && reg.student_email && p.email.toLowerCase() === reg.student_email.toLowerCase()) ||
+          (p.username && reg.student_username && p.username.toLowerCase() === reg.student_username.toLowerCase())
+      );
     const matchedEvent = reg.events || (events || []).find((e) => e.id === reg.event_id);
     const matchedLog = (attendanceLogs || []).find(
-      (log) => log.student_id === reg.student_id && log.event_id === reg.event_id
+      (log) =>
+        (log.student_id && log.student_id === reg.student_id && log.event_id === reg.event_id) ||
+        (log.student_id && log.student_id === reg.student_id)
     );
     const coordinatorProfile = reg.scanned_by
       ? (profilesList || []).find((p) => p.id === reg.scanned_by || p.email === reg.scanned_by || p.full_name === reg.scanned_by)
       : null;
 
-    const isAttended = Boolean(reg.attended || reg.checked_in_at || matchedLog);
+    const isAttended = Boolean(reg.attended || reg.checked_in_at || reg.attended_at || matchedLog);
     const checkInTime = reg.checked_in_at || reg.attended_at || matchedLog?.check_in_time || null;
 
+    const studentName =
+      matchedProfile?.full_name ||
+      matchedProfile?.name ||
+      reg.student_name ||
+      (matchedProfile?.email ? matchedProfile.email.split('@')[0] : null) ||
+      (reg.student_email ? reg.student_email.split('@')[0] : null) ||
+      'Student Attendee';
+
+    const rollNo =
+      matchedProfile?.roll_no ||
+      matchedProfile?.college_id ||
+      reg.roll_no ||
+      reg.college_id ||
+      (reg.student_id ? `STU-${reg.student_id.slice(0, 6).toUpperCase()}` : 'N/A');
+
+    const collegeName =
+      matchedProfile?.college ||
+      matchedProfile?.college_name ||
+      reg.college ||
+      reg.college_name ||
+      'Main Campus';
+
+    const email = matchedProfile?.email || reg.student_email || 'N/A';
+
     return {
-      id: reg.id,
+      id: reg.id || `${reg.student_id}-${reg.event_id}`,
       registration_id: reg.id,
       student_id: reg.student_id,
-      student_name:
-        matchedProfile?.full_name ||
-        matchedProfile?.name ||
-        reg.student_name ||
-        matchedProfile?.email ||
-        'Student',
-      roll_no:
-        matchedProfile?.roll_no ||
-        matchedProfile?.college_id ||
-        reg.roll_no ||
-        reg.college_id ||
-        'N/A',
-      college_name:
-        matchedProfile?.college ||
-        matchedProfile?.college_name ||
-        reg.college ||
-        'Main Campus',
-      department:
-        matchedProfile?.department ||
-        reg.department ||
-        'General',
-      phone:
-        matchedProfile?.phone ||
-        matchedProfile?.phone_number ||
-        'N/A',
-      email: matchedProfile?.email || reg.student_email || 'N/A',
+      student_name: studentName,
+      roll_no: rollNo,
+      college_name: collegeName,
+      department: matchedProfile?.department || reg.department || 'General',
+      phone: matchedProfile?.phone || matchedProfile?.phone_number || 'N/A',
+      email: email,
       event_id: reg.event_id,
       event_title: matchedEvent?.title || reg.event_title || 'Symposium Session',
       hall_number: matchedEvent?.venue || matchedEvent?.hall_number || matchedLog?.hall_number || 'Main Venue',
@@ -850,10 +863,10 @@ export default function AdminAnalytics() {
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 dark:text-white tracking-tight">
-            Governance Hub
+            Admin Dashboard
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Manage sessions, attendance, reports, and delegate operations.
+            Manage events, track live attendance, and oversee attendees.
           </p>
         </div>
 
@@ -926,7 +939,7 @@ export default function AdminAnalytics() {
                     className="w-full px-3.5 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition cursor-pointer"
                   >
                     <ScanLine className="w-3.5 h-3.5" />
-                    <span>Camera Scanner</span>
+                    <span>QR Scanner</span>
                   </button>
 
                   <button
@@ -1055,7 +1068,7 @@ export default function AdminAnalytics() {
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          Attendance Feed ({joinedAttendanceRecords.length})
+          Live Attendance ({joinedAttendanceRecords.length})
         </button>
 
         <button
@@ -1077,7 +1090,7 @@ export default function AdminAnalytics() {
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          User Governance ({(profilesList || []).length})
+          Users & Students ({(profilesList || []).length})
         </button>
 
         <button

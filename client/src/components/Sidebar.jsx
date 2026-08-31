@@ -35,33 +35,33 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, mobileOpen, setMo
 
   const navItems = [
     {
-      label: 'Symposium Programme',
+      label: 'Browse Events',
       path: isAdmin ? '/admin' : isCoordinator ? '/coordinator' : '/student',
       icon: BookOpen,
       roles: ['student', 'coordinator', 'admin'],
     },
     {
-      label: 'Paper Agenda & Passes',
+      label: 'My Digital Pass',
       path: '/student',
       icon: Ticket,
       roles: ['student', 'coordinator', 'admin'],
       badge: 'TOTP',
     },
     {
-      label: 'Camera Scanner',
+      label: 'QR Scanner',
       path: '/scanner',
       icon: QrCode,
       roles: ['coordinator', 'admin'],
       badge: 'Live',
     },
     {
-      label: 'Lecture Hall Console',
+      label: 'Venues & Halls',
       path: '/coordinator',
       icon: Building2,
       roles: ['coordinator', 'admin'],
     },
     {
-      label: 'Governance Hub',
+      label: 'Admin Dashboard',
       path: '/admin',
       icon: ShieldAlert,
       roles: ['admin'],
@@ -192,7 +192,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, mobileOpen, setMo
               }`}
             >
               <Settings className="w-4 h-4 text-slate-500 shrink-0" />
-              {!isCollapsed && <span className="truncate flex-1 text-left">Credential Settings</span>}
+              {!isCollapsed && <span className="truncate flex-1 text-left">Settings</span>}
             </button>
           )}
 
@@ -205,7 +205,7 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, mobileOpen, setMo
               }`}
             >
               <LogOut className="w-4 h-4 text-rose-600 shrink-0" />
-              {!isCollapsed && <span className="truncate flex-1 text-left">Exit Session</span>}
+              {!isCollapsed && <span className="truncate flex-1 text-left">Logout</span>}
             </button>
           )}
 

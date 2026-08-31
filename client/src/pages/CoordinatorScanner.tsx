@@ -217,9 +217,9 @@ export default function CoordinatorScanner() {
           </div>
           <div>
             <h1 className="text-lg font-extrabold text-slate-900 tracking-tight">
-              Live QR Scanner
+              QR Scanner
             </h1>
-            <p className="text-xs text-slate-500 font-medium">Automatic pass verification terminal</p>
+            <p className="text-xs text-slate-500 font-medium">Scan and verify student attendance in real time</p>
           </div>
         </div>
 

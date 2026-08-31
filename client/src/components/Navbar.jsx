@@ -38,14 +38,14 @@ export default function Navbar({ onToggleMobileMenu }) {
   const getBreadcrumbTitle = () => {
     switch (location.pathname) {
       case '/admin':
-        return 'Governance Hub';
+        return 'Admin Dashboard';
       case '/coordinator':
-        return 'Hall Console';
+        return 'Venues & Halls';
       case '/scanner':
-        return 'Camera Scanner';
+        return 'QR Scanner';
       case '/student':
       default:
-        return 'Symposium Programme';
+        return 'Browse Events';
     }
   };
 
@@ -158,7 +158,7 @@ export default function Navbar({ onToggleMobileMenu }) {
                   className="hidden sm:flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 border border-slate-200 dark:border-slate-800 text-xs font-medium transition cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>Exit</span>
+                  <span>Logout</span>
                 </button>
               )}
             </div>

@@ -130,77 +130,95 @@ export default function CoordinatorConsole() {
 
     setIsFetchingAttendance(true);
     try {
-      let allRegistrations = null;
+      let dbRegistrations = null;
 
       if (!isMockMode) {
         try {
           const { data, error } = await supabase
             .from('registrations')
-            .select(`
-              id,
-              attended,
-              checked_in_at,
-              student_id,
-              profiles (
-                id,
-                full_name,
-                email,
-                roll_no,
-                college
-              )
-            `)
+            .select('*, profiles(*)')
             .eq('event_id', eventId);
 
-          if (error) {
-            console.error("Error fetching stats:", error);
-            const { data: fallbackData, error: fbError } = await supabase
-              .from('registrations')
-              .select(`
-                id,
-                attended,
-                checked_in_at,
-                student_id,
-                profiles:student_id (
-                  id,
-                  full_name,
-                  email,
-                  roll_no,
-                  college
-                )
-              `)
-              .eq('event_id', eventId);
-
-            if (!fbError && fallbackData) {
-              allRegistrations = fallbackData;
-            }
+          if (!error && data) {
+            dbRegistrations = data;
           } else {
-            allRegistrations = data;
+            const { data: simpleData } = await supabase
+              .from('registrations')
+              .select('*')
+              .eq('event_id', eventId);
+            if (simpleData) dbRegistrations = simpleData;
           }
         } catch (queryErr) {
           console.warn('Supabase fetchEventStats catch:', queryErr);
         }
       }
 
-      if (!allRegistrations) {
-        allRegistrations = (registrations || [])
-          .filter((r) => r && r.event_id === eventId)
-          .map((r) => {
-            const profile = (profilesList || []).find((p) => p && p.id === r.student_id);
-            return {
-              ...r,
-              profiles: r?.profiles || profile || {
-                id: r?.student_id,
-                full_name: r?.student_name || 'Student Attendee',
-                email: r?.student_email || '',
-                roll_no: r?.roll_no || r?.college_id || '',
-                college: r?.college || 'Main Campus',
-              },
-            };
-          });
+      // Combine DB records with in-memory registrations for this event
+      const inMemoryForEvent = (registrations || []).filter((r) => r && r.event_id === eventId);
+      const combinedRecords = dbRegistrations && dbRegistrations.length > 0 ? [...dbRegistrations] : [...inMemoryForEvent];
+
+      // Add any in-memory items not yet in dbRegistrations
+      for (const localReg of inMemoryForEvent) {
+        if (!combinedRecords.some((r) => r.id === localReg.id || (r.student_id === localReg.student_id && r.event_id === localReg.event_id))) {
+          combinedRecords.push(localReg);
+        }
       }
 
-      const total = allRegistrations?.length || 0;
-      const scanned = allRegistrations?.filter((r) => r && (r.attended === true || r.checked_in_at !== null)).length || 0;
+      const processedRegistrations = combinedRecords.map((r) => {
+        const profile =
+          r.profiles ||
+          (profilesList || []).find(
+            (p) =>
+              p &&
+              (p.id === r.student_id ||
+                (p.email && r.student_email && p.email.toLowerCase() === r.student_email.toLowerCase()) ||
+                (p.username && r.student_username && p.username.toLowerCase() === r.student_username.toLowerCase()))
+          );
+
+        const resolvedName =
+          profile?.full_name ||
+          profile?.name ||
+          r?.student_name ||
+          (profile?.email ? profile.email.split('@')[0] : null) ||
+          (r?.student_email ? r.student_email.split('@')[0] : null) ||
+          'Student Attendee';
+
+        const resolvedRollNo =
+          profile?.roll_no ||
+          profile?.college_id ||
+          r?.roll_no ||
+          r?.college_id ||
+          (r?.student_id ? `STU-${r.student_id.slice(0, 6).toUpperCase()}` : 'N/A');
+
+        const resolvedCollege =
+          profile?.college ||
+          profile?.college_name ||
+          r?.college ||
+          r?.college_name ||
+          'Main Campus';
+
+        const resolvedEmail = profile?.email || r?.student_email || 'N/A';
+        const isAttended = Boolean(r.attended || r.checked_in_at || r.attended_at);
+
+        return {
+          ...r,
+          attended: isAttended,
+          checked_in_at: r.checked_in_at || r.attended_at,
+          profiles: {
+            id: r.student_id,
+            full_name: resolvedName,
+            name: resolvedName,
+            email: resolvedEmail,
+            roll_no: resolvedRollNo,
+            college_id: resolvedRollNo,
+            college: resolvedCollege,
+            college_name: resolvedCollege,
+          },
+        };
+      });
+
+      const total = processedRegistrations.length;
+      const scanned = processedRegistrations.filter((r) => r.attended === true).length;
       const pending = total - scanned;
       const rate = total > 0 ? Math.round((scanned / total) * 100) : 0;
 
@@ -212,9 +230,10 @@ export default function CoordinatorConsole() {
       });
 
       // Recent scans sorted by checked_in_at
-      const attendedList = allRegistrations
-        ?.filter((r) => r && r.attended === true)
-        ?.sort((a, b) => new Date(b?.checked_in_at || 0) - new Date(a?.checked_in_at || 0)) || [];
+      const attendedList = processedRegistrations
+        .filter((r) => r.attended === true)
+        .sort((a, b) => new Date(b?.checked_in_at || 0).getTime() - new Date(a?.checked_in_at || 0).getTime());
+
       setRecentScans(attendedList);
     } catch (err) {
       console.error("Error in fetchEventStats:", err);
@@ -223,20 +242,32 @@ export default function CoordinatorConsole() {
     }
   }, [registrations, profilesList]);
 
-  // 2. Real-time Subscription: listen on registrations channel for active event
+  // 2. Real-time Subscription: listen on registrations and attendance_logs channels for active event
   useEffect(() => {
     if (!currentEvent?.id) return;
     fetchEventStats(currentEvent.id);
 
     if (!isMockMode) {
       const channel = supabase
-        .channel(`coordinator:registrations:${currentEvent.id}`)
+        .channel(`coordinator:realtime:${currentEvent.id}`)
         .on(
           'postgres_changes',
           {
             event: '*',
             schema: 'public',
             table: 'registrations',
+            filter: `event_id=eq.${currentEvent.id}`,
+          },
+          () => {
+            fetchEventStats(currentEvent.id);
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'attendance_logs',
             filter: `event_id=eq.${currentEvent.id}`,
           },
           () => {
@@ -332,14 +363,14 @@ export default function CoordinatorConsole() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight">
-              Lecture Hall Signage & Terminal
+              Venues & Halls
             </h1>
             <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#8B1E24]/10 text-[#8B1E24] dark:bg-[#8B1E24]/20 dark:text-red-300 border border-[#8B1E24]/20 uppercase">
               Operations
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
-            Real-time venue attendance governance, student pass verification & scanner terminal
+            Scan and verify student attendance in real time
           </p>
         </div>
 
@@ -503,10 +534,10 @@ export default function CoordinatorConsole() {
                 <div>
                   <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                     <Camera className="w-4 h-4 text-indigo-600" />
-                    <span>Scan Student Pass</span>
+                    <span>Scan QR Pass</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Position student QR pass in front of the lens
+                    Position student QR pass in front of the camera
                   </p>
                 </div>
 
@@ -529,10 +560,10 @@ export default function CoordinatorConsole() {
 
                 <div className="space-y-1">
                   <div className="text-sm font-bold text-slate-900">
-                    Ready for Camera Verification
+                    Ready to Scan
                   </div>
                   <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                    One-touch fast camera verification with instant audio, haptic, and database synchronization
+                    Scan student QR passes to record attendance in real time.
                   </p>
                 </div>
 
@@ -555,7 +586,7 @@ export default function CoordinatorConsole() {
                     }}
                     className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all cursor-pointer shadow-2xs"
                   >
-                    View Roster ({stats?.totalRegistered ?? 0})
+                    Event Roster ({stats?.totalRegistered ?? 0})
                   </button>
                   <button
                     onClick={() => handleEditClick(currentEvent)}
@@ -577,7 +608,7 @@ export default function CoordinatorConsole() {
                     onClick={handleStartEvent}
                     className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-bold transition-all cursor-pointer shadow-2xs"
                   >
-                    Start Track
+                    Start Event
                   </button>
                   <button
                     onClick={handleDelayEvent}

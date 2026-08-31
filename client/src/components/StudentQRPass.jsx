@@ -58,7 +58,7 @@ export default function StudentQRPass({
           <div className="w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
           </div>
-          <span className="text-slate-700 font-bold text-xs">Anti-Screenshot Pass</span>
+          <span className="text-slate-700 font-bold text-xs">Live Entry Pass</span>
         </div>
         <div className="flex items-center gap-1.5 font-mono font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-200/70 text-xs">
           <Clock className="w-3.5 h-3.5 text-indigo-600" />

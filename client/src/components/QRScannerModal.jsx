@@ -244,7 +244,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
             <Camera className="w-4 h-4" />
           </div>
           <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-            {isGuestMode ? 'Guest Check-in & Passes' : 'Live Attendance Scanner'}
+            {isGuestMode ? 'Guest Check-in' : 'QR Scanner'}
           </h3>
         </div>
 

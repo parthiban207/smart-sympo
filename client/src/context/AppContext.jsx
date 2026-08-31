@@ -510,42 +510,67 @@ export const AppProvider = ({ children }) => {
         try {
           await fetchEvents();
 
-          const { data: regData } = await supabase.from('registrations').select('*');
-          if (regData) setRegistrations(regData);
+          // 1. Fetch Registrations (with linked profiles and events if available)
+          let loadedRegs = null;
+          try {
+            const { data: regWithProfiles, error: regErr } = await supabase
+              .from('registrations')
+              .select('*, profiles(*), events(*)');
+            if (!regErr && regWithProfiles && regWithProfiles.length > 0) {
+              loadedRegs = regWithProfiles;
+            }
+          } catch {
+            // ignore
+          }
 
+          if (!loadedRegs) {
+            const { data: simpleReg } = await supabase.from('registrations').select('*');
+            if (simpleReg) loadedRegs = simpleReg;
+          }
+
+          if (loadedRegs) setRegistrations(loadedRegs);
+
+          // 2. Fetch Attendance Logs
           const { data: attData } = await supabase.from('attendance_logs').select('*');
           if (attData) setAttendanceLogs(attData);
 
-          if (!profilesEndpointFailedRef.current) {
-            try {
-              const { data: profData, error: profErr } = await supabase.from('profiles').select('*');
-              if (profErr) {
-                profilesEndpointFailedRef.current = true;
-              } else if (profData && profData.length > 0) {
-                setProfilesList((prev) => {
-                  const combined = [...profData];
-                  for (const localAcc of prev) {
-                    if (
-                      !combined.some(
-                        (p) =>
-                          p.id === localAcc.id ||
-                          (p.email && localAcc.email && p.email.toLowerCase() === localAcc.email.toLowerCase())
-                      )
-                    ) {
-                      combined.push(localAcc);
-                    }
+          // 3. Fetch Profiles with normalization
+          try {
+            const { data: profData, error: profErr } = await supabase.from('profiles').select('*');
+            if (!profErr && profData && profData.length > 0) {
+              const enhancedProfiles = profData.map((p) => ({
+                ...p,
+                full_name: p.full_name || p.name || 'Student Attendee',
+                name: p.name || p.full_name || 'Student Attendee',
+                roll_no: p.roll_no || p.college_id || 'N/A',
+                college_id: p.college_id || p.roll_no || 'N/A',
+                college: p.college || p.college_name || 'Main Campus',
+                college_name: p.college_name || p.college || 'Main Campus',
+              }));
+
+              setProfilesList((prev) => {
+                const combined = [...enhancedProfiles];
+                for (const localAcc of prev) {
+                  if (
+                    !combined.some(
+                      (p) =>
+                        p.id === localAcc.id ||
+                        (p.email && localAcc.email && p.email.toLowerCase() === localAcc.email.toLowerCase())
+                    )
+                  ) {
+                    combined.push(localAcc);
                   }
-                  try {
-                    localStorage.setItem('smart_sympo_accounts', JSON.stringify(combined));
-                  } catch {
-                    /* ignore storage quota errors */
-                  }
-                  return combined;
-                });
-              }
-            } catch {
-              profilesEndpointFailedRef.current = true;
+                }
+                try {
+                  localStorage.setItem('smart_sympo_accounts', JSON.stringify(combined));
+                } catch {
+                  /* ignore storage quota errors */
+                }
+                return combined;
+              });
             }
+          } catch (profCatch) {
+            console.warn('Fetch profiles catch:', profCatch);
           }
         } catch (e) {
           console.warn('Supabase fetchInitialData catch:', e);
@@ -1550,26 +1575,88 @@ export const AppProvider = ({ children }) => {
 
       // IF VALID & NOT YET ATTENDED:
       const nowISO = new Date().toISOString();
-      const coordinatorIdentifier = currentUser?.full_name || currentUser?.name || currentUser?.email || currentUser?.id || 'Coordinator';
+      const coordinatorUuid = isValidUUID(currentUser?.id) ? currentUser.id : null;
+      const coordinatorName = currentUser?.full_name || currentUser?.name || currentUser?.email || 'Coordinator';
 
       // 1. Update local state immediately for 0ms visual feedback
-      setRegistrations((prev) =>
-        prev.map((r) => {
-          if (
+      setRegistrations((prev) => {
+        const exists = prev.some(
+          (r) =>
             (matchedReg.id && r.id === matchedReg.id) ||
             (r.student_id === regStudentId && r.event_id === regEventId)
-          ) {
-            return {
-              ...r,
-              attended: true,
-              checked_in_at: nowISO,
-              attended_at: nowISO,
-              scanned_by: coordinatorIdentifier,
+        );
+
+        const updatedItem = {
+          ...matchedReg,
+          student_id: regStudentId,
+          event_id: regEventId,
+          attended: true,
+          checked_in_at: nowISO,
+          attended_at: nowISO,
+          student_name: studentName,
+          student_email: studentEmail,
+          roll_no: studentCollegeId,
+          college_id: studentCollegeId,
+          college: studentCollege,
+          scanned_by: coordinatorName,
+        };
+
+        if (exists) {
+          return prev.map((r) => {
+            if (
+              (matchedReg.id && r.id === matchedReg.id) ||
+              (r.student_id === regStudentId && r.event_id === regEventId)
+            ) {
+              return { ...r, ...updatedItem };
+            }
+            return r;
+          });
+        }
+        return [updatedItem, ...prev];
+      });
+
+      // Ensure profilesList is updated so student details are accessible across all views
+      if (regStudentId) {
+        setProfilesList((prev) => {
+          const profileExists = prev.some(
+            (p) =>
+              p.id === regStudentId ||
+              (p.email && studentEmail && p.email.toLowerCase() === studentEmail.toLowerCase())
+          );
+
+          if (!profileExists) {
+            const newProfile = {
+              id: regStudentId,
+              full_name: studentName,
+              name: studentName,
+              email: studentEmail,
+              college_id: studentCollegeId,
+              roll_no: studentCollegeId,
+              college: studentCollege,
+              college_name: studentCollege,
+              role: 'student',
             };
+            return [newProfile, ...prev];
           }
-          return r;
-        })
-      );
+
+          return prev.map((p) => {
+            if (
+              p.id === regStudentId ||
+              (p.email && studentEmail && p.email.toLowerCase() === studentEmail.toLowerCase())
+            ) {
+              return {
+                ...p,
+                full_name: p.full_name || studentName,
+                name: p.name || studentName,
+                college_id: p.college_id || studentCollegeId,
+                roll_no: p.roll_no || studentCollegeId,
+                college: p.college || studentCollege,
+              };
+            }
+            return p;
+          });
+        });
+      }
 
       const newAttendanceLog = {
         id: crypto.randomUUID ? crypto.randomUUID() : 'att-' + Date.now().toString(16),
@@ -1595,27 +1682,38 @@ export const AppProvider = ({ children }) => {
       if (!isMockMode) {
         (async () => {
           try {
+            const updatePayload = {
+              attended: true,
+              checked_in_at: nowISO,
+              attended_at: nowISO,
+            };
+            if (coordinatorUuid) {
+              updatePayload.scanned_by = coordinatorUuid;
+            }
+
             if (isValidUUID(matchedReg.id)) {
               await supabase
                 .from('registrations')
-                .update({
-                  attended: true,
-                  checked_in_at: nowISO,
-                  attended_at: nowISO,
-                  scanned_by: coordinatorIdentifier,
-                })
+                .update(updatePayload)
                 .eq('id', matchedReg.id);
             } else if (isValidUUID(regStudentId) && isValidUUID(regEventId)) {
               await supabase
                 .from('registrations')
-                .update({
-                  attended: true,
-                  checked_in_at: nowISO,
-                  attended_at: nowISO,
-                  scanned_by: coordinatorIdentifier,
-                })
+                .update(updatePayload)
                 .eq('student_id', regStudentId)
                 .eq('event_id', regEventId);
+            }
+
+            // Ensure profile in Supabase has the latest name and roll_no
+            if (isValidUUID(regStudentId)) {
+              await supabase
+                .from('profiles')
+                .update({
+                  name: studentName,
+                  college_id: studentCollegeId,
+                })
+                .eq('id', regStudentId)
+                .catch(() => {});
             }
 
             const { data: dbLog } = await supabase
@@ -1650,6 +1748,7 @@ export const AppProvider = ({ children }) => {
         email: studentEmail,
         college: studentCollege,
         rollNumber: studentCollegeId,
+        collegeId: studentCollegeId,
         eventTitle,
         hallNumber: eventHall,
         student: {
@@ -1657,6 +1756,7 @@ export const AppProvider = ({ children }) => {
           name: studentName,
           college: studentCollege,
           college_id: studentCollegeId,
+          roll_no: studentCollegeId,
           email: studentEmail,
         },
         event: {

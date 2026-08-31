@@ -84,8 +84,8 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
           <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-600 flex items-center justify-center mb-2 shadow-xs">
             <QrCode className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Dynamic Digital Pass</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Present live QR code at venue entrance</p>
+          <h3 className="text-base font-extrabold text-slate-900 tracking-tight">Symposium Entry Badge</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Show this QR code at the entrance to check in</p>
         </div>
 
         {/* Dynamic Refreshing QR Pass Component */}

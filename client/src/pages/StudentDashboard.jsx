@@ -139,7 +139,7 @@ export default function StudentDashboard() {
               )}
               <span>•</span>
               <span className="text-[#8B1E24] dark:text-red-300 font-mono font-bold bg-[#8B1E24]/10 px-2 py-0.5 rounded">
-                {registeredEvents.length} Enrolled Tracks
+                {registeredEvents.length} Registered Events
               </span>
             </p>
           </div>
@@ -151,7 +151,7 @@ export default function StudentDashboard() {
             className="w-full md:w-auto px-5 py-3 bg-[#8B1E24] hover:bg-[#73181d] text-white font-semibold text-xs rounded-lg shadow-xs flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
           >
             <QrCode className="w-4 h-4" />
-            <span>Generate Programme Entry Pass</span>
+            <span>Symposium Entry Badge</span>
           </button>
         )}
       </div>
@@ -181,7 +181,7 @@ export default function StudentDashboard() {
           <div className="flex items-center justify-between border-b border-[#E7E3D8] dark:border-[#2A2E38] pb-3">
             <h2 className="text-xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-[#8B1E24] dark:text-red-400" />
-              <span>Official Delegate Schedule</span>
+              <span>My Schedule</span>
             </h2>
             <span className="text-xs font-mono text-slate-500 dark:text-slate-400 font-semibold">
               {registeredEvents.length} Registered Sessions
@@ -193,9 +193,9 @@ export default function StudentDashboard() {
               <div className="w-12 h-12 rounded-lg bg-[#8B1E24]/10 text-[#8B1E24] dark:text-red-400 flex items-center justify-center mx-auto">
                 <FileText className="w-6 h-6" />
               </div>
-              <p className="font-serif font-bold text-[#1E293B] dark:text-slate-200 text-lg">No sessions added to your programme.</p>
+              <p className="font-serif font-bold text-[#1E293B] dark:text-slate-200 text-lg">No events registered yet.</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Explore the open proceedings on the right panel to enroll in keynote lectures and technical tracks.
+                Browse available events on the right to register.
               </p>
             </div>
           ) : (
@@ -234,7 +234,7 @@ export default function StudentDashboard() {
                         className="px-3 py-1.5 rounded bg-[#8B1E24]/10 hover:bg-[#8B1E24]/20 text-[#8B1E24] dark:text-red-300 border border-[#8B1E24]/20 text-xs font-bold font-mono transition cursor-pointer shrink-0 flex items-center gap-1.5"
                       >
                         <QrCode className="w-4 h-4" />
-                        <span>Pass</span>
+                        <span>Entry Badge</span>
                       </button>
                     </div>
 
@@ -263,7 +263,7 @@ export default function StudentDashboard() {
                         onClick={() => handleUnregister(event.id)}
                         className="text-[11px] font-mono text-rose-700 dark:text-rose-400 hover:underline font-semibold cursor-pointer"
                       >
-                        Withdraw Registration
+                        Cancel Registration
                       </button>
                     </div>
                   </div>
@@ -278,7 +278,7 @@ export default function StudentDashboard() {
           <div className="flex items-center justify-between border-b border-[#E7E3D8] dark:border-[#2A2E38] pb-3">
             <h2 className="text-xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight flex items-center gap-2">
               <Bookmark className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
-              <span>Open Proceedings</span>
+              <span>Browse Events</span>
             </h2>
             <span className="text-xs font-mono text-slate-500 dark:text-slate-400 font-semibold">
               {availableEvents.length} Available
@@ -288,7 +288,7 @@ export default function StudentDashboard() {
           {availableEvents.length === 0 ? (
             <div className="academic-card p-8 text-center space-y-2">
               <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
-              <p className="font-serif font-bold text-[#1E293B] dark:text-slate-200 text-sm">Registered for all symposium sessions.</p>
+              <p className="font-serif font-bold text-[#1E293B] dark:text-slate-200 text-sm">Registered for all available events.</p>
             </div>
           ) : (
             <div className="space-y-3.5">
@@ -321,7 +321,7 @@ export default function StudentDashboard() {
                             : 'bg-[#8B1E24] hover:bg-[#73181d] text-white'
                         }`}
                       >
-                        {isFull ? 'Concluded' : 'Enroll Session'}
+                        {isFull ? 'Full' : 'Register'}
                       </button>
                     </div>
 

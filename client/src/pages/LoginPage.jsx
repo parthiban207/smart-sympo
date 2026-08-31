@@ -13,7 +13,7 @@ export default function LoginPage() {
         <div className="space-y-3 max-w-2xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#8B1E24]/10 border border-[#8B1E24]/20 text-[#8B1E24] dark:text-red-300 text-xs font-bold uppercase tracking-wider font-mono">
             <Sparkles className="w-3.5 h-3.5 text-[#8B1E24] dark:text-red-400" />
-            <span>Academic Symposium Ecosystem</span>
+            <span>Event Management Portal</span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight leading-tight">
@@ -21,7 +21,7 @@ export default function LoginPage() {
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed max-w-xl mx-auto font-medium">
-            Choose your designated portal below to browse session tracks, verify digital passes, or govern symposium operations.
+            Select your portal below to browse events, verify passes, or manage operations.
           </p>
         </div>
 
@@ -47,7 +47,7 @@ export default function LoginPage() {
                   Student Portal
                 </h3>
                 <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                  Browse tracks, claim dynamic passes, and monitor your personal agenda.
+                  Browse events, get your digital pass, and view your schedule.
                 </p>
               </div>
 
@@ -102,7 +102,7 @@ export default function LoginPage() {
                   Coordinator Console
                 </h3>
                 <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                  Hall validation, camera attendance scanning, and live attendee check-ins.
+                  Scan and verify student attendance in real time.
                 </p>
               </div>
 
@@ -111,13 +111,13 @@ export default function LoginPage() {
                   <div className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
                     <Check className="w-3 h-3" />
                   </div>
-                  <span>Instant QR camera scanner</span>
+                  <span>Instant QR scanner</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <div className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
                     <Check className="w-3 h-3" />
                   </div>
-                  <span>Live hall attendance feed</span>
+                  <span>Live attendance tracking</span>
                 </li>
                 <li className="flex items-center gap-2.5">
                   <div className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
@@ -154,10 +154,10 @@ export default function LoginPage() {
 
               <div>
                 <h3 className="text-xl font-bold text-white group-hover:text-rose-400 transition-colors">
-                  Administrator Hub
+                  Admin Dashboard
                 </h3>
                 <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                  System analytics, user permissions, emergency broadcast & audits.
+                  Manage events, live attendance, and user permissions.
                 </p>
               </div>
 

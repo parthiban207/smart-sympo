@@ -23,21 +23,40 @@ export default function ViewRegisteredStudentsModal({
 
   // Map to full student profile objects with real student names & roll numbers
   const registeredStudents = eventRegs.map((reg) => {
-    const profile = reg.profiles || profilesList.find((p) => p.id === reg.student_id);
+    const profile =
+      reg.profiles ||
+      profilesList.find(
+        (p) =>
+          p.id === reg.student_id ||
+          (p.email && reg.student_email && p.email.toLowerCase() === reg.student_email.toLowerCase()) ||
+          (p.username && reg.student_username && p.username.toLowerCase() === reg.student_username.toLowerCase())
+      );
     const resolvedName =
       profile?.full_name ||
       profile?.name ||
+      reg.student_name ||
       (profile?.email ? profile.email.split('@')[0] : null) ||
-      `Student (${reg.student_id?.slice(0, 8)})`;
+      (reg.student_email ? reg.student_email.split('@')[0] : null) ||
+      `Student (${reg.student_id?.slice(0, 8) || 'Attendee'})`;
     const resolvedEmail = profile?.email || reg.student_email || 'N/A';
-    const resolvedRollNo = profile?.roll_no || profile?.college_id || reg.student_id?.slice(0, 10);
-    const resolvedCollege = profile?.college || profile?.college_name || 'Main Campus';
+    const resolvedRollNo =
+      profile?.roll_no ||
+      profile?.college_id ||
+      reg.roll_no ||
+      reg.college_id ||
+      (reg.student_id ? `STU-${reg.student_id.slice(0, 6).toUpperCase()}` : 'N/A');
+    const resolvedCollege =
+      profile?.college ||
+      profile?.college_name ||
+      reg.college ||
+      reg.college_name ||
+      'Main Campus';
 
     return {
       id: reg.id || reg.student_id,
       student_id: reg.student_id,
       registered_at: reg.registered_at,
-      attended: Boolean(reg.attended),
+      attended: Boolean(reg.attended || reg.checked_in_at || reg.attended_at),
       checked_in_at: reg.checked_in_at || reg.attended_at,
       name: resolvedName,
       username: profile?.username || (profile?.email ? profile.email.split('@')[0] : 'student'),
