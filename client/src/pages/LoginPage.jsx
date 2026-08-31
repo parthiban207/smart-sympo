@@ -2,7 +2,6 @@
 
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, UserCheck, Shield, ArrowRight, Sparkles, Check } from 'lucide-react';
-import { ParticleTextEffect } from '../components/ui/interactive-text-particle';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -10,16 +9,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-[calc(100vh-64px)] py-12 px-4 sm:px-6 lg:px-8 flex flex-col justify-center items-center relative overflow-hidden">
       <div className="max-w-6xl w-full space-y-10 text-center relative z-10">
-        {/* Interactive Particle Hero Banner */}
-        <div className="relative w-full h-44 sm:h-56 rounded-3xl border border-[#E7E3D8] dark:border-[#2A2E38] bg-[#FDFBF7] dark:bg-[#121417] overflow-hidden shadow-xs flex items-center justify-center">
-          <ParticleTextEffect
-            text="SMARTSYMPO"
-            className="absolute inset-0"
-            colors={['8b1e24', 'd97706', '2563eb', '059669']}
-            particleDensity={3}
-          />
-        </div>
-
         {/* Header Banner */}
         <div className="space-y-3 max-w-2xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#8B1E24]/10 border border-[#8B1E24]/20 text-[#8B1E24] dark:text-red-300 text-xs font-bold uppercase tracking-wider font-mono">
