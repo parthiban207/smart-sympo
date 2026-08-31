@@ -1,9 +1,13 @@
-import DottedModern from "@/components/ui/dotted-modern";
+import { ParticleTextEffect } from "@/components/ui/interactive-text-particle";
 
-export default function Default() {
+const DemoOne = () => {
   return (
-    <div className="h-[600px] w-full">
-      <DottedModern />
-    </div>
+    <ParticleTextEffect
+      text="SMARTSYMPO"
+      className="absolute top-0 left-0 pointer-events-auto"
+      colors={['8b1e24', 'd97706', '2563eb', '059669']}
+    />
   );
-}
+};
+
+export { DemoOne };

@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Admin analytics dashboard with realtime registrations subscription, Excel spreadsheet export system, and role management", deps: ["src/context/AppContext.jsx", "src/hooks/usePresence.ts", "src/components/QRScannerModal.jsx", "src/utils/exportReports.ts", "src/supabaseClient.js", "lucide-react"], state: "active", last: "antigravity@2026-08-26" }
+// agent-notes: { ctx: "Admin analytics dashboard with realtime registrations subscription, Excel spreadsheet export system, and role management", deps: ["src/context/AppContext.jsx", "src/hooks/usePresence.ts", "src/components/QRScannerModal.jsx", "src/utils/exportReports.ts", "src/supabaseClient.js", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
 
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
@@ -12,34 +12,29 @@ import {
   exportStudentsCSV,
   exportAllUsersCSV,
   exportEmailDispatchCSV,
-  exportAllUsersExcel,
   exportMultiSheetUsersWorkbook,
   exportStudentsExcel,
   exportCoordinatorsExcel,
-  exportAdminsExcel,
   exportEventRegistrationsExcel,
   exportAttendanceRecordsExcel,
   exportEmailDispatchExcel,
-  exportToCSVFile,
-  exportToExcel,
   exportToPDF,
 } from '../utils/exportReports';
 import QRScannerModal from '../components/QRScannerModal';
 import ViewRegisteredStudentsModal from '../components/ViewRegisteredStudentsModal';
 import EmergencyBroadcastModal from '../components/EmergencyBroadcastModal';
 import {
-  ShieldCheck, PlusCircle, MapPin, Activity, Radio, UserCheck, Users, Signal,
+  ShieldCheck, PlusCircle, MapPin, Radio, UserCheck, Users,
   Globe, Crosshair, Ruler, FileText, ScanLine, Clock, Hash, CheckCircle2, AlertCircle,
-  Pencil, Trash2, KeyRound, RefreshCw, Lock, FileSpreadsheet, Download, FileDown,
-  CalendarCheck, ClipboardCheck, Loader2, StopCircle, Mail, Send, CheckCircle, AlertTriangle,
-  Search, Building, Filter, UserMinus, ChevronRight, Eye
+  Pencil, Trash2, KeyRound, Lock, FileSpreadsheet, Download, FileDown,
+  StopCircle, Mail, Search, Building, Eye
 } from 'lucide-react';
 
 export default function AdminAnalytics() {
   const {
     events, fetchEvents, registrations, setRegistrations, attendanceLogs, setAttendanceLogs,
-    addEvent, updateEvent, deleteEvent, unregisterForEvent, guestCheckins, currentUser, profilesList, setProfilesList,
-    updateUserRole, createCoordinatorAccount, updateUserPassCode, deleteUserAccount, clearAllAccounts, liveAlerts,
+    addEvent, updateEvent, deleteEvent, unregisterForEvent, currentUser, profilesList, setProfilesList,
+    updateUserRole, createCoordinatorAccount, deleteUserAccount, clearAllAccounts, liveAlerts,
     clearGlobalEmergencyBroadcast
   } = useApp();
   const { onlineUsers, onlineCount } = usePresence();
@@ -106,14 +101,14 @@ export default function AdminAnalytics() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'registrations' },
           () => {
-            fetchAttendanceList(); // Re-fetch updated list instantly
+            fetchAttendanceList();
           }
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'attendance_logs' },
           () => {
-            fetchAttendanceList(); // Re-fetch updated attendance logs instantly
+            fetchAttendanceList();
           }
         )
         .subscribe();
@@ -122,7 +117,7 @@ export default function AdminAnalytics() {
         supabase.removeChannel(channel);
       };
     }
-  }, []);
+  }, [fetchEvents, fetchAttendanceList]);
 
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [selectedRosterEvent, setSelectedRosterEvent] = useState(null);
@@ -131,14 +126,12 @@ export default function AdminAnalytics() {
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [updatingUser, setUpdatingUser] = useState(null);
-  const [roleFeedback, setRoleFeedback] = useState(null);
 
   // Real-Time Attendance Search & Filter State
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState('');
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('ALL'); // 'ALL' | 'ATTENDED' | 'PENDING'
 
-  // Spreadsheet Export Loading & Feedback State
-  const [exportingReport, setExportingReport] = useState(null);
+  // Spreadsheet Export Feedback State
   const [exportFeedback, setExportFeedback] = useState(null);
 
   // Master Security Passcode Confirmation Modal State
@@ -190,7 +183,7 @@ export default function AdminAnalytics() {
     ? Math.round((totalAttendedCount / totalRegistrationsCount) * 100)
     : 0;
 
-  // Combined Real-Time Joined Attendance Table: Registrations joined with Profiles, Events, & Attendance Logs
+  // Combined Real-Time Joined Attendance Table
   const joinedAttendanceRecords = (registrations || []).map((reg) => {
     const matchedProfile = reg.profiles || (profilesList || []).find((p) => p.id === reg.student_id);
     const matchedEvent = reg.events || (events || []).find((e) => e.id === reg.event_id);
@@ -250,7 +243,7 @@ export default function AdminAnalytics() {
     const query = attendanceSearchQuery.toLowerCase();
     const matchesQuery =
       record.student_name.toLowerCase().includes(query) ||
-      record.college_id.toLowerCase().includes(query) ||
+      record.roll_no.toLowerCase().includes(query) ||
       record.college_name.toLowerCase().includes(query) ||
       record.event_title.toLowerCase().includes(query) ||
       record.email.toLowerCase().includes(query);
@@ -263,12 +256,13 @@ export default function AdminAnalytics() {
 
   const handleRoleChange = async (targetUserId, newRole) => {
     setUpdatingUser(targetUserId);
-    setRoleFeedback(null);
     const res = await updateUserRole(targetUserId, newRole);
     if (res.success) {
-      setRoleFeedback({ type: 'success', text: res.message });
+      setExportFeedback({ type: 'success', message: res.message });
+      setTimeout(() => setExportFeedback(null), 3000);
     } else {
-      setRoleFeedback({ type: 'error', text: res.message });
+      setExportFeedback({ type: 'error', message: res.message });
+      setTimeout(() => setExportFeedback(null), 4000);
     }
     setUpdatingUser(null);
   };
@@ -276,33 +270,22 @@ export default function AdminAnalytics() {
   const handleCreateCoordinator = async (e) => {
     e.preventDefault();
     if (!coordForm.fullName.trim() || !coordForm.email.trim() || !coordForm.password.trim()) {
-      setRoleFeedback({ type: 'error', text: 'Please fill in Coordinator Full Name, Email, and Password.' });
+      setExportFeedback({ type: 'error', message: 'Please fill in Coordinator Full Name, Email, and Password.' });
+      setTimeout(() => setExportFeedback(null), 4000);
       return;
     }
     setCreatingCoord(true);
     const res = await createCoordinatorAccount(coordForm);
     if (res.success) {
-      setRoleFeedback({ type: 'success', text: res.message });
+      setExportFeedback({ type: 'success', message: res.message });
       setShowAddCoordinatorModal(false);
       setCoordForm({ fullName: '', email: '', password: '', phone: '', department: '' });
-      setTimeout(() => setRoleFeedback(null), 4000);
+      setTimeout(() => setExportFeedback(null), 4000);
     } else {
-      setRoleFeedback({ type: 'error', text: res.message });
+      setExportFeedback({ type: 'error', message: res.message });
+      setTimeout(() => setExportFeedback(null), 4000);
     }
     setCreatingCoord(false);
-  };
-
-  const handleGeneratePassCode = async (targetUserId) => {
-    setUpdatingUser(targetUserId);
-    setRoleFeedback(null);
-    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
-    const res = await updateUserPassCode(targetUserId, newPin);
-    if (res.success) {
-      setRoleFeedback({ type: 'success', text: res.message });
-    } else {
-      setRoleFeedback({ type: 'error', text: res.message });
-    }
-    setUpdatingUser(null);
   };
 
   const handleEditClick = (evt) => {
@@ -333,7 +316,7 @@ export default function AdminAnalytics() {
     setEditingEvent(null);
   };
 
-  // 1. Single User Deletion - Trigger Master Security Code Confirmation ("2027")
+  // Single User Deletion - Trigger Master Security Code Confirmation ("2027")
   const handleDeleteAccount = async (userId, userName) => {
     const formattedName = userName || 'User';
     setSecurityModalError(null);
@@ -346,25 +329,24 @@ export default function AdminAnalytics() {
 
     if (inputCode !== undefined) {
       if (inputCode === null) {
-        // User cancelled prompt
         return;
       }
       const trimmedCode = String(inputCode).trim();
       if (trimmedCode !== '2027') {
         const errorText = 'Access Denied: Incorrect Security Code!';
-        setRoleFeedback({ text: errorText, type: 'error' });
-        setTimeout(() => setRoleFeedback(null), 4000);
+        setExportFeedback({ message: errorText, type: 'error' });
+        setTimeout(() => setExportFeedback(null), 4000);
         return;
       }
 
       const res = await deleteUserAccount(userId, trimmedCode);
       if (res.success) {
-        setRoleFeedback({ text: `Account "${formattedName}" deleted successfully!`, type: 'success' });
-        setTimeout(() => setRoleFeedback(null), 3000);
+        setExportFeedback({ message: `Account "${formattedName}" deleted successfully!`, type: 'success' });
+        setTimeout(() => setExportFeedback(null), 3000);
       } else {
         const errorText = res.message || 'Access Denied: Incorrect Security Code!';
-        setRoleFeedback({ text: errorText, type: 'error' });
-        setTimeout(() => setRoleFeedback(null), 4000);
+        setExportFeedback({ message: errorText, type: 'error' });
+        setTimeout(() => setExportFeedback(null), 4000);
       }
       return;
     }
@@ -374,49 +356,6 @@ export default function AdminAnalytics() {
       actionType: 'single',
       targetUserId: userId,
       targetUserName: formattedName,
-    });
-  };
-
-  // 2. Bulk Clear Accounts - Trigger Master Security Code Confirmation ("2027")
-  const handleClearAllAccounts = async () => {
-    setSecurityModalError(null);
-    setEnteredPasscode('');
-
-    const promptText = 'Enter Master Security Code to confirm clearing ALL accounts:';
-    const inputCode = typeof window !== 'undefined' && typeof window.prompt === 'function'
-      ? window.prompt(promptText)
-      : undefined;
-
-    if (inputCode !== undefined) {
-      if (inputCode === null) {
-        // User cancelled prompt
-        return;
-      }
-      const trimmedCode = String(inputCode).trim();
-      if (trimmedCode !== '2027') {
-        const errorText = 'Operation Aborted: Invalid Security Code';
-        setRoleFeedback({ text: errorText, type: 'error' });
-        setTimeout(() => setRoleFeedback(null), 4000);
-        return;
-      }
-
-      const res = await clearAllAccounts(trimmedCode);
-      if (res.success) {
-        setRoleFeedback({ text: 'All accounts deleted successfully!', type: 'success' });
-        setTimeout(() => setRoleFeedback(null), 3000);
-      } else {
-        const errorText = res.message || 'Operation Aborted: Invalid Security Code';
-        setRoleFeedback({ text: errorText, type: 'error' });
-        setTimeout(() => setRoleFeedback(null), 4000);
-      }
-      return;
-    }
-
-    setSecurityModalState({
-      isOpen: true,
-      actionType: 'bulk',
-      targetUserId: null,
-      targetUserName: 'All Registered Accounts',
     });
   };
 
@@ -431,16 +370,16 @@ export default function AdminAnalytics() {
       if (trimmedCode !== '2027') {
         const errorText = 'Access Denied: Incorrect Security Code!';
         setSecurityModalError(errorText);
-        setRoleFeedback({ text: errorText, type: 'error' });
-        setTimeout(() => setRoleFeedback(null), 4000);
+        setExportFeedback({ message: errorText, type: 'error' });
+        setTimeout(() => setExportFeedback(null), 4000);
         return;
       }
 
       const res = await deleteUserAccount(securityModalState.targetUserId, trimmedCode);
       if (res.success) {
         setSecurityModalState({ isOpen: false, actionType: 'single', targetUserId: null, targetUserName: '' });
-        setRoleFeedback({ text: `Account "${securityModalState.targetUserName}" deleted successfully!`, type: 'success' });
-        setTimeout(() => setRoleFeedback(null), 3000);
+        setExportFeedback({ message: `Account "${securityModalState.targetUserName}" deleted successfully!`, type: 'success' });
+        setTimeout(() => setExportFeedback(null), 3000);
       } else {
         const errorText = res.message || 'Access Denied: Incorrect Security Code!';
         setSecurityModalError(errorText);
@@ -449,16 +388,16 @@ export default function AdminAnalytics() {
       if (trimmedCode !== '2027') {
         const errorText = 'Operation Aborted: Invalid Security Code';
         setSecurityModalError(errorText);
-        setRoleFeedback({ text: errorText, type: 'error' });
-        setTimeout(() => setRoleFeedback(null), 4000);
+        setExportFeedback({ message: errorText, type: 'error' });
+        setTimeout(() => setExportFeedback(null), 4000);
         return;
       }
 
       const res = await clearAllAccounts(trimmedCode);
       if (res.success) {
         setSecurityModalState({ isOpen: false, actionType: 'bulk', targetUserId: null, targetUserName: '' });
-        setRoleFeedback({ text: 'All accounts deleted successfully!', type: 'success' });
-        setTimeout(() => setRoleFeedback(null), 3000);
+        setExportFeedback({ message: 'All accounts deleted successfully!', type: 'success' });
+        setTimeout(() => setExportFeedback(null), 3000);
       } else {
         const errorText = res.message || 'Operation Aborted: Invalid Security Code';
         setSecurityModalError(errorText);
@@ -498,10 +437,9 @@ export default function AdminAnalytics() {
     return usersToExport;
   };
 
-  // 1. Export All Registered Users by Role (Multi-Sheet Workbook) -> All_Users_Directory_By_Role.xlsx
+  // 1. Export All Registered Users by Role (Multi-Sheet Workbook)
   const handleExportMultiSheetUsers = async () => {
     try {
-      setExportingReport('multisheet');
       setExportFeedback(null);
       const users = await getCombinedUsersForExport();
       exportMultiSheetUsersWorkbook(users);
@@ -514,15 +452,12 @@ export default function AdminAnalytics() {
       console.error('Error exporting multi-sheet workbook:', err);
       setExportFeedback({ type: 'error', message: 'Failed to generate multi-sheet workbook.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
   // 1b. Export Students (CSV & Excel)
   const handleExportStudentsCSV = async () => {
     try {
-      setExportingReport('students-csv');
       setExportFeedback(null);
       const users = await getCombinedUsersForExport();
       const count = users.filter((u) => (u.role || 'student').toLowerCase() === 'student').length;
@@ -536,14 +471,11 @@ export default function AdminAnalytics() {
       console.error('Error exporting students CSV:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export students CSV.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
   const handleExportStudentsExcel = async () => {
     try {
-      setExportingReport('students-excel');
       setExportFeedback(null);
       const users = await getCombinedUsersForExport();
       const count = users.filter((u) => (u.role || 'student').toLowerCase() === 'student').length;
@@ -557,15 +489,12 @@ export default function AdminAnalytics() {
       console.error('Error exporting students report:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export students spreadsheet.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
   // 1c. Export Coordinators (CSV & Excel)
   const handleExportCoordinatorsCSV = async () => {
     try {
-      setExportingReport('coordinators-csv');
       setExportFeedback(null);
       const users = await getCombinedUsersForExport();
       const count = users.filter((u) => (u.role || '').toLowerCase() === 'coordinator').length;
@@ -579,14 +508,11 @@ export default function AdminAnalytics() {
       console.error('Error exporting coordinators CSV:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export coordinators CSV.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
   const handleExportCoordinatorsExcel = async () => {
     try {
-      setExportingReport('coordinators-excel');
       setExportFeedback(null);
       const users = await getCombinedUsersForExport();
       const count = users.filter((u) => (u.role || '').toLowerCase() === 'coordinator').length;
@@ -600,15 +526,12 @@ export default function AdminAnalytics() {
       console.error('Error exporting coordinators report:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export coordinators spreadsheet.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
-  // 1d. Export All Users (CSV & Excel)
+  // 1d. Export All Users CSV
   const handleExportAllUsersCSV = async () => {
     try {
-      setExportingReport('users-csv');
       setExportFeedback(null);
       const users = await getCombinedUsersForExport();
       exportAllUsersCSV(users, onlineUsers);
@@ -621,37 +544,13 @@ export default function AdminAnalytics() {
       console.error('Error exporting all users CSV:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export all users CSV.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
-    }
-  };
-
-  const handleExportAllUsersExcel = async () => {
-    try {
-      setExportingReport('users-excel');
-      setExportFeedback(null);
-      const usersToExport = await getCombinedUsersForExport();
-      exportAllUsersExcel(usersToExport);
-      setExportFeedback({
-        type: 'success',
-        message: `All_Users_Report.xlsx exported successfully (${usersToExport.length} records)!`,
-      });
-      setTimeout(() => setExportFeedback(null), 4000);
-    } catch (err) {
-      console.error('Error exporting users report:', err);
-      setExportFeedback({ type: 'error', message: 'Failed to export users report spreadsheet.' });
-      setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
   // 2. Export All Student Event Registrations (CSV & Excel)
   const handleExportAllRegistrationsCSV = async () => {
     try {
-      setExportingReport('registrations-csv');
       setExportFeedback(null);
-
       let regsToExport = registrations || [];
       let eventsList = events || [];
       let profsList = profilesList || [];
@@ -681,16 +580,12 @@ export default function AdminAnalytics() {
       console.error('Error exporting registrations CSV:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export registrations CSV.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
   const handleExportEventRegistrationsExcel = async () => {
     try {
-      setExportingReport('registrations-excel');
       setExportFeedback(null);
-
       let regsToExport = registrations || [];
       let eventsList = events || [];
       let profsList = profilesList || [];
@@ -720,8 +615,6 @@ export default function AdminAnalytics() {
       console.error('Error exporting event registrations report:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export event registrations spreadsheet.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
@@ -729,7 +622,6 @@ export default function AdminAnalytics() {
   const handleExportSingleEventCSV = (eventToExport) => {
     if (!eventToExport) return;
     try {
-      setExportingReport(`event-csv-${eventToExport.id}`);
       setExportFeedback(null);
       exportSingleEventRegistrationsCSV(eventToExport, registrations, profilesList);
       const count = (registrations || []).filter((r) => r.event_id === eventToExport.id).length;
@@ -742,8 +634,6 @@ export default function AdminAnalytics() {
       console.error('Error exporting event roster CSV:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export event CSV.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
@@ -780,7 +670,6 @@ export default function AdminAnalytics() {
   // 4. Export Overall Attendance (CSV & Excel)
   const handleExportAttendanceCSV = () => {
     try {
-      setExportingReport('attendance-csv');
       setExportFeedback(null);
       const recordsToUse = filteredAttendanceRecords.length > 0 ? filteredAttendanceRecords : joinedAttendanceRecords;
       exportAttendanceCSV(recordsToUse, events, profilesList);
@@ -793,14 +682,11 @@ export default function AdminAnalytics() {
       console.error('Error exporting attendance CSV:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export attendance CSV.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
   const handleExportAttendanceExcel = async () => {
     try {
-      setExportingReport('attendance-excel');
       setExportFeedback(null);
       exportAttendanceRecordsExcel(joinedAttendanceRecords, events, profilesList);
       setExportFeedback({
@@ -812,15 +698,12 @@ export default function AdminAnalytics() {
       console.error('Error exporting attendance report:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export attendance spreadsheet.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
   // 5. Export Email Dispatch Audit Log (CSV & Excel)
   const handleExportEmailDispatchCSV = async () => {
     try {
-      setExportingReport('emails-csv');
       setExportFeedback(null);
       exportEmailDispatchCSV(registrations, events, profilesList);
       setExportFeedback({
@@ -832,14 +715,11 @@ export default function AdminAnalytics() {
       console.error('Error exporting email dispatch CSV:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export email audit CSV.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
   const handleExportEmailDispatchExcel = async () => {
     try {
-      setExportingReport('emails-excel');
       setExportFeedback(null);
       exportEmailDispatchExcel(registrations, events, profilesList);
       setExportFeedback({
@@ -851,8 +731,6 @@ export default function AdminAnalytics() {
       console.error('Error exporting email dispatch audit report:', err);
       setExportFeedback({ type: 'error', message: 'Failed to export email audit spreadsheet.' });
       setTimeout(() => setExportFeedback(null), 4000);
-    } finally {
-      setExportingReport(null);
     }
   };
 
@@ -883,8 +761,8 @@ export default function AdminAnalytics() {
 
     const userRole = (currentUser?.role || localStorage.getItem('smart_sympo_active_role') || '').toLowerCase();
     if (userRole !== 'admin' && userRole !== 'coordinator') {
-      setRoleFeedback({ text: 'Access Denied: Only admins or coordinators can create events.', type: 'error' });
-      setTimeout(() => setRoleFeedback(null), 4000);
+      setExportFeedback({ message: 'Access Denied: Only admins or coordinators can create events.', type: 'error' });
+      setTimeout(() => setExportFeedback(null), 4000);
       return;
     }
 
@@ -957,33 +835,34 @@ export default function AdminAnalytics() {
     (a) => a.isEmergency || a.severity === 'emergency' || a.type === 'emergency'
   );
 
-  const guestLogs = (guestCheckins || []).concat(
-    attendanceLogs.filter((log) => log.guest_name || log.is_guest)
-  );
-
   const activeExportEvent = events.find((e) => e.id === (selectedExportEventId || events[0]?.id)) || events[0];
   const activeExportEventRegs = activeExportEvent ? registrations.filter((r) => r.event_id === activeExportEvent.id) : [];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-      {/* 1. Sleek Admin Header */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* 1. Academic Governance Header */}
+      <div className="academic-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 transition-colors">
         <div>
-          <h1 className="text-lg font-bold text-slate-900 tracking-tight">
-            Admin Console
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Attendance verification, event operations, reports export, and system user management
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight">
+              Academic Governance & Proceedings Hub
+            </h1>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#8B1E24]/10 text-[#8B1E24] dark:bg-[#8B1E24]/20 dark:text-red-300 border border-[#8B1E24]/20 uppercase">
+              Management
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+            Attendance verification, proceedings management, report exports, and delegate security
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2.5 w-full md:w-auto flex-wrap sm:flex-nowrap">
           {hasActiveEmergency && (
             <button
               onClick={async () => {
                 await clearGlobalEmergencyBroadcast();
               }}
-              className="px-3.5 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-amber-500"
+              className="px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-lg shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer border border-amber-500"
               title="Stop emergency broadcast"
             >
               <StopCircle className="w-3.5 h-3.5 text-rose-700" />
@@ -993,26 +872,26 @@ export default function AdminAnalytics() {
 
           <button
             onClick={() => setShowEmergencyModal(true)}
-            className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-xl border border-rose-200 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-2.5 bg-rose-50 dark:bg-rose-950/80 hover:bg-rose-100 text-rose-800 dark:text-rose-300 font-bold text-xs rounded-lg border border-rose-200 dark:border-rose-800 flex items-center justify-center gap-1.5 transition cursor-pointer"
           >
-            <Radio className="w-3.5 h-3.5 text-rose-600" />
+            <Radio className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
             <span>Emergency Alert</span>
           </button>
 
           <button
             onClick={() => setIsScannerOpen(true)}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-2.5 bg-[#F5F1E8] dark:bg-[#1A1D24] hover:bg-[#EAE5D7] text-slate-800 dark:text-slate-200 font-bold text-xs rounded-lg border border-[#E7E3D8] dark:border-[#2A2E38] flex items-center justify-center gap-1.5 transition cursor-pointer"
           >
-            <ScanLine className="w-3.5 h-3.5 text-indigo-600" />
+            <ScanLine className="w-3.5 h-3.5 text-[#8B1E24]" />
             <span>QR Scanner</span>
           </button>
 
           <button
             onClick={() => setAdminTab('reports')}
-            className={`px-3.5 py-2 font-semibold text-xs rounded-xl border shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+            className={`px-3.5 py-2.5 font-bold text-xs rounded-lg border flex items-center justify-center gap-1.5 transition cursor-pointer ${
               adminTab === 'reports'
-                ? 'bg-indigo-600 text-white border-indigo-600'
-                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200'
+                ? 'bg-[#8B1E24] text-white border-[#8B1E24]'
+                : 'bg-emerald-50 dark:bg-emerald-950 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
             }`}
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -1021,18 +900,18 @@ export default function AdminAnalytics() {
 
           <button
             onClick={() => setShowAddCoordinatorModal(true)}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3.5 py-2.5 bg-[#F5F1E8] dark:bg-[#1A1D24] hover:bg-[#EAE5D7] text-slate-800 dark:text-slate-200 font-bold text-xs rounded-lg border border-[#E7E3D8] dark:border-[#2A2E38] flex items-center justify-center gap-1.5 transition cursor-pointer"
           >
-            <UserCheck className="w-3.5 h-3.5 text-slate-600" />
-            <span>Add Coordinator</span>
+            <UserCheck className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+            <span>Add Faculty</span>
           </button>
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            className="px-4 py-2.5 bg-[#8B1E24] hover:bg-[#73181d] text-white font-bold text-xs rounded-lg shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Create Event</span>
+            <span>Create Session</span>
           </button>
         </div>
       </div>
@@ -1040,17 +919,17 @@ export default function AdminAnalytics() {
       {/* Export Feedback Live Banner */}
       {exportFeedback && (
         <div
-          className={`p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between border shadow-2xs transition-all animate-fadeIn ${
+          className={`p-4 rounded-2xl text-xs font-semibold flex items-center justify-between border shadow-2xs transition-all animate-fadeIn ${
             exportFeedback.type === 'success'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border-rose-200'
+              ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
+              : 'bg-rose-50 text-rose-900 dark:bg-rose-950 dark:text-rose-200 border-rose-200 dark:border-rose-800'
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {exportFeedback.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
             )}
             <span>{exportFeedback.message}</span>
           </div>
@@ -1063,59 +942,82 @@ export default function AdminAnalytics() {
         </div>
       )}
 
-      {/* 2. Top Stats: 3 Minimalist Pastel Boxes */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* 2. Top Stats: 4 Modern KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Stat 1: Total Registered */}
-        <div className="bg-indigo-50/70 border border-indigo-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
-          <div className="text-xs font-semibold text-indigo-800 flex items-center gap-1.5">
-            <Users className="w-4 h-4 text-indigo-600" />
+        <div className="bg-white dark:bg-[#14161F] p-5.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
             <span>Total Registered</span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+              <Users className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-extrabold text-indigo-950 font-mono tracking-tight">
+          <div className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
             {totalRegistrationsCount}
           </div>
-          <p className="text-[11px] text-indigo-700/80 font-medium">
+          <p className="text-[11px] text-slate-400 font-medium">
             Across all symposium sessions
           </p>
         </div>
 
         {/* Stat 2: Verified Attendance */}
-        <div className="bg-emerald-50/70 border border-emerald-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
-          <div className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <div className="bg-white dark:bg-[#14161F] p-5.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
             <span>Verified Attendance</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-extrabold text-emerald-950 font-mono tracking-tight">
+          <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight">
             {totalAttendedCount}
           </div>
-          <p className="text-[11px] text-emerald-700/80 font-medium">
+          <p className="text-[11px] text-emerald-700 dark:text-emerald-300 font-medium">
             {liveAttendanceRate}% overall turnout confirmed
           </p>
         </div>
 
         {/* Stat 3: Pending Check-In */}
-        <div className="bg-amber-50/70 border border-amber-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
-          <div className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
-            <Clock className="w-4 h-4 text-amber-600" />
+        <div className="bg-white dark:bg-[#14161F] p-5.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
             <span>Pending Check-In</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <Clock className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-extrabold text-amber-950 font-mono tracking-tight">
+          <div className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight">
             {pendingAttendanceCount}
           </div>
-          <p className="text-[11px] text-amber-700/80 font-medium">
-            Registered attendees awaiting door check-in
+          <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+            Registered attendees awaiting scan
+          </p>
+        </div>
+
+        {/* Stat 4: Online Users & Coords */}
+        <div className="bg-white dark:bg-[#14161F] p-5.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 shadow-xs space-y-2 hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <span>System Presence</span>
+            <div className="w-8 h-8 rounded-xl bg-violet-50 dark:bg-violet-950 text-violet-600 dark:text-violet-400 flex items-center justify-center">
+              <UserCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-extrabold text-indigo-600 tracking-tight flex items-center gap-2">
+            <span>{onlineCount}</span>
+            <span className="text-xs font-normal text-slate-400">online</span>
+          </div>
+          <p className="text-[11px] text-slate-400 font-medium">
+            {coordinatorCount} active coordinators configured
           </p>
         </div>
       </div>
 
-      {/* 3. Section Tabs: Clean Pill Navigation */}
-      <div className="flex items-center gap-1.5 border-b border-slate-200/80 pb-1 flex-wrap sm:flex-nowrap">
+      {/* 3. Section Tabs: Clean Navigation */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-1 flex-wrap sm:flex-nowrap">
         <button
           onClick={() => setAdminTab('attendance')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+          className={`px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             adminTab === 'attendance'
               ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
           Attendance Feed ({joinedAttendanceRecords.length})
@@ -1123,10 +1025,10 @@ export default function AdminAnalytics() {
 
         <button
           onClick={() => setAdminTab('events')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+          className={`px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             adminTab === 'events'
               ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
           Events & Venues ({events.length})
@@ -1134,10 +1036,10 @@ export default function AdminAnalytics() {
 
         <button
           onClick={() => setAdminTab('users')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+          className={`px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
             adminTab === 'users'
               ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
           User Governance ({(profilesList || []).length})
@@ -1145,23 +1047,23 @@ export default function AdminAnalytics() {
 
         <button
           onClick={() => setAdminTab('reports')}
-          className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+          className={`px-4.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
             adminTab === 'reports'
               ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-emerald-700 hover:text-emerald-800 bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200/60'
+              : 'text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
           }`}
         >
           <FileSpreadsheet className="w-3.5 h-3.5" />
-          <span>CSV Reports & Export Hub</span>
+          <span>Export Hub</span>
         </button>
       </div>
 
       {/* Tab 1: ATTENDANCE FEED & CLEAN FILTER TABLE */}
       {adminTab === 'attendance' && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-5">
+        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-6">
           {/* Clean Filter Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {/* Single Sleek Search Bar */}
+            {/* Single Search Bar */}
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
@@ -1169,12 +1071,12 @@ export default function AdminAnalytics() {
                 placeholder="Search by student name, roll number, college, or event..."
                 value={attendanceSearchQuery}
                 onChange={(e) => setAttendanceSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200/90 text-slate-900 rounded-xl pl-10 pr-3.5 py-2 text-xs focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-medium"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-10 pr-3.5 py-2 text-xs focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-medium"
               />
             </div>
 
-            {/* Simple Status Toggle Tabs */}
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/80 shrink-0 text-xs font-semibold">
+            {/* Status Toggle Tabs */}
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0 text-xs font-bold">
               <button
                 onClick={() => setAttendanceStatusFilter('ALL')}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
@@ -1189,7 +1091,7 @@ export default function AdminAnalytics() {
                 onClick={() => setAttendanceStatusFilter('ATTENDED')}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   attendanceStatusFilter === 'ATTENDED'
-                    ? 'bg-white text-emerald-800 shadow-2xs font-bold'
+                    ? 'bg-white text-emerald-800 shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -1199,7 +1101,7 @@ export default function AdminAnalytics() {
                 onClick={() => setAttendanceStatusFilter('PENDING')}
                 className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
                   attendanceStatusFilter === 'PENDING'
-                    ? 'bg-white text-slate-800 shadow-2xs font-bold'
+                    ? 'bg-white text-slate-800 shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -1211,7 +1113,7 @@ export default function AdminAnalytics() {
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={handleExportAttendanceCSV}
-                className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-semibold text-xs rounded-xl border border-emerald-200/80 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 title="Export Filtered Attendance Records to CSV"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-600" />
@@ -1220,7 +1122,7 @@ export default function AdminAnalytics() {
 
               <button
                 onClick={handleExportAttendanceExcel}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200/80 shadow-2xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 title="Export Attendance Records to Excel (.xlsx)"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
@@ -1229,13 +1131,13 @@ export default function AdminAnalytics() {
             </div>
           </div>
 
-          {/* Simplified Clean Data Table */}
-          <div className="overflow-x-auto rounded-xl border border-slate-100">
+          {/* Clean Data Table */}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-100">
-                  <th className="py-3 px-4">Student Name & Roll No</th>
-                  <th className="py-3 px-4">Event</th>
+                <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                  <th className="py-3 px-4">Student & Roll No</th>
+                  <th className="py-3 px-4">Event Track</th>
                   <th className="py-3 px-4">College</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4">Check-in Time</th>
@@ -1245,7 +1147,7 @@ export default function AdminAnalytics() {
               <tbody className="divide-y divide-slate-100">
                 {filteredAttendanceRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={6} className="py-12 text-center text-slate-400 font-medium">
                       {attendanceSearchQuery
                         ? 'No attendance records match your search query.'
                         : 'No student registrations recorded yet.'}
@@ -1253,14 +1155,14 @@ export default function AdminAnalytics() {
                   </tr>
                 ) : (
                   filteredAttendanceRecords.map((record) => (
-                    <tr key={record.id} className="hover:bg-slate-50/60 transition-colors">
+                    <tr key={record.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* Column 1: Student Name & Roll No */}
                       <td className="py-3.5 px-4 font-semibold text-slate-900">
                         <div className="flex items-center gap-2.5">
                           <img
                             src={`https://api.dicebear.com/7.x/bottts/svg?seed=${record.student_id}`}
                             alt=""
-                            className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200/80 p-0.5 shrink-0"
+                            className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 p-0.5 shrink-0"
                           />
                           <div>
                             <div className="font-bold text-slate-900">{record.student_name}</div>
@@ -1289,15 +1191,15 @@ export default function AdminAnalytics() {
                         )}
                       </td>
 
-                      {/* Column 4: Status Badge (Clean Green / Gray) */}
+                      {/* Column 4: Status Badge */}
                       <td className="py-3.5 px-4">
                         {record.is_attended ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             Verified
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200/80">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
                             <Clock className="w-3 h-3 text-slate-400" />
                             Pending
                           </span>
@@ -1320,7 +1222,7 @@ export default function AdminAnalytics() {
                       <td className="py-3.5 px-4 text-right">
                         <button
                           onClick={() => handleAdminUnregister(record.event_id, record.student_id, record.student_name, record.event_title)}
-                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200/70 transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px] font-medium"
+                          className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold"
                           title="Remove this registration"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1338,7 +1240,7 @@ export default function AdminAnalytics() {
 
       {/* Tab 2: EVENTS & VENUES MANAGEMENT */}
       {adminTab === 'events' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {events.map((evt) => {
             const regCount = registrations.filter((r) => r.event_id === evt.id).length;
             const checkedInCount = attendanceLogs.filter(
@@ -1349,68 +1251,64 @@ export default function AdminAnalytics() {
             return (
               <div
                 key={evt.id}
-                className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3 relative overflow-hidden"
+                className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
               >
-                <div className="flex justify-between items-start">
-                  <span className="text-[10px] font-bold text-indigo-700 uppercase bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/80">
-                    {evt.category}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-600 font-mono">
-                    {occupancyPercent}% Turnout
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 truncate">{evt.title}</h3>
-                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-slate-400" />
-                    <span className="truncate">{evt.hall_number}</span>
-                  </p>
-                </div>
-
-                <div className="space-y-1 pt-1">
-                  <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-indigo-600 h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(occupancyPercent, 100)}%` }}
-                    ></div>
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      {evt.category || 'Technical'}
+                    </span>
+                    <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                      {evt.hall_number || 'Main Hall'}
+                    </span>
                   </div>
-                  <div className="flex justify-between text-[11px] text-slate-500 pt-0.5">
-                    <span>Checked-In: <strong>{checkedInCount}</strong></span>
-                    <span>Registered: <strong>{regCount}</strong> / {evt.max_capacity || 100}</span>
+
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight leading-snug">
+                      {evt.title}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                      {evt.description || 'Interactive symposium workshop & live seminar track.'}
+                    </p>
+                  </div>
+
+                  {/* Occupancy Indicator */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-slate-500">Occupancy</span>
+                      <span className="text-slate-900 font-bold">{regCount} / {evt.max_capacity || 100} ({occupancyPercent}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-indigo-600 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(100, occupancyPercent)}%` }}
+                      ></div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1 text-xs">
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                   <button
                     onClick={() => {
                       setSelectedRosterEvent(evt);
                       setShowRosterModal(true);
                     }}
-                    className="flex-1 py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-indigo-700 rounded-lg font-medium text-[11px] flex items-center justify-center gap-1 transition cursor-pointer"
+                    className="flex-1 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition cursor-pointer"
                   >
-                    <Users className="w-3 h-3" />
-                    Roster ({regCount})
-                  </button>
-                  <button
-                    onClick={() => handleExportSingleEventCSV(evt)}
-                    className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg font-medium text-[11px] flex items-center justify-center gap-1 transition cursor-pointer border border-emerald-200/80"
-                    title={`Export ${evt.title} registered students to CSV`}
-                  >
-                    <Download className="w-3 h-3 text-emerald-600" />
-                    <span>CSV</span>
+                    View Roster
                   </button>
                   <button
                     onClick={() => handleEditClick(evt)}
-                    className="py-1.5 px-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg font-medium text-[11px] transition cursor-pointer"
+                    className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
                   >
                     Edit
                   </button>
                   <button
                     onClick={() => handleDeleteClick(evt)}
-                    className="py-1.5 px-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg font-medium text-[11px] transition cursor-pointer"
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                    title="Delete Event"
                   >
-                    Delete
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -1421,18 +1319,18 @@ export default function AdminAnalytics() {
 
       {/* Tab 3: USER GOVERNANCE & ROLES */}
       {adminTab === 'users' && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">User Accounts & Roles</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <h3 className="text-base font-extrabold text-slate-900 tracking-tight">User Accounts & Roles</h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">
                 {adminCount}/5 Admins • {coordinatorCount} Coordinators • {studentCount} Students
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handleExportStudentsCSV}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1.5 cursor-pointer"
                 title="Export Registered Students to CSV"
               >
                 <Download className="w-3.5 h-3.5 text-emerald-600" />
@@ -1440,7 +1338,7 @@ export default function AdminAnalytics() {
               </button>
               <button
                 onClick={handleExportCoordinatorsCSV}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1.5 cursor-pointer"
                 title="Export Coordinator Directory & Logins to CSV"
               >
                 <Download className="w-3.5 h-3.5 text-amber-600" />
@@ -1448,17 +1346,17 @@ export default function AdminAnalytics() {
               </button>
               <button
                 onClick={() => setShowAddCoordinatorModal(true)}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
-                <UserCheck className="w-3.5 h-3.5" />
+                <UserCheck className="w-4 h-4" />
                 <span>Add Coordinator</span>
               </button>
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-100">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-100">
+              <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                 <tr>
                   <th className="px-4 py-3">User Profile</th>
                   <th className="px-4 py-3">Email & Identifier</th>
@@ -1477,18 +1375,18 @@ export default function AdminAnalytics() {
                   profilesList.map((user) => {
                     const isCurrent = user.id === currentUser?.id;
                     return (
-                      <tr key={user.id} className="hover:bg-slate-50/60 transition-colors">
+                      <tr key={user.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-4 py-3.5 font-semibold text-slate-900 flex items-center gap-2.5">
                           <img
                             src={`https://api.dicebear.com/7.x/bottts/svg?seed=${user.id}`}
                             alt=""
-                            className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200/80 p-0.5 shrink-0"
+                            className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 p-0.5 shrink-0"
                           />
                           <div>
                             <div className="font-bold text-slate-900 flex items-center gap-1">
                               {user.full_name || user.name || 'User'}
                               {isCurrent && (
-                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-bold">
+                                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-700 font-bold">
                                   You
                                 </span>
                               )}
@@ -1498,13 +1396,13 @@ export default function AdminAnalytics() {
                         </td>
 
                         <td className="px-4 py-3.5 text-slate-600">
-                          <div>{user.email}</div>
+                          <div className="font-medium text-slate-800">{user.email}</div>
                           <div className="text-[10px] text-slate-400 font-mono">{user.college_id || user.id?.slice(0, 10)}</div>
                         </td>
 
                         <td className="px-4 py-3.5">
                           <span
-                            className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-lg border ${getRoleBadgeStyle(user.role)}`}
+                            className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full border ${getRoleBadgeStyle(user.role)}`}
                           >
                             {user.role}
                           </span>
@@ -1516,7 +1414,7 @@ export default function AdminAnalytics() {
                               <button
                                 onClick={() => handleRoleChange(user.id, 'coordinator')}
                                 disabled={updatingUser === user.id}
-                                className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer disabled:opacity-50"
+                                className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer disabled:opacity-50"
                               >
                                 Set Coordinator
                               </button>
@@ -1525,7 +1423,7 @@ export default function AdminAnalytics() {
                               <button
                                 onClick={() => handleRoleChange(user.id, 'admin')}
                                 disabled={updatingUser === user.id || adminCount >= 5}
-                                className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer disabled:opacity-50"
+                                className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition cursor-pointer disabled:opacity-50"
                               >
                                 Promote Admin
                               </button>
@@ -1534,7 +1432,7 @@ export default function AdminAnalytics() {
                               <button
                                 onClick={() => handleRoleChange(user.id, 'student')}
                                 disabled={updatingUser === user.id || isCurrent}
-                                className="px-2.5 py-1 rounded-lg text-[10px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer disabled:opacity-50"
+                                className="px-2.5 py-1 rounded-xl text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer disabled:opacity-50"
                               >
                                 Set Student
                               </button>
@@ -1542,10 +1440,10 @@ export default function AdminAnalytics() {
                             <button
                               onClick={() => handleDeleteAccount(user.id, user.full_name || user.name || user.email)}
                               disabled={updatingUser === user.id}
-                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                              className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                               title="Delete Account"
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>
@@ -1563,16 +1461,16 @@ export default function AdminAnalytics() {
       {adminTab === 'reports' && (
         <div className="space-y-6 animate-fadeIn">
           {/* Hero Banner for Export Center */}
-          <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 text-white p-6 rounded-2xl border border-indigo-700 shadow-md">
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-7 rounded-3xl border border-slate-800 shadow-md">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
-                <span className="text-[10px] font-bold tracking-wider uppercase bg-indigo-700/70 border border-indigo-500/50 px-2.5 py-0.5 rounded-md text-indigo-200 inline-block mb-1.5">
+                <span className="text-[10px] font-bold tracking-wider uppercase bg-indigo-500/20 border border-indigo-400/30 px-3 py-0.5 rounded-full text-indigo-300 inline-block mb-2">
                   Symposium Data & Analytics Center
                 </span>
-                <h2 className="text-xl font-bold tracking-tight">
+                <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
                   Export & Reporting Center
                 </h2>
-                <p className="text-xs text-indigo-200/90 mt-1 max-w-2xl">
+                <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
                   Generate dedicated UTF-8 encoded CSV spreadsheets and formatted reports for student attendance, registrations, coordinator logins, and specific event rosters.
                 </p>
               </div>
@@ -1580,7 +1478,7 @@ export default function AdminAnalytics() {
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={handleExportMultiSheetUsers}
-                  className="px-4 py-2 bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 transition cursor-pointer border border-indigo-400"
+                  className="px-4.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/30 flex items-center gap-2 transition cursor-pointer active:scale-98"
                 >
                   <FileSpreadsheet className="w-4 h-4" />
                   <span>All-in-One Excel Workbook</span>
@@ -1589,30 +1487,30 @@ export default function AdminAnalytics() {
             </div>
           </div>
 
-          {/* Section 1: Event-Specific Student Registration Exporter ("whose student register the particular event") */}
-          <div className="bg-white p-6 rounded-2xl border border-indigo-100 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          {/* Section 1: Event-Specific Student Registration Exporter */}
+          <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700">
+                  <span className="p-2 rounded-xl bg-indigo-50 text-indigo-700">
                     <Users className="w-4 h-4" />
                   </span>
-                  <h3 className="text-sm font-bold text-slate-900">
+                  <h3 className="text-base font-extrabold text-slate-900">
                     Event-Specific Student Registrations
                   </h3>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5 font-medium">
                   Select any symposium event to inspect and export the exact list of registered students
                 </p>
               </div>
 
               {/* Event Selector Dropdown */}
               <div className="flex items-center gap-2">
-                <label className="text-xs font-semibold text-slate-600">Select Event:</label>
+                <label className="text-xs font-bold text-slate-600">Select Event:</label>
                 <select
                   value={selectedExportEventId || events[0]?.id || ''}
                   onChange={(e) => setSelectedExportEventId(e.target.value)}
-                  className="bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none focus:border-indigo-600 max-w-[220px] truncate"
+                  className="bg-slate-50 border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 font-bold focus:outline-none focus:border-indigo-600 max-w-[220px] truncate"
                 >
                   {events.map((evt) => (
                     <option key={evt.id} value={evt.id}>
@@ -1626,25 +1524,25 @@ export default function AdminAnalytics() {
             {/* Selected Event Details & Direct Actions */}
             {activeExportEvent ? (
               <div className="space-y-4">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="bg-slate-50 p-4.5 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-slate-900">{activeExportEvent.title}</span>
-                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
                         {activeExportEvent.category}
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-500 flex items-center gap-3">
-                      <span>Venue: <strong>{activeExportEvent.hall_number || 'Main Venue'}</strong></span>
+                      <span>Venue: <strong className="text-slate-800 font-bold">{activeExportEvent.hall_number || 'Main Venue'}</strong></span>
                       <span>•</span>
-                      <span>Total Registered: <strong className="text-indigo-700">{activeExportEventRegs.length}</strong> / {activeExportEvent.max_capacity || 100}</span>
+                      <span>Total Registered: <strong className="text-indigo-700 font-bold">{activeExportEventRegs.length}</strong> / {activeExportEvent.max_capacity || 100}</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0 flex-wrap">
                     <button
                       onClick={() => handleExportSingleEventCSV(activeExportEvent)}
-                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95"
                       title="Download CSV of students registered for this event"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -1653,7 +1551,7 @@ export default function AdminAnalytics() {
 
                     <button
                       onClick={() => handleExportSingleEventPDF(activeExportEvent)}
-                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1.5 transition cursor-pointer"
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center gap-1.5 transition cursor-pointer"
                       title="Download PDF Roster of students registered for this event"
                     >
                       <FileDown className="w-3.5 h-3.5 text-rose-600" />
@@ -1665,7 +1563,7 @@ export default function AdminAnalytics() {
                         setSelectedRosterEvent(activeExportEvent);
                         setShowRosterModal(true);
                       }}
-                      className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-xl border border-indigo-200 shadow-2xs flex items-center gap-1.5 transition cursor-pointer"
+                      className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 shadow-2xs flex items-center gap-1.5 transition cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />
                       <span>Manage Roster</span>
@@ -1674,9 +1572,9 @@ export default function AdminAnalytics() {
                 </div>
 
                 {/* Preview Table of Registered Students for this event */}
-                <div className="overflow-x-auto rounded-xl border border-slate-100">
+                <div className="overflow-x-auto rounded-2xl border border-slate-200">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50/80 text-slate-600 font-semibold border-b border-slate-100">
+                    <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                       <tr>
                         <th className="px-4 py-2.5">#</th>
                         <th className="px-4 py-2.5">Student Name</th>
@@ -1689,7 +1587,7 @@ export default function AdminAnalytics() {
                     <tbody className="divide-y divide-slate-100">
                       {activeExportEventRegs.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
+                          <td colSpan={6} className="px-4 py-6 text-center text-slate-400 font-medium">
                             No students have registered for "{activeExportEvent.title}" yet.
                           </td>
                         </tr>
@@ -1698,7 +1596,7 @@ export default function AdminAnalytics() {
                           const profile = (profilesList || []).find((p) => p.id === reg.student_id);
                           const isAttended = Boolean(reg.attended || reg.is_attended);
                           return (
-                            <tr key={reg.id || idx} className="hover:bg-slate-50/60">
+                            <tr key={reg.id || idx} className="hover:bg-slate-50/70">
                               <td className="px-4 py-2.5 text-slate-400 font-mono">{idx + 1}</td>
                               <td className="px-4 py-2.5 font-semibold text-slate-900">
                                 {reg.student_name || profile?.full_name || profile?.name || `Student (${reg.student_id?.slice(0, 8)})`}
@@ -1710,7 +1608,7 @@ export default function AdminAnalytics() {
                               </td>
                               <td className="px-4 py-2.5">
                                 <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                                     isAttended
                                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                       : 'bg-slate-100 text-slate-600'
@@ -1726,7 +1624,7 @@ export default function AdminAnalytics() {
                     </tbody>
                   </table>
                   {activeExportEventRegs.length > 5 && (
-                    <div className="p-2 bg-slate-50 text-center text-[11px] text-slate-500 border-t border-slate-100">
+                    <div className="p-2.5 bg-slate-50 text-center text-[11px] text-slate-500 border-t border-slate-200 font-medium">
                       Showing 5 of {activeExportEventRegs.length} registered students. Download the full CSV for complete details.
                     </div>
                   )}
@@ -1736,35 +1634,35 @@ export default function AdminAnalytics() {
           </div>
 
           {/* Section 2: 6 Dedicated Export Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Card 1: Student Attendance Report */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
+                  <span className="p-2.5 bg-emerald-50 text-emerald-700 rounded-2xl">
                     <CheckCircle2 className="w-5 h-5" />
                   </span>
-                  <span className="text-xs font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                  <span className="text-xs font-mono font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
                     {totalAttendedCount} Verified
                   </span>
                 </div>
-                <h4 className="text-sm font-bold text-slate-900">Student Attendance Report</h4>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <h4 className="text-sm font-extrabold text-slate-900">Student Attendance Report</h4>
+                <p className="text-xs text-slate-500 leading-relaxed font-normal">
                   Full door check-in logs with verified attendee names, roll numbers, venues, exact timestamps, and verification status.
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+              <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
                 <button
                   onClick={handleExportAttendanceCSV}
-                  className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>CSV</span>
                 </button>
                 <button
                   onClick={handleExportAttendanceExcel}
-                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Excel</span>
@@ -1773,33 +1671,33 @@ export default function AdminAnalytics() {
             </div>
 
             {/* Card 2: All Student Registrations */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="p-2 bg-indigo-50 text-indigo-700 rounded-xl">
+                  <span className="p-2.5 bg-indigo-50 text-indigo-700 rounded-2xl">
                     <Users className="w-5 h-5" />
                   </span>
-                  <span className="text-xs font-mono font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                  <span className="text-xs font-mono font-bold text-indigo-800 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
                     {totalRegistrationsCount} Total
                   </span>
                 </div>
-                <h4 className="text-sm font-bold text-slate-900">All Student Registrations</h4>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <h4 className="text-sm font-extrabold text-slate-900">All Student Registrations</h4>
+                <p className="text-xs text-slate-500 leading-relaxed font-normal">
                   Master registry of all student registrations across all symposium sessions with pass codes, contact info, and status.
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+              <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
                 <button
                   onClick={handleExportAllRegistrationsCSV}
-                  className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>CSV</span>
                 </button>
                 <button
                   onClick={handleExportEventRegistrationsExcel}
-                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Excel</span>
@@ -1808,33 +1706,33 @@ export default function AdminAnalytics() {
             </div>
 
             {/* Card 3: Coordinators & Login Presence */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="p-2 bg-amber-50 text-amber-700 rounded-xl">
+                  <span className="p-2.5 bg-amber-50 text-amber-700 rounded-2xl">
                     <UserCheck className="w-5 h-5" />
                   </span>
-                  <span className="text-xs font-mono font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                  <span className="text-xs font-mono font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
                     {coordinatorCount} Coords • {onlineCount} Online
                   </span>
                 </div>
-                <h4 className="text-sm font-bold text-slate-900">Coordinators & Logins</h4>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <h4 className="text-sm font-extrabold text-slate-900">Coordinators & Logins</h4>
+                <p className="text-xs text-slate-500 leading-relaxed font-normal">
                   Coordinator roster, assigned departments, contact info, live login status (online presence), and security passcode status.
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+              <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
                 <button
                   onClick={handleExportCoordinatorsCSV}
-                  className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="flex-1 py-2 px-3 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>CSV</span>
                 </button>
                 <button
                   onClick={handleExportCoordinatorsExcel}
-                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Excel</span>
@@ -1843,33 +1741,33 @@ export default function AdminAnalytics() {
             </div>
 
             {/* Card 4: Registered Students Directory */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="p-2 bg-sky-50 text-sky-700 rounded-xl">
+                  <span className="p-2.5 bg-sky-50 text-sky-700 rounded-2xl">
                     <Building className="w-5 h-5" />
                   </span>
-                  <span className="text-xs font-mono font-bold text-sky-800 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200">
+                  <span className="text-xs font-mono font-bold text-sky-800 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200">
                     {studentCount} Students
                   </span>
                 </div>
-                <h4 className="text-sm font-bold text-slate-900">Student Directory</h4>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <h4 className="text-sm font-extrabold text-slate-900">Student Directory</h4>
+                <p className="text-xs text-slate-500 leading-relaxed font-normal">
                   All registered student profiles, colleges, departments, roll numbers, contact emails, and registration dates.
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+              <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
                 <button
                   onClick={handleExportStudentsCSV}
-                  className="flex-1 py-2 px-3 bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="flex-1 py-2 px-3 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>CSV</span>
                 </button>
                 <button
                   onClick={handleExportStudentsExcel}
-                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Excel</span>
@@ -1878,33 +1776,33 @@ export default function AdminAnalytics() {
             </div>
 
             {/* Card 5: Email & Pass Dispatch Audit */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="p-2 bg-purple-50 text-purple-700 rounded-xl">
+                  <span className="p-2.5 bg-purple-50 text-purple-700 rounded-2xl">
                     <Mail className="w-5 h-5" />
                   </span>
-                  <span className="text-xs font-mono font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                  <span className="text-xs font-mono font-bold text-purple-800 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">
                     {registrations.length} Passes Sent
                   </span>
                 </div>
-                <h4 className="text-sm font-bold text-slate-900">Email & Pass Delivery Log</h4>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <h4 className="text-sm font-extrabold text-slate-900">Email & Pass Delivery Log</h4>
+                <p className="text-xs text-slate-500 leading-relaxed font-normal">
                   Audit trail of registration passes dispatched to students, including recipient email, timestamp, and delivery status.
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+              <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
                 <button
                   onClick={handleExportEmailDispatchCSV}
-                  className="flex-1 py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="flex-1 py-2 px-3 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>CSV</span>
                 </button>
                 <button
                   onClick={handleExportEmailDispatchExcel}
-                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Excel</span>
@@ -1913,33 +1811,33 @@ export default function AdminAnalytics() {
             </div>
 
             {/* Card 6: All System Users Directory */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-4">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200/90 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all">
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="p-2 bg-slate-100 text-slate-700 rounded-xl">
+                  <span className="p-2.5 bg-slate-100 text-slate-700 rounded-2xl">
                     <ShieldCheck className="w-5 h-5" />
                   </span>
-                  <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                  <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
                     {(profilesList || []).length} Accounts
                   </span>
                 </div>
-                <h4 className="text-sm font-bold text-slate-900">Master Users Directory</h4>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <h4 className="text-sm font-extrabold text-slate-900">Master Users Directory</h4>
+                <p className="text-xs text-slate-500 leading-relaxed font-normal">
                   Complete user directory of all accounts (students, coordinators, administrators) with permission roles and identifiers.
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+              <div className="pt-3 border-t border-slate-100 flex items-center gap-2">
                 <button
                   onClick={handleExportAllUsersCSV}
-                  className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>CSV</span>
                 </button>
                 <button
                   onClick={handleExportMultiSheetUsers}
-                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center gap-1.5 transition cursor-pointer"
                   title="Export multi-sheet Excel with tabs for Students, Coordinators, Admins"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
@@ -1953,24 +1851,24 @@ export default function AdminAnalytics() {
 
       {/* Enhanced Create Event Modal with Location & Radius */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white w-full max-w-lg rounded-2xl border border-slate-200 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-slate-900">
-            <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <PlusCircle className="w-4 h-4 text-indigo-600" />
-                Create Symposium Event
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white w-full max-w-lg rounded-3xl border border-slate-200/90 p-7 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-slate-900 animate-slideUp text-left">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3.5">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-indigo-600" />
+                Create Symposium Track
               </h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-slate-900 text-sm cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 text-sm cursor-pointer p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} className="space-y-3.5 text-xs">
+            <form onSubmit={handleAddSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
                   Event Title
                 </label>
@@ -1980,12 +1878,12 @@ export default function AdminAnalytics() {
                   placeholder="e.g. Cyber Security Workshop"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-medium"
                 />
               </div>
 
               <div>
-                <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
                   Description
                 </label>
@@ -1994,24 +1892,24 @@ export default function AdminAnalytics() {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white resize-none transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white resize-none transition-all font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1">Category</label>
+                  <label className="text-slate-700 font-bold block mb-1">Category</label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 cursor-pointer font-medium"
                   >
                     <option value="Technical">Technical</option>
                     <option value="Non-Technical">Non-Technical</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                  <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                     <Hash className="w-3.5 h-3.5 text-amber-600" />
                     Max Capacity
                   </label>
@@ -2019,13 +1917,13 @@ export default function AdminAnalytics() {
                     type="number"
                     value={formData.max_capacity}
                     onChange={(e) => setFormData({ ...formData, max_capacity: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-amber-600" />
                   Assigned Hall / Venue
                 </label>
@@ -2035,13 +1933,13 @@ export default function AdminAnalytics() {
                   placeholder="e.g. Hall 1 (Main Auditorium)"
                   value={formData.hall_number}
                   onChange={(e) => setFormData({ ...formData, hall_number: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
                 />
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-slate-800 font-semibold flex items-center gap-1.5">
+                  <label className="text-slate-800 font-bold flex items-center gap-1.5">
                     <Globe className="w-3.5 h-3.5 text-indigo-600" />
                     Location Coordinates
                   </label>
@@ -2049,7 +1947,7 @@ export default function AdminAnalytics() {
                     type="button"
                     onClick={handleUseCurrentLocation}
                     disabled={geoLoading}
-                    className="px-2.5 py-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                    className="px-3 py-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
                   >
                     <Crosshair className="w-3 h-3" />
                     {geoLoading ? 'Detecting...' : 'Use My Location'}
@@ -2058,31 +1956,31 @@ export default function AdminAnalytics() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-slate-500 text-[10px] block mb-1">Latitude</label>
+                    <label className="text-slate-500 text-[10px] block mb-1 font-semibold">Latitude</label>
                     <input
                       type="number"
                       step="0.000001"
                       placeholder="e.g. 13.082680"
                       value={formData.latitude}
                       onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
-                      className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-1.5 text-[11px] font-mono focus:outline-none focus:border-indigo-600"
+                      className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-[11px] font-mono focus:outline-none focus:border-indigo-600"
                     />
                   </div>
                   <div>
-                    <label className="text-slate-500 text-[10px] block mb-1">Longitude</label>
+                    <label className="text-slate-500 text-[10px] block mb-1 font-semibold">Longitude</label>
                     <input
                       type="number"
                       step="0.000001"
                       placeholder="e.g. 80.270721"
                       value={formData.longitude}
                       onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
-                      className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-1.5 text-[11px] font-mono focus:outline-none focus:border-indigo-600"
+                      className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl px-3 py-2 text-[11px] font-mono focus:outline-none focus:border-indigo-600"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-slate-700 font-semibold flex items-center gap-1.5 mb-1">
+                  <label className="text-slate-700 font-bold flex items-center gap-1.5 mb-1">
                     <Ruler className="w-3 h-3 text-amber-600" />
                     <span>Allowed Check-in Radius</span>
                     <span className="text-[10px] text-slate-500 font-normal">(meters)</span>
@@ -2093,7 +1991,7 @@ export default function AdminAnalytics() {
                     max={5000}
                     value={formData.allowed_radius}
                     onChange={(e) => setFormData({ ...formData, allowed_radius: e.target.value })}
-                    className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-1.5 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-white border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                   <p className="text-[10px] text-slate-500 mt-1">
                     Students must be within this radius to check in. Default: 200m.
@@ -2103,7 +2001,7 @@ export default function AdminAnalytics() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                  <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-emerald-600" />
                     Start Time
                   </label>
@@ -2112,11 +2010,11 @@ export default function AdminAnalytics() {
                     required
                     value={formData.start_time}
                     onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                  <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-rose-600" />
                     End Time
                   </label>
@@ -2125,14 +2023,14 @@ export default function AdminAnalytics() {
                     required
                     value={formData.end_time}
                     onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full mt-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors shadow-xs cursor-pointer text-xs"
+                className="w-full mt-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-md shadow-indigo-500/20 cursor-pointer text-xs active:scale-98"
               >
                 Save & Publish Event
               </button>
@@ -2151,27 +2049,27 @@ export default function AdminAnalytics() {
 
       {/* Edit Event Modal */}
       {showEditModal && editingEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white w-full max-w-lg rounded-2xl border border-slate-200 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-slate-900">
-            <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white w-full max-w-lg rounded-3xl border border-slate-200/90 p-7 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-slate-900 animate-slideUp text-left">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3.5">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-indigo-600" />
-                Edit Symposium Event
+                Edit Symposium Track
               </h3>
               <button
                 onClick={() => {
                   setShowEditModal(false);
                   setEditingEvent(null);
                 }}
-                className="text-slate-400 hover:text-slate-900 text-sm cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 text-sm cursor-pointer p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit} className="space-y-3.5 text-xs">
+            <form onSubmit={handleEditSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
                   Event Title
                 </label>
@@ -2180,12 +2078,12 @@ export default function AdminAnalytics() {
                   required
                   value={editFormData.title}
                   onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
                 />
               </div>
 
               <div>
-                <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
                   Description
                 </label>
@@ -2193,24 +2091,24 @@ export default function AdminAnalytics() {
                   value={editFormData.description}
                   onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
                   rows={2}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white resize-none transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 resize-none font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1">Category</label>
+                  <label className="text-slate-700 font-bold block mb-1">Category</label>
                   <select
                     value={editFormData.category}
                     onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 cursor-pointer font-medium"
                   >
                     <option value="Technical">Technical</option>
                     <option value="Non-Technical">Non-Technical</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                  <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                     <Hash className="w-3.5 h-3.5 text-amber-600" />
                     Max Capacity / Seats
                   </label>
@@ -2218,13 +2116,13 @@ export default function AdminAnalytics() {
                     type="number"
                     value={editFormData.max_capacity}
                     onChange={(e) => setEditFormData({ ...editFormData, max_capacity: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-amber-600" />
                   Assigned Hall / Venue
                 </label>
@@ -2233,13 +2131,13 @@ export default function AdminAnalytics() {
                   required
                   value={editFormData.hall_number}
                   onChange={(e) => setEditFormData({ ...editFormData, hall_number: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                  <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-emerald-600" />
                     Start Time
                   </label>
@@ -2248,11 +2146,11 @@ export default function AdminAnalytics() {
                     required
                     value={editFormData.start_time}
                     onChange={(e) => setEditFormData({ ...editFormData, start_time: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                  <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-rose-600" />
                     End Time
                   </label>
@@ -2261,14 +2159,14 @@ export default function AdminAnalytics() {
                     required
                     value={editFormData.end_time}
                     onChange={(e) => setEditFormData({ ...editFormData, end_time: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full mt-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors shadow-xs cursor-pointer text-xs"
+                className="w-full mt-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-md shadow-indigo-500/20 cursor-pointer text-xs active:scale-98"
               >
                 Update & Save Changes
               </button>
@@ -2294,7 +2192,7 @@ export default function AdminAnalytics() {
       {/* Master Security Code Passcode Confirmation Modal */}
       {securityModalState.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white w-full max-w-md rounded-3xl border border-slate-200 p-6 md:p-7 shadow-2xl relative text-left overflow-hidden space-y-5 animate-scaleUp">
+          <div className="bg-white w-full max-w-md rounded-3xl border border-slate-200 p-6 md:p-7 shadow-2xl relative text-left overflow-hidden space-y-5 animate-slideUp">
             {/* Header */}
             <div className="flex items-start gap-3.5">
               <div className="w-12 h-12 rounded-2xl bg-rose-100 border border-rose-200 text-rose-700 flex items-center justify-center shrink-0 shadow-2xs">
@@ -2314,7 +2212,7 @@ export default function AdminAnalytics() {
 
             {/* Prompt Description */}
             <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1 text-xs">
-              <p className="font-semibold text-slate-800">
+              <p className="font-bold text-slate-800">
                 {securityModalState.actionType === 'bulk'
                   ? 'Enter Master Security Code to confirm clearing ALL accounts:'
                   : `Enter Master Security Code to delete this user [${securityModalState.targetUserName}]:`}
@@ -2360,7 +2258,7 @@ export default function AdminAnalytics() {
               <div className="flex gap-2.5 pt-1">
                 <button
                   type="submit"
-                  className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="flex-1 py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>
@@ -2389,29 +2287,29 @@ export default function AdminAnalytics() {
 
       {/* Add New Coordinator Modal */}
       {showAddCoordinatorModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white max-w-md w-full rounded-3xl border border-slate-200 p-6 shadow-2xl space-y-4 text-left relative">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white max-w-md w-full rounded-3xl border border-slate-200 p-6 sm:p-7 shadow-2xl space-y-4 text-left relative animate-slideUp">
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
                   <UserCheck className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-slate-900">Add New Coordinator</h3>
-                  <p className="text-[11px] text-slate-500">Create staff coordinator account in Supabase</p>
+                  <p className="text-[11px] text-slate-500 font-medium">Create staff coordinator account in Supabase</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowAddCoordinatorModal(false)}
-                className="p-1.5 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-900 transition cursor-pointer"
+                className="p-1.5 rounded-xl bg-slate-100 text-slate-400 hover:text-slate-700 transition cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                ✕
               </button>
             </div>
 
             <form onSubmit={handleCreateCoordinator} className="space-y-3.5">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                <label className="text-xs font-bold text-slate-700 block mb-1">
                   Full Name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -2420,12 +2318,12 @@ export default function AdminAnalytics() {
                   placeholder="e.g. Dr. Ramesh Kumar"
                   value={coordForm.fullName}
                   onChange={(e) => setCoordForm({ ...coordForm, fullName: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-indigo-600 focus:bg-white font-medium"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                <label className="text-xs font-bold text-slate-700 block mb-1">
                   Email Address <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -2434,13 +2332,13 @@ export default function AdminAnalytics() {
                   placeholder="coordinator@college.edu"
                   value={coordForm.email}
                   onChange={(e) => setCoordForm({ ...coordForm, email: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-indigo-600 focus:bg-white font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
                     Password / PIN <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -2449,12 +2347,12 @@ export default function AdminAnalytics() {
                     placeholder="Min 6 chars"
                     value={coordForm.password}
                     onChange={(e) => setCoordForm({ ...coordForm, password: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-indigo-600 focus:bg-white font-mono"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
                     Phone Number
                   </label>
                   <input
@@ -2462,13 +2360,13 @@ export default function AdminAnalytics() {
                     placeholder="9876543210"
                     value={coordForm.phone}
                     onChange={(e) => setCoordForm({ ...coordForm, phone: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white font-mono"
+                    className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-indigo-600 focus:bg-white font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                <label className="text-xs font-bold text-slate-700 block mb-1">
                   Department / Institution
                 </label>
                 <input
@@ -2476,15 +2374,15 @@ export default function AdminAnalytics() {
                   placeholder="e.g. Department of Computer Science"
                   value={coordForm.department}
                   onChange={(e) => setCoordForm({ ...coordForm, department: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 text-xs rounded-xl px-3.5 py-2.5 text-slate-900 focus:outline-none focus:border-indigo-600 focus:bg-white font-medium"
                 />
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="submit"
                   disabled={creatingCoord}
-                  className="flex-1 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                  className="flex-1 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50 active:scale-98"
                 >
                   <UserCheck className="w-4 h-4" />
                   <span>{creatingCoord ? 'Creating Coordinator...' : 'Create Coordinator'}</span>
@@ -2493,7 +2391,7 @@ export default function AdminAnalytics() {
                 <button
                   type="button"
                   onClick={() => setShowAddCoordinatorModal(false)}
-                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                  className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
                 >
                   Cancel
                 </button>

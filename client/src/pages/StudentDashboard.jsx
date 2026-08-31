@@ -1,19 +1,20 @@
+// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with serif typography, parchment paper styling, paper ID badges, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
+
 import { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { isValidUUID } from '../supabaseClient';
 import StudentQRModal from '../components/StudentQRModal';
 import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
 
 import {
-  Calendar,
   Clock,
   MapPin,
   QrCode,
-  PlusCircle,
   CheckCircle2,
   AlertCircle,
-  Sparkles,
-  Lock,
+  School,
+  BookOpen,
+  FileText,
+  Bookmark,
 } from 'lucide-react';
 
 export default function StudentDashboard() {
@@ -29,7 +30,6 @@ export default function StudentDashboard() {
 
   if (!currentUser) return null;
 
-  // Get event details for student's registered events
   const studentRegIds = registrations
     .filter(
       (r) =>
@@ -76,27 +76,29 @@ export default function StudentDashboard() {
   const getStatusBadge = (status, delayMins) => {
     if (delayMins > 0) {
       return (
-        <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
-          Delayed ({delayMins}m)
+        <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800 inline-flex items-center gap-1">
+          <Clock className="w-3 h-3 text-amber-600" />
+          <span>Delayed ({delayMins}m)</span>
         </span>
       );
     }
     switch (status) {
       case 'In Progress':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            Live Now
+          <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-emerald-50 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping"></span>
+            <span>Live Session</span>
           </span>
         );
       case 'Completed':
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-            Completed
+          <span className="px-2 py-0.5 rounded font-mono text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+            Concluded
           </span>
         );
       default:
         return (
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+          <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-blue-50 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
             Scheduled
           </span>
         );
@@ -104,29 +106,40 @@ export default function StudentDashboard() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-      {/* Header Profile Section */}
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-xs">
-            {(currentUser.name || currentUser.full_name || 'S').charAt(0)}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* 1. Academic Credential Header */}
+      <div className="academic-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 border border-[#E7E3D8] dark:border-[#2A2E38] relative overflow-hidden">
+        <div className="flex items-start sm:items-center gap-4 sm:gap-5">
+          <div className="w-14 h-14 rounded-lg bg-[#8B1E24] text-white flex items-center justify-center font-serif font-bold text-2xl shadow-xs shrink-0">
+            {(currentUser.name || currentUser.full_name || 'A').charAt(0)}
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">{currentUser.name || currentUser.full_name}</h1>
-              <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono font-bold">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight">
+                {currentUser.name || currentUser.full_name}
+              </h1>
+              <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-[#8B1E24]/10 text-[#8B1E24] dark:bg-[#8B1E24]/20 dark:text-red-300 border border-[#8B1E24]/20">
                 {currentUser.college_id}
               </span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                Verified Active
+              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-semibold flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                Verified Delegate
               </span>
             </div>
-            <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-1">
+            <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-2 flex-wrap font-medium">
               <span>{currentUser.email}</span>
+              {currentUser.college && (
+                <>
+                  <span>•</span>
+                  <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1 font-serif">
+                    <School className="w-3.5 h-3.5 text-slate-400" />
+                    {currentUser.college}
+                  </span>
+                </>
+              )}
               <span>•</span>
-              <span className="text-emerald-700 font-semibold">
-                {registeredEvents.length} Registered Events
+              <span className="text-[#8B1E24] dark:text-red-300 font-mono font-bold bg-[#8B1E24]/10 px-2 py-0.5 rounded">
+                {registeredEvents.length} Enrolled Tracks
               </span>
             </p>
           </div>
@@ -135,205 +148,226 @@ export default function StudentDashboard() {
         {registeredEvents.length > 0 && (
           <button
             onClick={() => handleOpenQRPass(registeredEvents[0])}
-            className="w-full md:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            className="w-full md:w-auto px-5 py-3 bg-[#8B1E24] hover:bg-[#73181d] text-white font-semibold text-xs rounded-lg shadow-xs flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
           >
             <QrCode className="w-4 h-4" />
-            My Dynamic QR Entry Pass
+            <span>Generate Programme Entry Pass</span>
           </button>
         )}
       </div>
 
-      {/* Registration Feedback Notification */}
+      {/* Feedback Toast */}
       {feedback && (
         <div
-          className={`p-4 rounded-xl flex items-center gap-3 text-xs font-semibold shadow-xs ${
+          className={`p-4 rounded-lg flex items-center gap-3 text-xs font-medium border shadow-xs animate-fadeIn ${
             feedback.success
-              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-              : 'bg-rose-50 text-rose-800 border border-rose-200'
+              ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800'
+              : 'bg-rose-50 text-rose-900 dark:bg-rose-950 dark:text-rose-200 border-rose-200 dark:border-rose-800'
           }`}
         >
           {feedback.success ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           ) : (
-            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
           )}
           <span>{feedback.message}</span>
         </div>
       )}
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Dynamic Agenda Timeline */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-indigo-600" />
-              Personal Dynamic Timeline Agenda
+      {/* 2. Distinctive Signature Moment: Symposium Programme & Paper Matrix */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Column: Registered Session Matrix (7 cols) */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="flex items-center justify-between border-b border-[#E7E3D8] dark:border-[#2A2E38] pb-3">
+            <h2 className="text-xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-[#8B1E24] dark:text-red-400" />
+              <span>Official Delegate Schedule</span>
             </h2>
-            <span className="text-xs text-slate-500 font-mono">Sorted by Start Time</span>
+            <span className="text-xs font-mono text-slate-500 dark:text-slate-400 font-semibold">
+              {registeredEvents.length} Registered Sessions
+            </span>
           </div>
 
           {registeredEvents.length === 0 ? (
-            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
-                <Calendar className="w-6 h-6" />
+            <div className="academic-card p-10 text-center space-y-3">
+              <div className="w-12 h-12 rounded-lg bg-[#8B1E24]/10 text-[#8B1E24] dark:text-red-400 flex items-center justify-center mx-auto">
+                <FileText className="w-6 h-6" />
               </div>
-              <h3 className="text-sm font-bold text-slate-800">No events registered yet</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                Explore available symposium tracks on the right to register for events without time
-                conflicts.
+              <p className="font-serif font-bold text-[#1E293B] dark:text-slate-200 text-lg">No sessions added to your programme.</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Explore the open proceedings on the right panel to enroll in keynote lectures and technical tracks.
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {registeredEvents.map((evt) => (
-                <div
-                  key={evt.id}
-                  className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1.5 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider bg-indigo-50 px-2.5 py-0.5 rounded border border-indigo-200">
-                        {evt.category}
-                      </span>
-                      {getStatusBadge(evt.status, evt.delay_minutes)}
-                    </div>
-                    <h3 className="text-base font-bold text-slate-900">{evt.title}</h3>
-                    <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap">
-                      <div className="flex items-center gap-1 text-slate-700">
-                        <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                        <span className="font-semibold">{evt.hall_number}</span>
+            <div className="space-y-4">
+              {registeredEvents.map((event, idx) => {
+                const regCount = registrations.filter((r) => r.event_id === event.id).length;
+                const maxCap = event.max_capacity || 100;
+                const capPct = Math.min(100, Math.round((regCount / maxCap) * 100));
+                const paperCode = `PAPER-${2026}-${String(idx + 1).padStart(2, '0')}`;
+
+                return (
+                  <div
+                    key={event.id}
+                    className="academic-card p-5 space-y-4 hover:border-[#8B1E24]/40 transition-all"
+                  >
+                    {/* Top Row: Paper Code, Category & Status */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            {paperCode}
+                          </span>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#8B1E24]/10 text-[#8B1E24] dark:bg-[#8B1E24]/20 dark:text-red-300 font-mono">
+                            {event.category || 'Technical Session'}
+                          </span>
+                          {getStatusBadge(event.status, event.delay_minutes || 0)}
+                        </div>
+
+                        <h3 className="text-lg font-serif font-bold text-[#1E293B] dark:text-white tracking-tight mt-1">
+                          {event.title}
+                        </h3>
                       </div>
-                      <div className="flex items-center gap-1 text-slate-600">
-                        <Clock className="w-3.5 h-3.5 text-slate-500" />
-                        <span>
-                          {formatTime(evt.start_time)} - {formatTime(evt.end_time)}
+
+                      <button
+                        onClick={() => handleOpenQRPass(event)}
+                        className="px-3 py-1.5 rounded bg-[#8B1E24]/10 hover:bg-[#8B1E24]/20 text-[#8B1E24] dark:text-red-300 border border-[#8B1E24]/20 text-xs font-bold font-mono transition cursor-pointer shrink-0 flex items-center gap-1.5"
+                      >
+                        <QrCode className="w-4 h-4" />
+                        <span>Pass</span>
+                      </button>
+                    </div>
+
+                    {/* Paper Abstract Preview */}
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
+                      {event.description}
+                    </p>
+
+                    {/* Meta Bar: Time, Hall, Occupancy & Actions */}
+                    <div className="pt-3 border-t border-[#E7E3D8] dark:border-[#2A2E38] flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 flex-wrap gap-2">
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <span className="flex items-center gap-1 font-mono text-[11px] font-medium">
+                          <Clock className="w-3.5 h-3.5 text-[#8B1E24] dark:text-red-400" />
+                          {formatTime(event.start_time)} – {formatTime(event.end_time)}
+                        </span>
+                        <span className="flex items-center gap-1 font-mono text-[11px] font-medium">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                          {event.hall_number}
+                        </span>
+                        <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                          {capPct}% Filled ({regCount}/{maxCap})
                         </span>
                       </div>
+
+                      <button
+                        onClick={() => handleUnregister(event.id)}
+                        className="text-[11px] font-mono text-rose-700 dark:text-rose-400 hover:underline font-semibold cursor-pointer"
+                      >
+                        Withdraw Registration
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <button
-                      onClick={() => handleOpenQRPass(evt)}
-                      className="flex-1 sm:flex-none px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-                    >
-                      <QrCode className="w-3.5 h-3.5" />
-                      Show Pass
-                    </button>
-                    <button
-                      onClick={() => handleUnregister(evt.id)}
-                      className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer"
-                      title="Unregister from this event"
-                    >
-                      Unregister
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Right Col: Symposium Event Directory */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-600" />
-              Symposium Tracks
+        {/* Right Column: Open Proceedings & Enrolment (5 cols) */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-[#E7E3D8] dark:border-[#2A2E38] pb-3">
+            <h2 className="text-xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight flex items-center gap-2">
+              <Bookmark className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
+              <span>Open Proceedings</span>
             </h2>
-            <span className="text-[11px] text-slate-500 font-medium">Clash Engine Active</span>
+            <span className="text-xs font-mono text-slate-500 dark:text-slate-400 font-semibold">
+              {availableEvents.length} Available
+            </span>
           </div>
 
-          <div className="space-y-3">
-            {availableEvents.length === 0 ? (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-xs text-slate-500 shadow-xs">
-                You are registered for all available symposium events!
-              </div>
-            ) : (
-              availableEvents.map((evt) => {
-                const regCount = registrations.filter((r) => r.event_id === evt.id).length;
-                const capacity = evt.max_capacity || evt.max_seats || 100;
-                const isFull = regCount >= capacity;
+          {availableEvents.length === 0 ? (
+            <div className="academic-card p-8 text-center space-y-2">
+              <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto" />
+              <p className="font-serif font-bold text-[#1E293B] dark:text-slate-200 text-sm">Registered for all symposium sessions.</p>
+            </div>
+          ) : (
+            <div className="space-y-3.5">
+              {availableEvents.map((event) => {
+                const regCount = registrations.filter((r) => r.event_id === event.id).length;
+                const maxCap = event.max_capacity || 100;
+                const isFull = regCount >= maxCap;
 
                 return (
                   <div
-                    key={evt.id}
-                    className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all space-y-2.5"
+                    key={event.id}
+                    className="academic-card p-4 space-y-3 hover:border-slate-400 transition-all"
                   >
-                    <div className="flex justify-between items-start">
-                      <span className="text-[10px] font-bold text-indigo-700 uppercase bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                        {evt.category}
-                      </span>
-                      {isFull ? (
-                        <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 font-mono flex items-center gap-1">
-                          <Lock className="w-3 h-3 text-rose-600" />
-                          {regCount}/{capacity} Seats Filled
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                          {event.category || 'Technical Session'}
                         </span>
-                      ) : (
-                        <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-mono">
-                          {regCount} / {capacity} Seats
-                        </span>
-                      )}
-                    </div>
-
-                    <h4 className="text-sm font-bold text-slate-900">{evt.title}</h4>
-
-                    <div className="text-xs text-slate-500 space-y-1">
-                      <div className="flex items-center gap-1 text-slate-700">
-                        <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                        <span>{evt.hall_number}</span>
+                        <h4 className="text-sm font-serif font-bold text-[#1E293B] dark:text-white">
+                          {event.title}
+                        </h4>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>
-                          {formatTime(evt.start_time)} - {formatTime(evt.end_time)}
-                        </span>
-                      </div>
-                    </div>
 
-                    {isFull ? (
                       <button
+                        onClick={() => handleRegister(event.id)}
                         disabled={isFull}
-                        className="w-full mt-2 py-2 bg-slate-200 text-slate-500 font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 cursor-not-allowed border border-slate-300"
+                        className={`px-3 py-1.5 rounded font-bold text-xs transition cursor-pointer shrink-0 font-mono shadow-xs ${
+                          isFull
+                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
+                            : 'bg-[#8B1E24] hover:bg-[#73181d] text-white'
+                        }`}
                       >
-                        <Lock className="w-3.5 h-3.5" />
-                        Event Full
+                        {isFull ? 'Concluded' : 'Enroll Session'}
                       </button>
-                    ) : (
-                      <button
-                        onClick={() => handleRegister(evt.id)}
-                        disabled={!evt || !evt.id}
-                        className="w-full mt-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <PlusCircle className="w-3.5 h-3.5" />
-                        Register Track
-                      </button>
-                    )}
+                    </div>
+
+                    <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
+                      {event.description}
+                    </p>
+
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-2 border-t border-[#E7E3D8] dark:border-[#2A2E38]">
+                      <span>{event.hall_number}</span>
+                      <span>{formatTime(event.start_time)}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">
+                        {regCount}/{maxCap} Seats
+                      </span>
+                    </div>
                   </div>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Registration Success Interactive Modal */}
-      <RegistrationSuccessModal
-        isOpen={Boolean(successModalData)}
-        onClose={() => setSuccessModalData(null)}
-        event={successModalData?.event}
-        student={currentUser}
-        emailResult={successModalData?.emailResult}
-        onOpenQRPass={handleOpenQRPass}
-      />
+      {/* Entry Pass Dialog */}
+      {selectedPassEvent && (
+        <StudentQRModal
+          isOpen={isQRModalOpen}
+          onClose={() => {
+            setIsQRModalOpen(false);
+            setSelectedPassEvent(null);
+          }}
+          event={selectedPassEvent}
+          student={currentUser}
+        />
+      )}
 
-      {/* QR Pass Modal */}
-      <StudentQRModal
-        isOpen={isQRModalOpen}
-        onClose={() => setIsQRModalOpen(false)}
-        event={selectedPassEvent}
-      />
+      {/* Registration Success Dialog */}
+      {successModalData && (
+        <RegistrationSuccessModal
+          isOpen={Boolean(successModalData)}
+          onClose={() => setSuccessModalData(null)}
+          event={successModalData.event}
+          emailResult={successModalData.emailResult}
+          passToken={successModalData.passToken}
+          student={currentUser}
+        />
+      )}
     </div>
   );
 }

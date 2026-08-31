@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Coordinator touch console with relational profile fetching, real student names, roll numbers, accurate stats, safe initial states and loading guards", deps: ["src/context/AppContext.jsx", "src/components/QRScannerModal.jsx", "src/components/PassCodeGuardModal.jsx", "src/components/StudentQRModal.jsx", "src/supabaseClient.ts", "lucide-react"], state: "active", last: "antigravity@2026-08-28" }
+// agent-notes: { ctx: "Coordinator touch console with relational profile fetching, real student names, roll numbers, accurate stats, safe initial states and loading guards", deps: ["src/context/AppContext.jsx", "src/components/QRScannerModal.jsx", "src/components/PassCodeGuardModal.jsx", "src/components/StudentQRModal.jsx", "src/components/ViewRegisteredStudentsModal.jsx", "src/components/EmergencyBroadcastModal.jsx", "src/supabaseClient.ts", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
 
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
@@ -9,40 +9,37 @@ import StudentQRModal from '../components/StudentQRModal';
 import ViewRegisteredStudentsModal from '../components/ViewRegisteredStudentsModal';
 import EmergencyBroadcastModal from '../components/EmergencyBroadcastModal';
 import {
-  Play,
-  Clock,
-  CheckSquare,
   Camera,
-  Users,
-  Bell,
   MapPin,
-  UserCheck,
   CheckCircle2,
-  Activity,
-  Radio,
   QrCode,
   PlusCircle,
   Pencil,
   Trash2,
   FileText,
   Hash,
-  Globe,
-  StopCircle,
   RefreshCw,
   Calendar,
-  Loader2,
+  Clock,
+  UserCheck,
+  TrendingUp,
+  Radio,
 } from 'lucide-react';
 
 export default function CoordinatorConsole() {
   const {
-    events, fetchEvents, registrations, attendanceLogs, updateHallStatus,
-    addEvent, updateEvent, deleteEvent, profilesList,
-    liveAlerts, clearGlobalEmergencyBroadcast
+    events,
+    fetchEvents,
+    registrations,
+    updateHallStatus,
+    addEvent,
+    updateEvent,
+    deleteEvent,
+    profilesList,
   } = useApp();
   const [selectedHall, setSelectedHall] = useState('Hall 1 (Main Auditorium)');
   const [selectedEventId, setSelectedEventId] = useState('');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [nudgeStatus, setNudgeStatus] = useState(null);
 
   // 1. Safe Initial States
   const [stats, setStats] = useState({
@@ -54,7 +51,6 @@ export default function CoordinatorConsole() {
   const [recentScans, setRecentScans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentEvent, setCurrentEvent] = useState(null);
-  const [eventRegistrations, setEventRegistrations] = useState([]);
   const [isFetchingAttendance, setIsFetchingAttendance] = useState(false);
 
   useEffect(() => {
@@ -83,8 +79,8 @@ export default function CoordinatorConsole() {
   const [showRosterModal, setShowRosterModal] = useState(false);
   const [selectedRosterEvent, setSelectedRosterEvent] = useState(null);
 
-  // Passcode verification state for coordinator/admin viewing a student pass
-  const [targetStudentForPass, setTargetStudentForPass] = useState(null);
+  // Passcode verification state for coordinator / admin viewing a student pass
+  const [targetStudentForPass] = useState(null);
   const [isGuardOpen, setIsGuardOpen] = useState(false);
   const [isPassModalOpen, setIsPassModalOpen] = useState(false);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
@@ -157,7 +153,6 @@ export default function CoordinatorConsole() {
 
           if (error) {
             console.error("Error fetching stats:", error);
-            // Fallback relationship query syntax if PostgREST requires named FK
             const { data: fallbackData, error: fbError } = await supabase
               .from('registrations')
               .select(`
@@ -221,7 +216,6 @@ export default function CoordinatorConsole() {
         ?.filter((r) => r && r.attended === true)
         ?.sort((a, b) => new Date(b?.checked_in_at || 0) - new Date(a?.checked_in_at || 0)) || [];
       setRecentScans(attendedList);
-      setEventRegistrations(allRegistrations);
     } catch (err) {
       console.error("Error in fetchEventStats:", err);
     } finally {
@@ -249,18 +243,6 @@ export default function CoordinatorConsole() {
             fetchEventStats(currentEvent.id);
           }
         )
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'attendance_logs',
-            filter: `event_id=eq.${currentEvent.id}`,
-          },
-          () => {
-            fetchEventStats(currentEvent.id);
-          }
-        )
         .subscribe();
 
       return () => {
@@ -269,46 +251,32 @@ export default function CoordinatorConsole() {
     }
   }, [currentEvent?.id, fetchEventStats]);
 
-  // Synchronize when global registrations state changes
-  useEffect(() => {
-    if (currentEvent?.id) {
-      fetchEventStats(currentEvent.id);
-    }
-  }, [registrations, currentEvent?.id, fetchEventStats]);
-
   const handleStartEvent = () => {
     if (currentEvent?.id) updateHallStatus(currentEvent.id, 'In Progress', 0);
   };
 
   const handleAddSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.title || !formData.start_time || !formData.end_time) return;
-    const result = await addEvent({
+    if (!formData.title.trim()) return;
+
+    await addEvent({
       ...formData,
-      start_time: new Date(formData.start_time).toISOString(),
-      end_time: new Date(formData.end_time).toISOString(),
-      hall_number: formData.hall_number || selectedHall,
-      max_capacity: Number(formData.max_capacity) || 100,
-      max_seats: Number(formData.max_capacity) || 100,
+      max_seats: formData.max_capacity,
     });
-    if (result && result.success) {
-      setShowAddModal(false);
-      setFormData({
-        title: '',
-        description: '',
-        category: 'Technical',
-        hall_number: selectedHall,
-        start_time: '',
-        end_time: '',
-        max_capacity: 100,
-      });
-    } else {
-      console.error(`Event creation failed: ${result?.error?.message || 'Database insert error'}`);
-    }
+
+    setShowAddModal(false);
+    setFormData({
+      title: '',
+      description: '',
+      category: 'Technical',
+      hall_number: selectedHall,
+      start_time: '',
+      end_time: '',
+      max_capacity: 100,
+    });
   };
 
   const handleEditClick = (evt) => {
-    if (!evt) return;
     setEditingEvent(evt);
     setEditFormData({
       title: evt.title || '',
@@ -325,6 +293,7 @@ export default function CoordinatorConsole() {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editingEvent?.id) return;
+
     await updateEvent(editingEvent.id, {
       ...editFormData,
       max_seats: editFormData.max_capacity,
@@ -351,200 +320,225 @@ export default function CoordinatorConsole() {
     if (currentEvent?.id) updateHallStatus(currentEvent.id, 'Completed', 0);
   };
 
-  const handleNudgeMissing = (studentId) => {
-    if (!studentId) return;
-    setNudgeStatus(`Sent Real-Time Routing Alert Nudge to Student ${studentId.slice(0, 8)}!`);
-    setTimeout(() => setNudgeStatus(null), 3500);
-  };
-
-  const handleRequestStudentPass = (studentId) => {
-    setTargetStudentForPass(studentId);
-    setIsGuardOpen(true);
-  };
-
   const handlePasscodeVerified = () => {
     setIsPassModalOpen(true);
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
-      {/* 1. Sleek Venue & Event Control Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* 1. Venue & Event Control Top Header */}
+      {/* 1. Academic Lecture Hall Header */}
+      <div className="academic-card p-6 sm:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-5 transition-colors">
         <div>
-          <h1 className="text-lg font-bold text-slate-900 tracking-tight">
-            Coordinator Console
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Real-time venue attendance verification & scanner terminal
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight">
+              Lecture Hall Signage & Terminal
+            </h1>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#8B1E24]/10 text-[#8B1E24] dark:bg-[#8B1E24]/20 dark:text-red-300 border border-[#8B1E24]/20 uppercase">
+              Operations
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">
+            Real-time venue attendance governance, student pass verification & scanner terminal
           </p>
         </div>
 
-        <div className="w-full sm:w-auto flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+        <div className="w-full md:w-auto flex items-center gap-3 flex-wrap sm:flex-nowrap">
           {/* Hall Selector */}
           <div className="flex items-center gap-2 flex-1 sm:flex-none">
-            <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-            <select
-              value={selectedHall}
-              onChange={(e) => {
-                const newHall = e.target.value;
-                setSelectedHall(newHall);
-                const matchingEvent = (events || []).find((ev) => ev?.hall_number === newHall);
-                if (matchingEvent?.id) setSelectedEventId(matchingEvent.id);
-              }}
-              className="w-full sm:w-52 bg-slate-50 border border-slate-200/90 text-slate-900 font-semibold text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
-            >
-              {safeHalls.map((hall) => (
-                <option key={hall} value={hall}>
-                  {hall}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Event Selector (if multiple events in hall or venue) */}
-          {(events || []).length > 1 && (
-            <div className="flex items-center gap-2 flex-1 sm:flex-none">
-              <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+            <div className="flex items-center gap-2 bg-[#F5F1E8] dark:bg-[#1A1D24] border border-[#E7E3D8] dark:border-[#2A2E38] px-3.5 py-2 rounded-lg text-xs font-mono font-bold text-[#1E293B] dark:text-slate-200">
+              <MapPin className="w-3.5 h-3.5 text-[#8B1E24] shrink-0" />
               <select
-                value={currentEvent?.id || ''}
+                value={selectedHall}
                 onChange={(e) => {
-                  const evId = e.target.value;
-                  setSelectedEventId(evId);
-                  const evObj = (events || []).find((ev) => ev?.id === evId);
-                  if (evObj?.hall_number) setSelectedHall(evObj.hall_number);
+                  const newHall = e.target.value;
+                  setSelectedHall(newHall);
+                  const matchingEvent = (events || []).find((ev) => ev?.hall_number === newHall);
+                  if (matchingEvent?.id) setSelectedEventId(matchingEvent.id);
                 }}
-                className="w-full sm:w-52 bg-slate-50 border border-slate-200/90 text-slate-900 font-semibold text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 cursor-pointer shadow-2xs"
+                className="bg-transparent focus:outline-none cursor-pointer"
               >
-                {(events || []).map((ev) => (
-                  <option key={ev.id} value={ev.id}>
-                    {ev.title} ({ev.hall_number})
+                {safeHalls.map((hall) => (
+                  <option key={hall} value={hall}>
+                    {hall}
                   </option>
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Event Selector */}
+          {(events || []).length > 1 && (
+            <div className="flex items-center gap-2 flex-1 sm:flex-none">
+              <div className="flex items-center gap-2 bg-[#F5F1E8] dark:bg-[#1A1D24] border border-[#E7E3D8] dark:border-[#2A2E38] px-3.5 py-2 rounded-lg text-xs font-mono font-bold text-[#1E293B] dark:text-slate-200">
+                <Calendar className="w-3.5 h-3.5 text-[#8B1E24] shrink-0" />
+                <select
+                  value={currentEvent?.id || ''}
+                  onChange={(e) => {
+                    const evId = e.target.value;
+                    setSelectedEventId(evId);
+                    const evObj = (events || []).find((ev) => ev?.id === evId);
+                    if (evObj?.hall_number) setSelectedHall(evObj.hall_number);
+                  }}
+                  className="bg-transparent focus:outline-none cursor-pointer max-w-[160px] truncate"
+                >
+                  {(events || []).map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           )}
 
-          {/* Manual Refresh Button */}
+          {/* Refresh Button */}
           <button
             onClick={() => currentEvent?.id && fetchEventStats(currentEvent.id)}
             title="Refresh Attendance Stats"
             disabled={isFetchingAttendance || !currentEvent?.id}
-            className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 rounded-xl transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+            className="p-2.5 bg-[#F5F1E8] dark:bg-[#1A1D24] hover:bg-[#EAE5D7] dark:hover:bg-[#252832] text-slate-700 dark:text-slate-300 border border-[#E7E3D8] dark:border-[#2A2E38] rounded-lg transition cursor-pointer shrink-0 disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${isFetchingAttendance ? 'animate-spin text-indigo-600' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isFetchingAttendance ? 'animate-spin text-[#8B1E24]' : ''}`} />
+          </button>
+
+          {/* Emergency Alert Trigger */}
+          <button
+            onClick={() => setShowEmergencyModal(true)}
+            className="px-3.5 py-2.5 bg-rose-50 dark:bg-rose-950/80 hover:bg-rose-100 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-bold text-xs rounded-lg transition cursor-pointer shrink-0 flex items-center gap-1.5"
+          >
+            <Radio className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+            <span className="hidden sm:inline">Emergency Alert</span>
           </button>
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+            className="px-4 py-2.5 bg-[#8B1E24] hover:bg-[#73181d] text-white font-bold text-xs rounded-lg shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Create Event</span>
+            <span>Create Session</span>
           </button>
         </div>
       </div>
 
-      {/* 2. Top Stats: 3 Minimalist Pastel Stat Boxes with Safe Optional Chaining */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Stat 1: Total Scanned */}
-        <div className="bg-emerald-50/70 border border-emerald-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
-          <div className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Total Scanned</span>
+      {/* 2. Top Stats: 4 Academic KPI Ledgers */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Stat 1: Total Registered */}
+        <div className="academic-card p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
+            <span>Total Enrolled</span>
+            <div className="w-8 h-8 rounded-lg bg-[#8B1E24]/10 text-[#8B1E24] dark:text-red-400 flex items-center justify-center">
+              <UserCheck className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-extrabold text-emerald-950 font-mono tracking-tight">
+          <div className="text-3xl font-serif font-bold text-[#1E293B] dark:text-white tracking-tight">
+            {stats?.totalRegistered ?? 0}
+          </div>
+          <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">Delegates registered for hall</p>
+        </div>
+
+        {/* Stat 2: Total Scanned / Checked-In */}
+        <div className="academic-card p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
+            <span>Verified Present</span>
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-serif font-bold text-emerald-700 dark:text-emerald-400 tracking-tight">
             {stats?.totalScanned ?? 0}
           </div>
-          <p className="text-[11px] text-emerald-700/80 font-medium">
-            Verified check-ins in {currentEvent?.title ? `"${currentEvent.title}"` : selectedHall}
-          </p>
+          <p className="text-[11px] font-mono text-emerald-800 dark:text-emerald-300">Verified attendance badges</p>
         </div>
 
-        {/* Stat 2: Pending Check-In */}
-        <div className="bg-amber-50/70 border border-amber-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
-          <div className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
-            <Clock className="w-4 h-4 text-amber-600" />
+        {/* Stat 3: Pending Check-In */}
+        <div className="academic-card p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
             <span>Pending Check-In</span>
+            <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400 flex items-center justify-center">
+              <Clock className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-extrabold text-amber-950 font-mono tracking-tight">
+          <div className="text-3xl font-serif font-bold text-amber-700 dark:text-amber-400 tracking-tight">
             {stats?.pendingCheckIn ?? 0}
           </div>
-          <p className="text-[11px] text-amber-700/80 font-medium">
-            {stats?.pendingCheckIn ?? 0} students awaiting venue check-in
-          </p>
+          <p className="text-[11px] font-mono text-amber-800 dark:text-amber-300">Awaiting entrance verification</p>
         </div>
 
-        {/* Stat 3: Success Rate */}
-        <div className="bg-indigo-50/70 border border-indigo-100/90 p-5 rounded-2xl shadow-2xs space-y-1">
-          <div className="text-xs font-semibold text-indigo-800 flex items-center gap-1.5">
-            <Activity className="w-4 h-4 text-indigo-600" />
-            <span>Success Rate</span>
+        {/* Stat 4: Attendance Rate */}
+        <div className="academic-card p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
+            <span>Hall Turnout Rate</span>
+            <div className="w-8 h-8 rounded-lg bg-[#8B1E24]/10 text-[#8B1E24] dark:text-red-400 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
+            </div>
           </div>
-          <div className="text-3xl font-extrabold text-indigo-950 font-mono tracking-tight">
+          <div className="text-3xl font-serif font-bold text-[#8B1E24] dark:text-red-400 tracking-tight">
             {stats?.successRate ?? 0}%
           </div>
-          <p className="text-[11px] text-indigo-700/80 font-medium">
-            {stats?.totalScanned ?? 0} of {stats?.totalRegistered ?? 0} students present
-          </p>
+          <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">Live lecture turnout</p>
         </div>
       </div>
 
-      {/* 3. Main Body Grid: Loading / Empty State or Scanner Card & Live Recent Scans */}
+      {/* 3. Main Dashboard Panels */}
       {loading ? (
-        <div className="bg-white p-12 rounded-2xl border border-slate-200/80 shadow-xs text-center space-y-3">
-          <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-xs font-medium text-slate-500">Loading coordinator console & venue events...</p>
+        <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-3 shadow-xs">
+          <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-xs text-slate-500 font-medium">Loading venue sessions...</p>
         </div>
       ) : !currentEvent ? (
-        <div className="bg-white p-12 rounded-2xl border border-slate-200/80 shadow-xs text-center text-slate-500 text-xs space-y-2">
-          <p className="font-semibold text-slate-700">No active symposium event assigned to <strong className="text-slate-900">{selectedHall}</strong>.</p>
-          <p className="text-[11px] text-slate-400">Please create an event or select another venue hall above.</p>
+        <div className="bg-white p-12 rounded-3xl border border-slate-200 text-center space-y-3 shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+            <Calendar className="w-7 h-7" />
+          </div>
+          <p className="font-bold text-slate-800">No active symposium event assigned to {selectedHall}.</p>
+          <p className="text-xs text-slate-500">Please create an event or select another venue hall above.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Centered Distraction-Free Scanner Card (7 Cols) */}
-          <div className="lg:col-span-7 space-y-5">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+          <div className="lg:col-span-7 space-y-6">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-6">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                     <Camera className="w-4 h-4 text-indigo-600" />
-                    Scan Student Pass
+                    <span>Scan Student Pass</span>
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Position student QR badge in front of lens
+                    Position student QR pass in front of the lens
                   </p>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono truncate max-w-[180px]">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold px-3 py-1 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 truncate max-w-[180px]">
                     {currentEvent?.title || 'Event'}
                   </span>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-mono">
+                  <span className="text-xs font-bold px-3 py-1 rounded-xl bg-slate-100 text-slate-700">
                     {currentEvent?.hall_number || selectedHall}
                   </span>
                 </div>
               </div>
 
               {/* Centered Clean Viewfinder Box */}
-              <div className="flex flex-col items-center justify-center p-8 bg-slate-50/80 rounded-2xl border border-dashed border-slate-200 text-center space-y-4">
-                <div className="w-24 h-24 rounded-2xl bg-white border border-slate-200/90 shadow-xs flex items-center justify-center text-indigo-600 relative group">
+              <div className="flex flex-col items-center justify-center p-8 sm:p-10 bg-slate-50/80 rounded-3xl border border-dashed border-slate-200 text-center space-y-4">
+                <div className="w-24 h-24 rounded-3xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-indigo-600 relative group">
                   <QrCode className="w-12 h-12 stroke-[1.5]" />
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white"></span>
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white animate-pulse"></span>
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-xs font-bold text-slate-900">
+                  <div className="text-sm font-bold text-slate-900">
                     Ready for Camera Verification
                   </div>
-                  <p className="text-[11px] text-slate-500 max-w-xs">
-                    One-touch fast camera verification with instant audio and visual haptic response
+                  <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                    One-touch fast camera verification with instant audio, haptic, and database synchronization
                   </p>
                 </div>
 
                 <button
                   onClick={() => setIsScannerOpen(true)}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
                 >
                   <Camera className="w-4 h-4" />
                   <span>Launch QR Scanner</span>
@@ -552,41 +546,48 @@ export default function CoordinatorConsole() {
               </div>
 
               {/* Event Quick Actions Bar */}
-              <div className="pt-1 flex items-center justify-between gap-2 flex-wrap text-xs">
+              <div className="pt-2 flex items-center justify-between gap-3 flex-wrap text-xs border-t border-slate-100">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
                       setSelectedRosterEvent(currentEvent);
                       setShowRosterModal(true);
                     }}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all cursor-pointer shadow-2xs"
                   >
                     View Roster ({stats?.totalRegistered ?? 0})
                   </button>
                   <button
                     onClick={() => handleEditClick(currentEvent)}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all cursor-pointer shadow-2xs"
                   >
                     Edit Event
+                  </button>
+                  <button
+                    onClick={() => handleDeleteClick(currentEvent)}
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                    title="Delete Event"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleStartEvent}
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-medium transition-colors cursor-pointer"
+                    className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl font-bold transition-all cursor-pointer shadow-2xs"
                   >
-                    Start
+                    Start Track
                   </button>
                   <button
                     onClick={handleDelayEvent}
-                    className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl font-medium transition-colors cursor-pointer"
+                    className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl font-bold transition-all cursor-pointer shadow-2xs"
                   >
                     +10m Delay
                   </button>
                   <button
                     onClick={handleEndEvent}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer"
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all cursor-pointer shadow-2xs"
                   >
                     End
                   </button>
@@ -596,22 +597,22 @@ export default function CoordinatorConsole() {
           </div>
 
           {/* Recent Scans Relational Feed (5 Cols) */}
-          <div className="lg:col-span-5 space-y-5">
-            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+                <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  Recent Scans
+                  <span>Recent Scans</span>
                 </h3>
-                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full font-mono">
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full font-mono">
                   {(recentScans || []).length} Scanned
                 </span>
               </div>
 
               {/* Clean Lightweight Scans List with Real Student Names, Roll No, & Scanned Time */}
-              <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                 {(recentScans || []).length === 0 ? (
-                  <div className="text-center py-10 text-xs text-slate-400">
+                  <div className="text-center py-12 text-xs text-slate-400 font-medium">
                     No scans recorded yet for {currentEvent?.title || 'this event'}.
                   </div>
                 ) : (
@@ -632,7 +633,7 @@ export default function CoordinatorConsole() {
                     return (
                       <div
                         key={scan.id || Math.random()}
-                        className="py-2.5 px-3.5 bg-slate-50/90 hover:bg-slate-100/90 rounded-xl border border-slate-200/80 flex items-center justify-between text-xs transition-colors"
+                        className="py-3 px-4 bg-slate-50/80 hover:bg-slate-100/90 rounded-2xl border border-slate-200/70 flex items-center justify-between text-xs transition-colors shadow-2xs"
                       >
                         <div className="min-w-0 flex-1 pr-3">
                           <div className="font-bold text-slate-900 truncate flex items-center gap-1.5">
@@ -645,7 +646,7 @@ export default function CoordinatorConsole() {
                           </div>
                           <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
                             {rollNo && (
-                              <span className="font-mono text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 text-[10px] font-semibold">
+                              <span className="font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200/70 text-[10px] font-bold">
                                 {rollNo}
                               </span>
                             )}
@@ -656,7 +657,7 @@ export default function CoordinatorConsole() {
                         </div>
 
                         <div className="text-right shrink-0 flex flex-col items-end">
-                          <span className="text-[11px] font-mono font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <span className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             {timeString || 'Checked-In'}
                           </span>
@@ -696,24 +697,24 @@ export default function CoordinatorConsole() {
 
       {/* Create Event Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white w-full max-w-lg rounded-2xl border border-slate-200 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-slate-900">
-            <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <PlusCircle className="w-4 h-4 text-indigo-600" />
-                Create New Symposium Event
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white w-full max-w-lg rounded-3xl border border-slate-200/90 p-7 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto relative text-slate-900 animate-slideUp text-left">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3.5">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                <PlusCircle className="w-5 h-5 text-indigo-600" />
+                Create New Symposium Track
               </h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-slate-900 text-sm cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 text-sm cursor-pointer p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} className="space-y-3.5 text-xs">
+            <form onSubmit={handleAddSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
                   Event Title
                 </label>
@@ -723,38 +724,38 @@ export default function CoordinatorConsole() {
                   placeholder="e.g. AI & Robotics Keynote"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white transition-all font-medium"
                 />
               </div>
 
               <div>
-                <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-indigo-600" />
                   Description
                 </label>
                 <textarea
-                  placeholder="Brief agenda or summary..."
+                  placeholder="Brief agenda or track summary..."
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white resize-none transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 focus:bg-white resize-none transition-all font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1">Category</label>
+                  <label className="text-slate-700 font-bold block mb-1">Category</label>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 cursor-pointer font-medium"
                   >
                     <option value="Technical">Technical</option>
                     <option value="Non-Technical">Non-Technical</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                  <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                     <Hash className="w-3.5 h-3.5 text-amber-600" />
                     Max Capacity / Seats
                   </label>
@@ -762,13 +763,13 @@ export default function CoordinatorConsole() {
                     type="number"
                     value={formData.max_capacity}
                     onChange={(e) => setFormData({ ...formData, max_capacity: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-amber-600" />
                   Assigned Hall / Venue
                 </label>
@@ -783,7 +784,7 @@ export default function CoordinatorConsole() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                  <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-emerald-600" />
                     Start Time
                   </label>
@@ -792,11 +793,11 @@ export default function CoordinatorConsole() {
                     required
                     value={formData.start_time}
                     onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1 flex items-center gap-1">
+                  <label className="text-slate-700 font-bold block mb-1 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-rose-600" />
                     End Time
                   </label>
@@ -805,14 +806,14 @@ export default function CoordinatorConsole() {
                     required
                     value={formData.end_time}
                     onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full mt-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors shadow-xs cursor-pointer text-xs"
+                className="w-full mt-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-md shadow-indigo-500/20 cursor-pointer text-xs active:scale-98"
               >
                 Save & Publish Event
               </button>
@@ -823,10 +824,10 @@ export default function CoordinatorConsole() {
 
       {/* Edit Event Modal */}
       {showEditModal && editingEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white w-full max-w-lg rounded-2xl border border-slate-200 p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-slate-900">
-            <div className="flex justify-between items-center border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white w-full max-w-lg rounded-3xl border border-slate-200/90 p-7 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto relative text-slate-900 animate-slideUp text-left">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3.5">
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-indigo-600" />
                 Edit Event
               </h3>
@@ -835,94 +836,94 @@ export default function CoordinatorConsole() {
                   setShowEditModal(false);
                   setEditingEvent(null);
                 }}
-                className="text-slate-400 hover:text-slate-900 text-sm cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 text-sm cursor-pointer p-1 rounded-lg hover:bg-slate-100 transition"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit} className="space-y-3.5 text-xs">
+            <form onSubmit={handleEditSubmit} className="space-y-4 text-xs">
               <div>
-                <label className="text-slate-700 font-semibold block mb-1">Event Title</label>
+                <label className="text-slate-700 font-bold block mb-1">Event Title</label>
                 <input
                   type="text"
                   required
                   value={editFormData.title}
                   onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
                 />
               </div>
 
               <div>
-                <label className="text-slate-700 font-semibold block mb-1">Description</label>
+                <label className="text-slate-700 font-bold block mb-1">Description</label>
                 <textarea
                   value={editFormData.description}
                   onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
                   rows={2}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 resize-none"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 resize-none font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1">Category</label>
+                  <label className="text-slate-700 font-bold block mb-1">Category</label>
                   <select
                     value={editFormData.category}
                     onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 cursor-pointer font-medium"
                   >
                     <option value="Technical">Technical</option>
                     <option value="Non-Technical">Non-Technical</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1">Max Capacity / Seats</label>
+                  <label className="text-slate-700 font-bold block mb-1">Max Capacity / Seats</label>
                   <input
                     type="number"
                     value={editFormData.max_capacity}
                     onChange={(e) => setEditFormData({ ...editFormData, max_capacity: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-slate-700 font-semibold block mb-1">Assigned Hall / Venue</label>
+                <label className="text-slate-700 font-bold block mb-1">Assigned Hall / Venue</label>
                 <input
                   type="text"
                   required
                   value={editFormData.hall_number}
                   onChange={(e) => setEditFormData({ ...editFormData, hall_number: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600"
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1">Start Time</label>
+                  <label className="text-slate-700 font-bold block mb-1">Start Time</label>
                   <input
                     type="datetime-local"
                     required
                     value={editFormData.start_time}
                     onChange={(e) => setEditFormData({ ...editFormData, start_time: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-700 font-semibold block mb-1">End Time</label>
+                  <label className="text-slate-700 font-bold block mb-1">End Time</label>
                   <input
                     type="datetime-local"
                     required
                     value={editFormData.end_time}
                     onChange={(e) => setEditFormData({ ...editFormData, end_time: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-2.5 py-2 focus:outline-none focus:border-indigo-600"
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3 py-2 focus:outline-none focus:border-indigo-600 font-medium"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full mt-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-colors shadow-xs cursor-pointer text-xs"
+                className="w-full mt-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-md shadow-indigo-500/20 cursor-pointer text-xs active:scale-98"
               >
                 Update & Save Changes
               </button>
@@ -939,6 +940,7 @@ export default function CoordinatorConsole() {
         registrations={registrations}
         profilesList={profilesList}
       />
+
       {/* Emergency Broadcast Modal */}
       <EmergencyBroadcastModal
         isOpen={showEmergencyModal}

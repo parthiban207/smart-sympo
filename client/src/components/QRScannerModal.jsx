@@ -1,11 +1,11 @@
-// agent-notes: { ctx: "QR Camera Scanner Modal with audio/haptic feedback, genuine student details, 3s auto-reset timeout, and Scan Next Student button", deps: ["html5-qrcode", "react-qr-code", "src/context/AppContext.jsx", "src/utils/scanFeedback.js", "lucide-react"], state: "active", last: "antigravity@2026-08-26" }
+// agent-notes: { ctx: "QR Camera Scanner Modal with audio/haptic feedback, genuine student details, 3s auto-reset timeout, and Scan Next button", deps: ["html5-qrcode", "react-qr-code", "src/context/AppContext.jsx", "src/utils/scanFeedback.js", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import QRCode from 'react-qr-code';
 import {
-  X, Camera, CheckCircle2, AlertCircle, RefreshCw, ScanLine, User, SwitchCamera,
-  Check, QrCode, Sparkles, Copy, CheckCheck, AlertTriangle, Building, Hash, Calendar, Clock, Mail
+  X, Camera, CheckCircle2, AlertCircle, RefreshCw, User, SwitchCamera,
+  QrCode, Copy, CheckCheck, AlertTriangle, Building, Hash, Calendar, Clock, Mail
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
@@ -24,7 +24,6 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
   const [guestEvent, setGuestEvent] = useState('');
   const [guestModeTab, setGuestModeTab] = useState('scan'); // 'scan' | 'generate'
   const [copied, setCopied] = useState(false);
-  const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [overlayState, setOverlayState] = useState(null); // 'success' | 'warning' | 'error' | null
   const [autoResetCountdown, setAutoResetCountdown] = useState(null);
@@ -117,10 +116,8 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
         },
         () => {}
       );
-      setIsScanning(true);
     } catch (err) {
       console.warn('[QR Scanner Camera Error]:', err);
-      setIsScanning(false);
       setCameraError('Camera access restricted or unavailable. Use manual verify or dev simulator below.');
     }
   }, [isGuestMode, selectedHall, checkinGuest, verifyQRPass, processScanResult]);
@@ -232,39 +229,41 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-      <div className="bg-white w-full max-w-md rounded-2xl border border-slate-200 p-6 shadow-2xl relative text-center max-h-[90vh] overflow-y-auto text-slate-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+      <div className="bg-white w-full max-w-md rounded-3xl border border-slate-200/90 p-7 shadow-2xl relative text-center max-h-[90vh] overflow-y-auto text-slate-900 animate-slideUp">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition cursor-pointer"
+          className="absolute top-4 right-4 p-2 rounded-xl bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
 
-        <div className="flex items-center gap-2 mb-2 justify-center">
-          <Camera className="w-5 h-5 text-indigo-600 animate-pulse" />
-          <h3 className="text-base font-bold text-slate-900">
-            {isGuestMode ? 'Guest Check-in & QR Pass Center' : 'Live Event Attendance Scanner'}
+        <div className="flex items-center gap-2 mb-1 justify-center">
+          <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100">
+            <Camera className="w-4 h-4" />
+          </div>
+          <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+            {isGuestMode ? 'Guest Check-in & Passes' : 'Live Attendance Scanner'}
           </h3>
         </div>
 
-        <p className="text-xs text-slate-500 mb-3">
-          Venue: <span className="font-semibold text-slate-800">{selectedHall || 'All Venues'}</span>
+        <p className="text-xs text-slate-500 mb-4 font-medium">
+          Venue: <span className="font-bold text-slate-800">{selectedHall || 'All Venues'}</span>
         </p>
 
         {/* Guest Mode Mode Selector Toggle */}
         {isGuestMode && (
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full mb-4">
+          <div className="flex bg-slate-100/90 p-1 rounded-xl border border-slate-200/70 w-full mb-4">
             <button
               type="button"
               onClick={() => {
                 setGuestModeTab('scan');
                 handleResetForNextScan();
               }}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 guestModeTab === 'scan'
-                  ? 'bg-white text-indigo-700 shadow-2xs font-bold'
+                  ? 'bg-white text-indigo-700 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -278,9 +277,9 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
                 setGuestModeTab('generate');
                 handleResetForNextScan();
               }}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 guestModeTab === 'generate'
-                  ? 'bg-white text-indigo-700 shadow-2xs font-bold'
+                  ? 'bg-white text-indigo-700 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -290,15 +289,15 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
           </div>
         )}
 
-        {/* Scan Result Feedback Card: Clean Success, Yellow Warning, or Red Error with Auto-Reset */}
+        {/* Scan Result Feedback Card */}
         {scanResult && (
           <div
             className={`p-4 rounded-2xl mb-4 text-left border shadow-md transition-all duration-300 ${
               scanResult.success
-                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 ring-2 ring-emerald-400/30'
+                ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 ring-2 ring-emerald-400/20'
                 : scanResult.isDuplicate || scanResult.status === 'ALREADY_SCANNED'
-                ? 'bg-amber-50/90 border-amber-300 text-amber-950 ring-2 ring-amber-400/30'
-                : 'bg-rose-50/90 border-rose-300 text-rose-950 ring-2 ring-rose-400/30'
+                ? 'bg-amber-50/90 border-amber-300 text-amber-950 ring-2 ring-amber-400/20'
+                : 'bg-rose-50/90 border-rose-300 text-rose-950 ring-2 ring-rose-400/20'
             }`}
           >
             {/* 1. SUCCESS STATE */}
@@ -306,15 +305,15 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-emerald-200">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-1.5 rounded-xl bg-emerald-600 text-white shrink-0 shadow-xs animate-bounce">
+                    <div className="p-1.5 rounded-xl bg-emerald-600 text-white shrink-0 shadow-xs">
                       <CheckCircle2 className="w-5 h-5 text-white" />
                     </div>
                     <div>
                       <h4 className="font-extrabold text-sm text-emerald-900">
-                        ✓ Attendance Verified Successfully
+                        Attendance Verified
                       </h4>
                       <p className="text-[11px] text-emerald-700 font-medium">
-                        Student attendance marked and synchronized in real-time
+                        Student attendance recorded in real-time
                       </p>
                     </div>
                   </div>
@@ -331,7 +330,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
                 <div className="bg-white/90 p-3 rounded-xl border border-emerald-200 space-y-1.5 text-xs text-slate-800 shadow-2xs">
                   <div className="flex justify-between items-center pb-1 border-b border-slate-100">
                     <span className="text-slate-500 font-medium flex items-center gap-1">
-                      <User className="w-3 h-3 text-slate-400" />
+                      <User className="w-3.5 h-3.5 text-slate-400" />
                       Student Name:
                     </span>
                     <span className="font-bold text-slate-900">
@@ -341,7 +340,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
 
                   <div className="flex justify-between items-center pb-1 border-b border-slate-100">
                     <span className="text-slate-500 font-medium flex items-center gap-1">
-                      <Mail className="w-3 h-3 text-slate-400" />
+                      <Mail className="w-3.5 h-3.5 text-slate-400" />
                       Email:
                     </span>
                     <span className="font-medium text-slate-800">
@@ -351,7 +350,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
 
                   <div className="flex justify-between items-center pb-1 border-b border-slate-100">
                     <span className="text-slate-500 font-medium flex items-center gap-1">
-                      <Building className="w-3 h-3 text-slate-400" />
+                      <Building className="w-3.5 h-3.5 text-slate-400" />
                       College:
                     </span>
                     <span className="font-semibold text-slate-800">
@@ -361,7 +360,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
 
                   <div className="flex justify-between items-center pb-1 border-b border-slate-100">
                     <span className="text-slate-500 font-medium flex items-center gap-1">
-                      <Hash className="w-3 h-3 text-slate-400" />
+                      <Hash className="w-3.5 h-3.5 text-slate-400" />
                       Roll Number:
                     </span>
                     <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
@@ -371,7 +370,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
 
                   <div className="flex justify-between items-center pb-1 border-b border-slate-100">
                     <span className="text-slate-500 font-medium flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-slate-400" />
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       Registered Event:
                     </span>
                     <span className="font-bold text-slate-900 truncate max-w-[180px]">
@@ -381,7 +380,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
 
                   <div className="flex justify-between items-center">
                     <span className="text-slate-500 font-medium flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-slate-400" />
+                      <Clock className="w-3.5 h-3.5 text-slate-400" />
                       Checked-In At:
                     </span>
                     <span className="font-mono text-[11px] text-emerald-800 font-semibold">
@@ -415,38 +414,13 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
                   </div>
                   <div className="flex-1">
                     <h4 className="font-extrabold text-xs text-amber-900">
-                      {scanResult.message || '⚠️ Already Checked-In'}
+                      {scanResult.message || 'Already Checked-In'}
                     </h4>
                     <p className="text-[11px] text-amber-800 mt-0.5">
-                      This QR code was already scanned earlier for this event session.
+                      This QR code was already scanned earlier for this session.
                     </p>
                   </div>
                 </div>
-
-                {scanResult.studentName && (
-                  <div className="bg-white/90 p-2.5 rounded-xl border border-amber-200 space-y-1 text-xs text-slate-800">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Attendee:</span>
-                      <span className="font-bold">{scanResult.studentName}</span>
-                    </div>
-                    {scanResult.email && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Email:</span>
-                        <span className="font-medium">{scanResult.email}</span>
-                      </div>
-                    )}
-                    {scanResult.rollNumber && (
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Roll No:</span>
-                        <span className="font-mono font-bold text-indigo-700">{scanResult.rollNumber}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Event:</span>
-                      <span className="font-semibold text-slate-900">{scanResult.eventTitle || 'Session'}</span>
-                    </div>
-                  </div>
-                )}
 
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-[11px] text-amber-800 font-medium">
@@ -472,10 +446,10 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
                   </div>
                   <div>
                     <h4 className="font-extrabold text-sm text-rose-900">
-                      ❌ Invalid QR Code! No registration found.
+                      Invalid QR Code
                     </h4>
                     <p className="text-xs text-rose-700 mt-0.5">
-                      {scanResult.message || 'The scanned QR pass does not match any valid registration for this event.'}
+                      {scanResult.message || 'No valid registration found for this event.'}
                     </p>
                   </div>
                 </div>
@@ -507,20 +481,20 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
                 className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-slate-700 hover:text-indigo-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
               >
                 <SwitchCamera className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Switch Camera ({facingMode === 'environment' ? 'Front' : 'Back'})</span>
+                <span>Switch Lens ({facingMode === 'environment' ? 'Front' : 'Back'})</span>
               </button>
             </div>
 
-            {/* HTML5 QR Camera Video Target Container with Dynamic Feedback Overlay */}
+            {/* HTML5 QR Camera Video Target Container */}
             <div
               className={`bg-slate-900 rounded-2xl p-2 border overflow-hidden relative min-h-[240px] flex items-center justify-center transition-all duration-300 ${
                 overlayState === 'success'
-                  ? 'border-emerald-500 ring-4 ring-emerald-500/40 shadow-lg shadow-emerald-500/20'
+                  ? 'border-emerald-500 ring-4 ring-emerald-500/30'
                   : overlayState === 'warning'
-                  ? 'border-amber-500 ring-4 ring-amber-500/40 shadow-lg shadow-amber-500/20'
+                  ? 'border-amber-500 ring-4 ring-amber-500/30'
                   : overlayState === 'error'
-                  ? 'border-rose-500 ring-4 ring-rose-500/40 shadow-lg shadow-rose-500/20'
-                  : 'border-slate-700'
+                  ? 'border-rose-500 ring-4 ring-rose-500/30'
+                  : 'border-slate-800'
               }`}
             >
               <div id="qr-reader-target" className="w-full text-white"></div>
@@ -530,7 +504,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
                 <div className="absolute inset-0 bg-emerald-500/20 pointer-events-none flex items-center justify-center animate-pulse">
                   <div className="bg-emerald-600/90 text-white font-bold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>✓ Attendance Verified Successfully</span>
+                    <span>Attendance Verified Successfully</span>
                   </div>
                 </div>
               )}
@@ -634,7 +608,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
         {(!isGuestMode || guestModeTab === 'scan') && (
           <div className="mt-4 pt-3 border-t border-slate-200 text-left space-y-2">
             <label className="text-[11px] text-slate-500 block font-medium">
-              Manual Test Scan / Dev Simulator
+              Manual Test Verification / Simulator
             </label>
             <div className="flex gap-2">
               <input
@@ -658,7 +632,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
                 className="py-2 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer"
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Simulate Valid Code</span>
+                <span>Simulate Valid Pass</span>
               </button>
 
               <button
@@ -666,7 +640,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
                 className="py-2 px-2 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1 transition-colors cursor-pointer"
               >
                 <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                <span>Simulate Wrong Code</span>
+                <span>Simulate Invalid Code</span>
               </button>
             </div>
           </div>
