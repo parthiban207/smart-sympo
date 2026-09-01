@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Neo-Glass Fest Conference Lanyard Badge with dynamic 15s rotating TOTP QR token, live status indicator, and security watermark", deps: ["react-qr-code", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
+// agent-notes: { ctx: "Neo-Glass Fest Conference Lanyard Badge with dynamic 15s rotating TOTP QR token, live status indicator, and security watermark", deps: ["react-qr-code", "lucide-react"], state: "active", last: "antigravity@2026-09-01" }
 
 import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
@@ -38,15 +38,48 @@ export default function StudentQRPass({
     return () => clearInterval(timer);
   }, []);
 
+  const resolvedStudentId =
+    studentId ||
+    user?.id ||
+    profile?.id ||
+    user?.student_id ||
+    profile?.student_id ||
+    'STU-AUTH';
+
   const resolvedFullName =
     (profile?.full_name && profile.full_name !== 'Student Attendee' ? profile.full_name : null) ||
     (user?.full_name && user.full_name !== 'Student Attendee' ? user.full_name : null) ||
     (studentName && studentName !== 'Student Attendee' ? studentName : null) ||
     (user?.name && user.name !== 'Student Attendee' ? user.name : null) ||
     (user?.email ? user.email.split('@')[0] : 'Delegate');
-  const resolvedRollNo = profile?.roll_no || user?.roll_no || collegeId || user?.college_id || 'STU-2026';
-  const resolvedDepartment = profile?.department || user?.department || department || 'Computer Science & Eng';
-  const resolvedCollege = profile?.college || user?.college || collegeName || user?.college_name || 'Engineering Campus';
+
+  const resolvedRollNo =
+    profile?.roll_no ||
+    user?.roll_no ||
+    collegeId ||
+    user?.college_id ||
+    profile?.college_id ||
+    'STU-2026';
+
+  const resolvedDepartment =
+    profile?.department ||
+    user?.department ||
+    department ||
+    'Computer Science & Eng';
+
+  const resolvedCollege =
+    profile?.college ||
+    user?.college ||
+    collegeName ||
+    user?.college_name ||
+    profile?.college_name ||
+    'Engineering Campus';
+
+  const resolvedEmail =
+    studentEmail ||
+    user?.email ||
+    profile?.email ||
+    '';
 
   // Clean JSON payload encoding student ID, profile metadata, and timestamp
   const qrPayload = JSON.stringify({
@@ -56,25 +89,28 @@ export default function StudentQRPass({
     department: resolvedDepartment,
     college: resolvedCollege,
     timestamp: tokenTimestamp,
-    event_id: eventId || '',
+    event_id: eventId || 'general',
     registration_id: registrationId || '',
-    email: studentEmail || user?.email || profile?.email || '',
+    email: resolvedEmail,
   });
 
   const progressPercent = ((15 - timeLeft) / 15) * 100;
-  const tokenHash = (resolvedStudentId ? resolvedStudentId.slice(0, 8).toUpperCase() : 'AUTH') + '-' + tokenTimestamp.toString(16).slice(-4).toUpperCase();
+  const tokenHash =
+    (resolvedStudentId ? String(resolvedStudentId).slice(0, 8).toUpperCase() : 'AUTH') +
+    '-' +
+    tokenTimestamp.toString(16).slice(-4).toUpperCase();
 
   return (
     <div className="w-full flex flex-col items-center">
       {/* 1. Lanyard Clip Slot Header */}
       <div className="w-full flex flex-col items-center mb-3">
-        <div className="w-14 h-3 bg-slate-900/80 dark:bg-slate-950 rounded-full border border-slate-700/60 shadow-inner flex items-center justify-center">
+        <div className="w-14 h-3 bg-slate-900/80 rounded-full border border-slate-700/60 shadow-inner flex items-center justify-center">
           <div className="w-8 h-1 bg-slate-600/60 rounded-full"></div>
         </div>
       </div>
 
       {/* 2. Conference Badge Body */}
-      <div className="w-full bg-[#151D2F]/95 dark:bg-[#151D2F]/95 border border-slate-700/60 rounded-3xl p-5 sm:p-6 shadow-2xl shadow-indigo-950/40 backdrop-blur-xl relative overflow-hidden text-left space-y-4">
+      <div className="w-full bg-[#151D2F] border border-slate-700/80 rounded-3xl p-5 sm:p-6 shadow-2xl shadow-indigo-950/40 backdrop-blur-xl relative overflow-hidden text-left space-y-4 text-white">
         {/* Background Ambient Glow Accents */}
         <div className="absolute -top-16 -right-16 w-36 h-36 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none"></div>
@@ -124,12 +160,12 @@ export default function StudentQRPass({
         {/* Centerpiece: High-Contrast QR Code Box with Luminous Gradient Border */}
         <div className="relative flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-900/80 border border-slate-800/80 z-10">
           <div className="relative p-1 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 shadow-lg shadow-indigo-500/20">
-            <div className="bg-white p-3.5 rounded-[14px] flex items-center justify-center">
+            <div className="bg-white p-3.5 rounded-[14px] flex items-center justify-center w-[200px] h-[200px] aspect-square shadow-inner">
               <QRCode
                 value={qrPayload}
                 size={180}
                 level="M"
-                style={{ height: 'auto', maxWidth: '100%', width: '100%' }}
+                style={{ height: '100%', maxWidth: '100%', width: '100%' }}
                 viewBox={`0 0 256 256`}
               />
             </div>
@@ -152,7 +188,7 @@ export default function StudentQRPass({
                 <Clock className="w-3 h-3 text-indigo-400" />
                 <span>Auto-Refreshes in</span>
               </span>
-              <span className="font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.2 rounded border border-cyan-500/20">
+              <span className="font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
                 {timeLeft}s
               </span>
             </div>

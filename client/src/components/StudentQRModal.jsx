@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Neo-Glass Student Entry Pass Modal with frosted backdrop, lanyard badge holder, Esc listener, and responsive viewport sizing", deps: ["src/components/StudentQRPass.jsx", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
+// agent-notes: { ctx: "Neo-Glass Student Entry Pass Modal with frosted backdrop, lanyard badge holder, Esc listener, and responsive viewport sizing", deps: ["src/components/StudentQRPass.jsx", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-09-01" }
 
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
@@ -10,14 +10,20 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
   const { currentUser, registrations } = useApp();
   const [dbRegistrationId, setDbRegistrationId] = useState('');
 
+  const displayEvent = event || {
+    id: 'general-symposium-pass',
+    title: 'SmartSympo 2026 General Access Pass',
+    hall_number: 'All Venues',
+  };
+
   const validStudentId = currentUser?.id || '';
-  const validEventId = event?.id || '';
+  const validEventId = displayEvent?.id || '';
 
   // 1. Locate registration from in-memory state
   const userReg = registrations.find(
     (r) =>
       (r.student_id === validStudentId || r.user_id === validStudentId) &&
-      (r.event_id === validEventId || (event?.title && r.event_title === event.title))
+      (r.event_id === validEventId || (displayEvent?.title && r.event_title === displayEvent.title))
   );
 
   const registrationId = userReg?.id || dbRegistrationId;
@@ -59,12 +65,12 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen || !event) return null;
+  if (!isOpen) return null;
 
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0B0F19]/80 backdrop-blur-md animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn"
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -73,7 +79,7 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
         {/* Floating Top-Right Close ('✕') Button */}
         <button
           onClick={onClose}
-          className="absolute -top-12 right-0 p-2 rounded-xl bg-slate-900/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700/80 hover:border-rose-500/40 transition-all cursor-pointer shadow-lg backdrop-blur-md z-20"
+          className="absolute -top-12 right-0 p-2 rounded-xl bg-slate-900/90 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 border border-slate-700/80 hover:border-rose-500/40 transition-all cursor-pointer shadow-lg backdrop-blur-md z-20"
           title="Close Pass (Esc)"
         >
           <X className="w-4 h-4" />
@@ -84,13 +90,17 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
           studentId={validStudentId}
           eventId={validEventId}
           registrationId={registrationId}
-          studentName={currentUser?.full_name || currentUser?.name || (currentUser?.email ? currentUser.email.split('@')[0] : 'Delegate')}
+          studentName={
+            currentUser?.full_name ||
+            currentUser?.name ||
+            (currentUser?.email ? currentUser.email.split('@')[0] : 'Delegate')
+          }
           studentEmail={currentUser?.email || ''}
           collegeId={currentUser?.roll_no || currentUser?.college_id || 'STU-2026'}
           collegeName={currentUser?.college_name || currentUser?.college || ''}
           department={currentUser?.department || 'CSE'}
-          eventTitle={event.title}
-          hallNumber={event.hall_number}
+          eventTitle={displayEvent.title}
+          hallNumber={displayEvent.hall_number}
           user={currentUser}
           profile={currentUser}
         />
