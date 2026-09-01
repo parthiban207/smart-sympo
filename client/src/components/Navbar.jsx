@@ -1,11 +1,10 @@
-// agent-notes: { ctx: "Clean Top Header with Breadcrumb title, Quick Search bar, Three-dots Slide-out Drawer Menu, Notification Bell, and User Profile chip", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "src/components/NotificationCenter.jsx", "src/components/EmergencyBroadcastModal.jsx", "src/utils/calendarExport.js", "src/utils/exportReports.ts", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-09-01" }
+// agent-notes: { ctx: "Clean Top Header with Breadcrumb title, Quick Search bar, Three-dots Slide-out Drawer Menu, Notification Bell, and User Profile chip", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "src/components/NotificationCenter.jsx", "src/utils/calendarExport.js", "src/utils/exportReports.ts", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-09-01" }
 
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import UserSettingsModal from './UserSettingsModal';
 import NotificationCenter from './NotificationCenter';
-import EmergencyBroadcastModal from './EmergencyBroadcastModal';
 import { generateMultiEventICS, downloadICSFile } from '../utils/calendarExport';
 import { exportAttendanceCSV } from '../utils/exportReports';
 import {
@@ -26,7 +25,6 @@ import {
   Sparkles,
   Ticket,
   FileSpreadsheet,
-  Radio,
   User,
 } from 'lucide-react';
 
@@ -45,7 +43,6 @@ export default function Navbar({ onToggleMobileMenu }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   const activeRole = currentUser?.role || 'student';
@@ -69,11 +66,6 @@ export default function Navbar({ onToggleMobileMenu }) {
   const handleExportAttendance = () => {
     setIsDrawerOpen(false);
     exportAttendanceCSV(registrations || [], events || [], profilesList || []);
-  };
-
-  const handleEmergencyAlert = () => {
-    setIsDrawerOpen(false);
-    setIsEmergencyModalOpen(true);
   };
 
   // Dynamic Breadcrumb Title mapping
@@ -364,14 +356,6 @@ export default function Navbar({ onToggleMobileMenu }) {
             )}
 
             <button
-              onClick={handleEmergencyAlert}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-rose-600 hover:bg-rose-50 transition cursor-pointer text-left"
-            >
-              <Radio className="w-4 h-4 text-rose-500 animate-pulse" />
-              <span>🚨 Emergency Alert</span>
-            </button>
-
-            <button
               onClick={() => {
                 setIsDrawerOpen(false);
                 setIsSettingsOpen(true);
@@ -403,12 +387,6 @@ export default function Navbar({ onToggleMobileMenu }) {
       {isSettingsOpen && (
         <UserSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       )}
-
-      {/* Emergency Broadcast Modal */}
-      <EmergencyBroadcastModal
-        isOpen={isEmergencyModalOpen}
-        onClose={() => setIsEmergencyModalOpen(false)}
-      />
     </>
   );
 }
