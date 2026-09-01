@@ -11,15 +11,13 @@ import {
   Building2,
   ShieldAlert,
   Settings,
-  Sun,
-  Moon,
   ChevronLeft,
   ChevronRight,
   LogOut,
 } from 'lucide-react';
 
 export default function Sidebar({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpen }) {
-  const { currentUser, signOutFromSupabase, isDarkMode, toggleDarkMode } = useApp();
+  const { currentUser, signOutFromSupabase } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -164,24 +162,6 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, mobileOpen, setMo
 
         {/* Footer Quick Controls */}
         <div className="p-3 border-t border-slate-200 dark:border-slate-800 space-y-1 shrink-0 bg-slate-50/60 dark:bg-slate-900/60">
-          <button
-            onClick={toggleDarkMode}
-            title="Toggle Theme"
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition cursor-pointer ${
-              isCollapsed ? 'justify-center px-0' : ''
-            }`}
-          >
-            {isDarkMode ? (
-              <Sun className="w-4 h-4 text-amber-400 shrink-0" />
-            ) : (
-              <Moon className="w-4 h-4 text-indigo-600 shrink-0" />
-            )}
-            {!isCollapsed && (
-              <span className="truncate flex-1 text-left">
-                {isDarkMode ? 'Light Mode' : 'Dark Mode'}
-              </span>
-            )}
-          </button>
 
           {currentUser && (
             <button

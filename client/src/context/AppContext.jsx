@@ -83,33 +83,19 @@ export const AppProvider = ({ children }) => {
       return false;
     }
   });
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    try {
-      const saved = localStorage.getItem('smart_sympo_theme');
-      if (saved) return saved === 'dark';
-      return typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    } catch {
-      return false;
-    }
-  });
-
+  // Enforce light theme
   useEffect(() => {
     try {
-      if (isDarkMode) {
-        document.documentElement.classList.add('dark');
-        document.body.classList.add('dark');
-        localStorage.setItem('smart_sympo_theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-        document.body.classList.remove('dark');
-        localStorage.setItem('smart_sympo_theme', 'light');
-      }
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+      localStorage.setItem('smart_sympo_theme', 'light');
     } catch (e) {
       console.warn('Theme update error:', e);
     }
-  }, [isDarkMode]);
+  }, []);
 
-  const toggleDarkMode = () => setIsDarkMode((prev) => !prev);
+  const isDarkMode = false;
+  const toggleDarkMode = () => {};
 
   const defaultSeedEvents = [
     {
