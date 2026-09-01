@@ -5,23 +5,27 @@ import emailjs from '@emailjs/browser';
 /**
  * Service to dispatch automated welcome and first login emails
  */
-export async function sendWelcomeEmail({ name, email, role }) {
+export async function sendWelcomeEmail({ name, email, role, roll_no, collegeName, department }) {
   const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_smartsympo';
   const templateId = import.meta.env.VITE_EMAILJS_WELCOME_TEMPLATE_ID || 'template_welcome';
   const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || '';
 
-  const studentName = name || email?.split('@')[0] || 'Student';
+  const studentName = name || email?.split('@')[0] || 'Student Delegate';
   const studentEmail = email || '';
-  const userRole = role || 'Student';
+  const userRole = role || 'student';
+  const studentRollNo = roll_no || 'STU-2026';
+  const studentCollege = collegeName || 'College of Engineering';
 
   const templateParams = {
     to_name: studentName,
     to_email: studentEmail,
     student_name: studentName,
     role: userRole,
-    subject: '🎉 Welcome to Smart-Sympo 2026!',
-    message: `Hi ${studentName},\nWelcome to Smart-Sympo! Your account has been successfully activated. You can now explore technical/non-technical events, register with one click, and access your digital QR entry pass from your dashboard.\n\nBest regards,\nSmart-Sympo Organizing Team`,
-    symposium_name: 'Smart-Sympo 2026',
+    roll_no: studentRollNo,
+    college: studentCollege,
+    subject: '🎉 Welcome to SmartSympo - Account Activated Successfully!',
+    message: `Hi ${studentName},\n\nWelcome to SmartSympo! Your student account has been successfully created and activated.\n\nYou can now log in to SmartSympo, browse available symposium tracks, register for events with 1-click clash detection, and access your live digital TOTP pass.\n\nYour Account Details:\n• Email: ${studentEmail}\n• Roll No: ${studentRollNo}\n• College: ${studentCollege}\n• Login Portal: ${typeof window !== 'undefined' ? window.location.origin + '/login/student' : 'https://smartsympo.edu/login'}\n\nBest regards,\nSmartSympo Organizing Team`,
+    symposium_name: 'SmartSympo 2026',
     year: new Date().getFullYear(),
   };
 
@@ -36,8 +40,8 @@ export async function sendWelcomeEmail({ name, email, role }) {
 
   console.log(
     `%c[EmailService Simulated Dispatch] Welcome email generated for ${studentEmail}:\n` +
-    `Subject: 🎉 Welcome to Smart-Sympo 2026!\n` +
-    `Hi ${studentName},\nWelcome to Smart-Sympo! Your account has been successfully activated.`,
+    `Subject: 🎉 Welcome to SmartSympo - Account Activated Successfully!\n` +
+    `Hi ${studentName}, welcome to SmartSympo! Your account has been successfully activated.`,
     'color: #6366f1; font-weight: bold;'
   );
 

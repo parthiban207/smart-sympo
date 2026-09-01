@@ -879,12 +879,19 @@ export const AppProvider = ({ children }) => {
         email: cleanEmail,
         name: fullName.trim(),
         role: role,
+        roll_no: finalCollegeId,
+        collegeName: finalCollegeName,
+        department: finalDepartment,
+        loginUrl: typeof window !== 'undefined' ? `${window.location.origin}/login/student` : '',
       }).catch((err) => console.warn('[Welcome Email Backend Error]:', err));
 
       sendWelcomeEmail({
         name: fullName.trim(),
         email: cleanEmail,
         role: role,
+        roll_no: finalCollegeId,
+        collegeName: finalCollegeName,
+        department: finalDepartment,
       }).catch((err) => console.warn('[Welcome EmailJS Error]:', err));
 
       return { success: true, user: savedUser, profile: savedUser, role: savedUser.role };
@@ -1074,14 +1081,21 @@ export const AppProvider = ({ children }) => {
       // Send Welcome & First Login Email asynchronously in background
       sendWelcomeEmailApi({
         email: synced.email,
-        name: synced.full_name || synced.name || synced.username || 'Student',
+        name: synced.full_name || synced.name || synced.username || 'Student Delegate',
         role: synced.role || 'student',
+        roll_no: synced.roll_no || synced.college_id || '',
+        collegeName: synced.college_name || synced.college || '',
+        department: synced.department || '',
+        loginUrl: typeof window !== 'undefined' ? `${window.location.origin}/login/student` : '',
       }).catch((err) => console.warn('[Welcome Email Backend Error]:', err));
 
       sendWelcomeEmail({
-        name: synced.full_name || synced.name || synced.username || 'Student',
+        name: synced.full_name || synced.name || synced.username || 'Student Delegate',
         email: synced.email,
         role: synced.role || 'student',
+        roll_no: synced.roll_no || synced.college_id || '',
+        collegeName: synced.college_name || synced.college || '',
+        department: synced.department || '',
       }).catch((err) => console.warn('[Welcome EmailJS Error]:', err));
 
       // Mark first_login = false in Supabase & Local state

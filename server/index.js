@@ -91,22 +91,26 @@ app.get('/api/health', (req, res) => {
 });
 
 // =========================================================================
-// 1. WELCOME & FIRST LOGIN EMAIL
-// Trigger: When a user (Student/Coordinator) logs in for the first time.
+// 1. WELCOME & STUDENT SIGNUP CONFIRMATION EMAIL
+// Trigger: When a student signs up or logs into SmartSympo.
 // =========================================================================
 const handleWelcomeEmail = async (req, res) => {
   try {
-    const { email, name, role } = req.body || {};
+    const { email, name, role, roll_no, collegeName, department, loginUrl } = req.body || {};
 
     if (!email) {
       return res.status(400).json({ success: false, error: 'Missing recipient email address.' });
     }
 
-    const studentName = name || email.split('@')[0] || 'Student';
-    const userRole = role || 'Student';
-    const subject = '🎉 Welcome to Smart-Sympo 2026!';
+    const studentName = name || email.split('@')[0] || 'Student Delegate';
+    const userRole = role || 'student';
+    const studentRollNo = roll_no || 'STU-2026';
+    const studentCollege = collegeName || 'College of Engineering';
+    const studentDept = department || 'Computer Science & Engineering';
+    const targetLoginUrl = loginUrl || 'http://localhost:5173/login/student';
+    const subject = '🎉 Welcome to SmartSympo - Account Activated Successfully!';
 
-    const textContent = `Hi ${studentName},\n\nWelcome to Smart-Sympo! Your account has been successfully activated.\nYou can now explore technical/non-technical events, register with one click, and access your digital QR entry pass from your dashboard.\n\nBest regards,\nSmart-Sympo Organizing Team`;
+    const textContent = `Hi ${studentName},\n\nWelcome to SmartSympo! You have successfully signed up and your account has been activated.\n\nYou can now log in to SmartSympo, browse symposium tracks, register for events with 1-click clash detection, and access your live digital TOTP pass.\n\nAccount Details:\n- Name: ${studentName}\n- Email: ${email}\n- Roll No: ${studentRollNo}\n- College: ${studentCollege}\n- Department: ${studentDept}\n- Login Link: ${targetLoginUrl}\n\nBest regards,\nSmartSympo Organizing Team`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -114,7 +118,7 @@ const handleWelcomeEmail = async (req, res) => {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Welcome to Smart-Sympo 2026</title>
+        <title>Welcome to SmartSympo 2026</title>
       </head>
       <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
         <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 10px;">
@@ -124,15 +128,15 @@ const handleWelcomeEmail = async (req, res) => {
                 
                 <!-- Hero Header Banner -->
                 <tr>
-                  <td style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #9333ea 100%); padding: 36px 32px; text-align: center;">
+                  <td style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%); padding: 36px 32px; text-align: center;">
                     <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.2); padding: 6px 16px; border-radius: 9999px; font-size: 12px; font-weight: 700; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">
-                      Smart-Sympo 2026
+                      SmartSympo 2026
                     </div>
                     <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">
-                      🎉 Welcome to Smart-Sympo!
+                      🎉 Welcome to SmartSympo!
                     </h1>
                     <p style="margin: 8px 0 0 0; color: #e0e7ff; font-size: 14px; font-weight: 500;">
-                      Account Activated & Verified (${userRole})
+                      Student Account Successfully Created & Activated
                     </p>
                   </td>
                 </tr>
@@ -145,9 +149,53 @@ const handleWelcomeEmail = async (req, res) => {
                     </p>
                     
                     <p style="font-size: 15px; line-height: 1.65; color: #cbd5e1; margin-top: 12px;">
-                      Welcome to Smart-Sympo! Your account has been successfully activated. 
-                      You can now explore technical/non-technical events, register with one click, and access your digital QR entry pass from your dashboard.
+                      Welcome to SmartSympo! Your student registration is complete and your account is now ready for use. 
+                      You can log in, explore paper presentations, hackathons, and technical tracks, claim your digital passes, and track your attendance in real-time.
                     </p>
+
+                    <!-- Student Credentials Box -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; border: 1px solid #334155; border-radius: 14px; margin: 24px 0; border-collapse: separate;">
+                      <tr>
+                        <td style="padding: 20px;">
+                          <div style="font-size: 12px; font-weight: 700; color: #818cf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
+                            📋 Your Registered Profile Details
+                          </div>
+                          <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8; width: 35%;">Name:</td>
+                              <td style="padding: 4px 0; color: #f8fafc; font-weight: 600;">${studentName}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">Email:</td>
+                              <td style="padding: 4px 0; color: #f8fafc; font-weight: 600;">${email}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">Roll No / ID:</td>
+                              <td style="padding: 4px 0; color: #a5b4fc; font-family: monospace; font-weight: 700;">${studentRollNo}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">College:</td>
+                              <td style="padding: 4px 0; color: #f8fafc;">${studentCollege}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">Department:</td>
+                              <td style="padding: 4px 0; color: #f8fafc;">${studentDept}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <!-- Login Button CTA -->
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin: 28px 0; text-align: center;">
+                      <tr>
+                        <td align="center">
+                          <a href="${targetLoginUrl}" style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 12px; box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.5);">
+                            🚀 Log In to SmartSympo
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
 
                     <!-- Key Feature Highlights -->
                     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; border: 1px solid #334155; border-radius: 14px; margin: 24px 0; border-collapse: separate;">
@@ -179,7 +227,7 @@ const handleWelcomeEmail = async (req, res) => {
 
                     <p style="font-size: 14px; line-height: 1.6; color: #cbd5e1; margin-bottom: 0;">
                       Best regards,<br>
-                      <strong style="color: #f8fafc;">Smart-Sympo Organizing Team</strong>
+                      <strong style="color: #f8fafc;">SmartSympo Organizing Team</strong>
                     </p>
                   </td>
                 </tr>
@@ -188,7 +236,7 @@ const handleWelcomeEmail = async (req, res) => {
                 <tr>
                   <td style="background-color: #0f172a; padding: 24px 32px; border-top: 1px solid #334155; text-align: center;">
                     <p style="margin: 0; font-size: 12px; color: #64748b;">
-                      Smart-Sympo 2026 • Real-Time Multi-Venue Event Management System
+                      SmartSympo 2026 • Real-Time Multi-Venue Event Management System
                     </p>
                   </td>
                 </tr>
@@ -207,10 +255,14 @@ const handleWelcomeEmail = async (req, res) => {
       html: htmlContent,
     });
 
-    return res.status(200).json(result);
+    res.json({
+      success: true,
+      message: `Welcome email dispatched to ${email}`,
+      ...result,
+    });
   } catch (err) {
-    console.error('Error in /api/send-welcome-email:', err);
-    return res.status(500).json({ success: false, error: err.message || 'Failed to dispatch welcome email.' });
+    console.error('[Welcome Email Error]:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to dispatch welcome email' });
   }
 };
 
