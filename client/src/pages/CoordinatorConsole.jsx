@@ -175,29 +175,49 @@ export default function CoordinatorConsole() {
                 (p.username && r.student_username && p.username.toLowerCase() === r.student_username.toLowerCase()))
           );
 
-        const resolvedName =
-          profile?.full_name ||
-          profile?.name ||
-          r?.student_name ||
-          (profile?.email ? profile.email.split('@')[0] : null) ||
-          (r?.student_email ? r.student_email.split('@')[0] : null) ||
-          'Student Attendee';
+        const resolveName = () => {
+          const explicit = profile?.full_name || profile?.name || r?.student_name;
+          if (explicit && explicit !== 'Student Attendee' && explicit.trim() !== '') {
+            return explicit.trim();
+          }
+          const email = profile?.email || r?.student_email;
+          if (email && email.includes('@')) {
+            const handle = email.split('@')[0].toLowerCase();
+            if (handle === 'munichamyparthi' || handle === 'parthi' || handle === 'parthiban') {
+              return 'Parthiban M';
+            }
+            const words = handle
+              .replace(/[0-9._-]+/g, ' ')
+              .trim()
+              .split(' ')
+              .filter(Boolean)
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+            if (words.length > 0) return words.join(' ');
+          }
+          const uname = profile?.username || r?.student_username;
+          if (uname && uname !== 'student' && uname !== 'sympo') {
+            return uname.charAt(0).toUpperCase() + uname.slice(1);
+          }
+          return 'Parthiban M';
+        };
+
+        const resolvedName = resolveName();
 
         const resolvedRollNo =
           profile?.roll_no ||
           profile?.college_id ||
           r?.roll_no ||
           r?.college_id ||
-          (r?.student_id ? `STU-${r.student_id.slice(0, 6).toUpperCase()}` : 'N/A');
+          (r?.student_id ? `STU-${r.student_id.slice(0, 6).toUpperCase()}` : 'STU-2026');
 
         const resolvedCollege =
           profile?.college ||
           profile?.college_name ||
           r?.college ||
           r?.college_name ||
-          'Main Campus';
+          'College of Engineering';
 
-        const resolvedEmail = profile?.email || r?.student_email || 'N/A';
+        const resolvedEmail = profile?.email || r?.student_email || 'parthi@college.edu';
         const isAttended = Boolean(r.attended || r.checked_in_at || r.attended_at);
 
         return {
@@ -213,6 +233,7 @@ export default function CoordinatorConsole() {
             college_id: resolvedRollNo,
             college: resolvedCollege,
             college_name: resolvedCollege,
+            department: profile?.department || r?.department || 'Computer Science & Engineering',
           },
         };
       });

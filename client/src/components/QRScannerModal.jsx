@@ -340,7 +340,7 @@ export default function QRScannerModal({ isOpen, onClose, selectedHall, isGuestM
                       Student Name:
                     </span>
                     <span className="font-bold text-white">
-                      {scanResult.studentProfile?.full_name || scanResult.parsedData?.full_name || scanResult.studentName || 'Student Attendee'}
+                      {scanResult.studentProfile?.full_name || scanResult.parsedData?.full_name || scanResult.studentName || (scanResult.studentProfile?.email ? scanResult.studentProfile.email.split('@')[0] : 'Delegate')}
                     </span>
                   </div>
 

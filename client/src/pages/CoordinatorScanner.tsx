@@ -391,7 +391,7 @@ export default function CoordinatorScanner() {
                     Student Name
                   </span>
                   <span className="font-extrabold text-white text-sm">
-                    {scanResult.studentProfile?.full_name || scanResult.parsedData?.full_name || scanResult.studentName || 'Student Attendee'}
+                    {scanResult.studentProfile?.full_name || scanResult.parsedData?.full_name || scanResult.studentName || (scanResult.studentProfile?.email ? scanResult.studentProfile.email.split('@')[0] : 'Delegate')}
                   </span>
                 </div>
 

@@ -34,14 +34,17 @@ const DEFAULT_SEED_ACCOUNTS = [
   },
   {
     id: '33333333-0000-4000-8000-000000000003',
-    name: 'Student Attendee',
-    full_name: 'Student Attendee',
+    name: 'Parthiban M',
+    full_name: 'Parthiban M',
     username: 'student',
     email: 'student@college.edu',
     password: 'student123',
     pass_code: 'student123',
     role: 'student',
-    college_id: 'STU-2005',
+    college_id: 'STU-2026-001',
+    roll_no: 'STU-2026-001',
+    college: 'College of Engineering',
+    department: 'Computer Science & Engineering',
     first_login: false,
   },
 ];
@@ -538,15 +541,19 @@ export const AppProvider = ({ children }) => {
           try {
             const { data: profData, error: profErr } = await supabase.from('profiles').select('*');
             if (!profErr && profData && profData.length > 0) {
-              const enhancedProfiles = profData.map((p) => ({
-                ...p,
-                full_name: p.full_name || p.name || 'Student Attendee',
-                name: p.name || p.full_name || 'Student Attendee',
-                roll_no: p.roll_no || p.college_id || 'N/A',
-                college_id: p.college_id || p.roll_no || 'N/A',
-                college: p.college || p.college_name || 'Main Campus',
-                college_name: p.college_name || p.college || 'Main Campus',
-              }));
+              const enhancedProfiles = profData.map((p) => {
+                const resolvedName = p.full_name || p.name || (p.email ? p.email.split('@')[0] : 'Delegate');
+                return {
+                  ...p,
+                  full_name: resolvedName,
+                  name: resolvedName,
+                  roll_no: p.roll_no || p.college_id || (p.id ? `REG-${p.id.slice(0, 6).toUpperCase()}` : 'N/A'),
+                  college_id: p.college_id || p.roll_no || (p.id ? `REG-${p.id.slice(0, 6).toUpperCase()}` : 'N/A'),
+                  college: p.college || p.college_name || 'College of Engineering',
+                  college_name: p.college_name || p.college || 'College of Engineering',
+                  department: p.department || 'Computer Science & Engineering',
+                };
+              });
 
               setProfilesList((prev) => {
                 const combined = [...enhancedProfiles];

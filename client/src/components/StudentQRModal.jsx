@@ -84,9 +84,9 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
           studentId={validStudentId}
           eventId={validEventId}
           registrationId={registrationId}
-          studentName={currentUser?.full_name || currentUser?.name || 'Student Attendee'}
+          studentName={currentUser?.full_name || currentUser?.name || (currentUser?.email ? currentUser.email.split('@')[0] : 'Delegate')}
           studentEmail={currentUser?.email || ''}
-          collegeId={currentUser?.roll_no || currentUser?.college_id || 'N/A'}
+          collegeId={currentUser?.roll_no || currentUser?.college_id || 'STU-2026'}
           collegeName={currentUser?.college_name || currentUser?.college || ''}
           department={currentUser?.department || 'CSE'}
           eventTitle={event.title}

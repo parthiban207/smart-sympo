@@ -38,8 +38,12 @@ export default function StudentQRPass({
     return () => clearInterval(timer);
   }, []);
 
-  const resolvedStudentId = user?.id || profile?.id || studentId || '';
-  const resolvedFullName = profile?.full_name || user?.full_name || studentName || user?.name || 'Student Attendee';
+  const resolvedFullName =
+    (profile?.full_name && profile.full_name !== 'Student Attendee' ? profile.full_name : null) ||
+    (user?.full_name && user.full_name !== 'Student Attendee' ? user.full_name : null) ||
+    (studentName && studentName !== 'Student Attendee' ? studentName : null) ||
+    (user?.name && user.name !== 'Student Attendee' ? user.name : null) ||
+    (user?.email ? user.email.split('@')[0] : 'Delegate');
   const resolvedRollNo = profile?.roll_no || user?.roll_no || collegeId || user?.college_id || 'STU-2026';
   const resolvedDepartment = profile?.department || user?.department || department || 'Computer Science & Eng';
   const resolvedCollege = profile?.college || user?.college || collegeName || user?.college_name || 'Engineering Campus';
