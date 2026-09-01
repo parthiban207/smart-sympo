@@ -343,21 +343,25 @@ export default function Navbar({ onToggleMobileMenu }) {
               Actions
             </p>
 
-            <button
-              onClick={handleExportAttendance}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-100 transition cursor-pointer text-left"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
-              <span>⬇ Export Attendance CSV</span>
-            </button>
+            {(activeRole === 'coordinator' || activeRole === 'admin') && (
+              <>
+                <button
+                  onClick={handleExportAttendance}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-100 transition cursor-pointer text-left"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                  <span>⬇ Export Attendance CSV</span>
+                </button>
 
-            <button
-              onClick={handleExportFullSchedule}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-100 transition cursor-pointer text-left"
-            >
-              <Calendar className="w-4 h-4 text-indigo-500" />
-              <span>📅 Export Full Schedule (.ics)</span>
-            </button>
+                <button
+                  onClick={handleExportFullSchedule}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-100 transition cursor-pointer text-left"
+                >
+                  <Calendar className="w-4 h-4 text-indigo-500" />
+                  <span>📅 Export Full Schedule (.ics)</span>
+                </button>
+              </>
+            )}
 
             <button
               onClick={handleEmergencyAlert}

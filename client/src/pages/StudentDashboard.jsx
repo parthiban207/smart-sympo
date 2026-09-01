@@ -5,8 +5,6 @@ import { useApp } from '../context/AppContext';
 import StudentQRModal from '../components/StudentQRModal';
 import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
 import SessionDetailsModal from '../components/SessionDetailsModal';
-import { generateEventICS, generateMultiEventICS, downloadICSFile } from '../utils/calendarExport';
-
 import {
   Clock,
   MapPin,
@@ -18,7 +16,6 @@ import {
   FileText,
   Bookmark,
   MoreVertical,
-  CalendarPlus,
   Share2,
   Sparkles,
   Search,
@@ -141,19 +138,6 @@ export default function StudentDashboard() {
     setSelectedDetailEvent(event);
   };
 
-  const handleExportSingleEventICS = (event) => {
-    setActiveMenuId(null);
-    const ics = generateEventICS(event);
-    const slug = (event.title || 'track').toLowerCase().replace(/[^a-z0-9]/g, '-');
-    downloadICSFile(`smart-sympo-${slug}.ics`, ics);
-  };
-
-  const handleExportMySchedule = () => {
-    if (registeredEvents.length === 0) return;
-    const ics = generateMultiEventICS(registeredEvents, `${currentUser.name || 'Student'}'s Symposium Schedule`);
-    downloadICSFile('my-symposium-schedule.ics', ics);
-  };
-
   const handleCopyLink = (event) => {
     const url = `${window.location.origin}/student?session=${event.id}`;
     navigator.clipboard.writeText(url);
@@ -246,24 +230,13 @@ export default function StudentDashboard() {
 
         <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
           {registeredEvents.length > 0 && (
-            <>
-              <button
-                onClick={handleExportMySchedule}
-                title="Export My Schedule as .ics"
-                className="px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
-              >
-                <CalendarPlus className="w-4 h-4 text-indigo-500" />
-                <span className="hidden sm:inline">Export Schedule</span>
-              </button>
-
-              <button
-                onClick={() => handleOpenQRPass(registeredEvents[0])}
-                className="flex-1 md:flex-none px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-500/25 flex items-center justify-center gap-2 transition cursor-pointer shrink-0 active:scale-95"
-              >
-                <QrCode className="w-4 h-4" />
-                <span>Digital Ticket Pass</span>
-              </button>
-            </>
+            <button
+              onClick={() => handleOpenQRPass(registeredEvents[0])}
+              className="flex-1 md:flex-none px-5 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-500/25 flex items-center justify-center gap-2 transition cursor-pointer shrink-0 active:scale-95"
+            >
+              <QrCode className="w-4 h-4" />
+              <span>Digital Ticket Pass</span>
+            </button>
           )}
         </div>
       </div>
@@ -544,14 +517,6 @@ export default function StudentDashboard() {
                                 </button>
 
                                 <button
-                                  onClick={() => handleExportSingleEventICS(event)}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition cursor-pointer text-left font-medium"
-                                >
-                                  <CalendarPlus className="w-3.5 h-3.5 text-cyan-500" />
-                                  <span>Add to Calendar (.ics)</span>
-                                </button>
-
-                                <button
                                   onClick={() => handleCopyLink(event)}
                                   className="w-full flex items-center gap-2.5 px-3.5 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition cursor-pointer text-left font-medium"
                                 >
@@ -706,14 +671,6 @@ export default function StudentDashboard() {
                                 >
                                   <Info className="w-3.5 h-3.5 text-indigo-500" />
                                   <span>View Full Details</span>
-                                </button>
-
-                                <button
-                                  onClick={() => handleExportSingleEventICS(event)}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition cursor-pointer text-left font-medium"
-                                >
-                                  <CalendarPlus className="w-3.5 h-3.5 text-cyan-500" />
-                                  <span>Add to Calendar</span>
                                 </button>
 
                                 <button
