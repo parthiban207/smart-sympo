@@ -1,10 +1,11 @@
-// agent-notes: { ctx: "Clean Top Header with Breadcrumb title, Quick Search bar, Dark Mode toggle, Notification Bell, and User Profile chip — zero duplicated nav links", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "src/components/NotificationCenter.jsx", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-08-31" }
+// agent-notes: { ctx: "Clean Top Header with Breadcrumb title, Quick Search bar, Three-dots Dashboard Switcher Menu, Dark Mode toggle, Notification Bell, and User Profile chip", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "src/components/NotificationCenter.jsx", "src/utils/calendarExport.js", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-09-01" }
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import UserSettingsModal from './UserSettingsModal';
 import NotificationCenter from './NotificationCenter';
+import { generateMultiEventICS, downloadICSFile } from '../utils/calendarExport';
 import {
   Bell,
   Sun,
@@ -14,24 +15,58 @@ import {
   LogOut,
   Search,
   ChevronRight,
+  MoreVertical,
+  BookOpen,
+  Building2,
+  ShieldAlert,
+  QrCode,
+  Calendar,
+  Layers,
+  Sparkles,
+  ExternalLink,
 } from 'lucide-react';
 
 export default function Navbar({ onToggleMobileMenu }) {
-  const { currentUser, signOutFromSupabase, isDarkMode, toggleDarkMode, unreadNotificationCount } = useApp();
+  const { currentUser, signOutFromSupabase, isDarkMode, toggleDarkMode, unreadNotificationCount, events, registrations } = useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const moreMenuRef = useRef(null);
 
   const activeRole = currentUser?.role || 'student';
   const avatarSeed = currentUser?.id || 'smart-user';
   const username = currentUser?.username || currentUser?.email?.split('@')[0] || 'user';
   const fullName = currentUser?.full_name || currentUser?.name || 'Smart User';
 
+  // Handle clicking outside of the 3-dots dropdown menu
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(event.target)) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+    if (isMoreMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMoreMenuOpen]);
+
   const handleLogout = async () => {
+    setIsMoreMenuOpen(false);
     await signOutFromSupabase();
     navigate('/login', { replace: true });
+  };
+
+  const handleExportFullSchedule = () => {
+    setIsMoreMenuOpen(false);
+    if (!events || events.length === 0) return;
+    const icsData = generateMultiEventICS(events, 'SmartSympo 2026 Programme');
+    downloadICSFile('smart-sympo-full-schedule.ics', icsData);
   };
 
   // Dynamic Breadcrumb Title mapping
@@ -99,8 +134,154 @@ export default function Navbar({ onToggleMobileMenu }) {
               </div>
             </div>
 
-            {/* 3. Controls: Dark Mode, Notification Bell & User Profile */}
+            {/* 3. Controls: Three Dots Menu, Dark Mode, Notification Bell & User Profile */}
             <div className="flex items-center gap-2">
+              {/* Three Dots More Actions & Dashboard Switcher Menu */}
+              <div className="relative" ref={moreMenuRef}>
+                <button
+                  onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+                  title="Open Dashboard & Quick Actions"
+                  className={`p-2 rounded-xl transition cursor-pointer border ${
+                    isMoreMenuOpen
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/25'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800'
+                  }`}
+                  aria-label="Three dots dashboard menu"
+                >
+                  <MoreVertical className="w-4 h-4" />
+                </button>
+
+                {/* Dropdown Menu Modal */}
+                {isMoreMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-[#121620] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 py-2 z-50 animate-fadeIn">
+                    {/* Header */}
+                    <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                      <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-indigo-500" />
+                        Open Dashboard
+                      </span>
+                      <span className="text-[10px] font-mono bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded font-bold uppercase">
+                        {activeRole}
+                      </span>
+                    </div>
+
+                    {/* Dashboard Options */}
+                    <div className="p-1.5 space-y-0.5">
+                      <Link
+                        to="/student"
+                        onClick={() => setIsMoreMenuOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition ${
+                          location.pathname === '/student'
+                            ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400'
+                            : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                          <BookOpen className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate">Student Dashboard</p>
+                          <p className="text-[10px] font-normal text-slate-400">Tracks, pass & schedule</p>
+                        </div>
+                      </Link>
+
+                      {(activeRole === 'coordinator' || activeRole === 'admin') && (
+                        <Link
+                          to="/coordinator"
+                          onClick={() => setIsMoreMenuOpen(false)}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition ${
+                            location.pathname === '/coordinator'
+                              ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0">
+                            <Building2 className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate">Venues & Coordinator</p>
+                            <p className="text-[10px] font-normal text-slate-400">Hall occupancy & alerts</p>
+                          </div>
+                        </Link>
+                      )}
+
+                      {(activeRole === 'coordinator' || activeRole === 'admin') && (
+                        <Link
+                          to="/scanner"
+                          onClick={() => setIsMoreMenuOpen(false)}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition ${
+                            location.pathname === '/scanner'
+                              ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                            <QrCode className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate">QR Entry Scanner</p>
+                            <p className="text-[10px] font-normal text-slate-400">Live delegate check-in</p>
+                          </div>
+                        </Link>
+                      )}
+
+                      {activeRole === 'admin' && (
+                        <Link
+                          to="/admin"
+                          onClick={() => setIsMoreMenuOpen(false)}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition ${
+                            location.pathname === '/admin'
+                              ? 'bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400'
+                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                          }`}
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                            <ShieldAlert className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate">Admin Analytics</p>
+                            <p className="text-[10px] font-normal text-slate-400">Full control & reports</p>
+                          </div>
+                        </Link>
+                      )}
+                    </div>
+
+                    {/* Divider */}
+                    <div className="my-1 border-t border-slate-100 dark:border-slate-800/80" />
+
+                    {/* Quick Tools */}
+                    <div className="p-1.5 space-y-0.5">
+                      <button
+                        onClick={handleExportFullSchedule}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition cursor-pointer text-left"
+                      >
+                        <Calendar className="w-4 h-4 text-indigo-500" />
+                        <span className="flex-1">Export Full Schedule (.ics)</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setIsMoreMenuOpen(false);
+                          setIsSettingsOpen(true);
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition cursor-pointer text-left"
+                      >
+                        <Settings className="w-4 h-4 text-slate-400" />
+                        <span className="flex-1">Account Preferences</span>
+                      </button>
+
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer text-left"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-500" />
+                        <span className="flex-1">Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Dark Mode Toggle */}
               <button
                 onClick={toggleDarkMode}
