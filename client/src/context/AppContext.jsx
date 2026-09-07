@@ -2382,6 +2382,48 @@ export const AppProvider = ({ children }) => {
     return { success: true, message: 'All accounts cleared successfully!' };
   };
 
+  // -------------------------------------------------------------------------
+  // Event Rating & Feedback Management
+  // -------------------------------------------------------------------------
+  const [eventFeedbacks, setEventFeedbacks] = useState(() => {
+    try {
+      const saved = localStorage.getItem('smart_sympo_event_feedbacks');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const submitEventFeedback = async (feedbackData) => {
+    const newFeedback = {
+      id: feedbackData.id || `fb_${Date.now()}`,
+      ...feedbackData,
+      created_at: feedbackData.created_at || new Date().toISOString(),
+    };
+
+    setEventFeedbacks((prev) => {
+      const updated = [newFeedback, ...(prev || [])];
+      try {
+        localStorage.setItem('smart_sympo_event_feedbacks', JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+
+    if (!isMockMode) {
+      try {
+        await supabase.from('event_feedback').insert(newFeedback);
+      } catch (err) {
+        console.warn('Supabase event_feedback insert fallback:', err);
+      }
+    }
+
+    return { success: true, feedback: newFeedback };
+  };
+
+  const getEventFeedback = (eventId) => {
+    return (eventFeedbacks || []).filter((fb) => fb.event_id === eventId);
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -2428,6 +2470,9 @@ export const AppProvider = ({ children }) => {
         unreadNotificationCount,
         isDarkMode,
         toggleDarkMode,
+        eventFeedbacks,
+        submitEventFeedback,
+        getEventFeedback,
       }}
     >
       {children}

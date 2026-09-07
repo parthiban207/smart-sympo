@@ -1,8 +1,8 @@
-// agent-notes: { ctx: "Neo-Glass Fest Conference Lanyard Badge with dynamic 15s rotating TOTP QR token, live status indicator, security watermark, and expired pass banner overlay", deps: ["react-qr-code", "lucide-react", "src/utils/eventTiming.js"], state: "active", last: "antigravity@2026-09-07" }
+// agent-notes: { ctx: "Neo-Glass Fest Conference Lanyard Badge with dynamic 15s rotating TOTP QR token, offline PWA caching, live status indicator, and security watermark", deps: ["react-qr-code", "lucide-react", "src/utils/eventTiming.js"], state: "active", last: "antigravity@2026-09-07" }
 
 import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
-import { RefreshCw, Clock, MapPin, Sparkles, Building, BookOpen, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Clock, MapPin, Sparkles, Building, BookOpen, ShieldCheck, AlertTriangle, WifiOff } from 'lucide-react';
 import { getEventTimingStatus } from '../utils/eventTiming';
 
 export default function StudentQRPass({
@@ -25,6 +25,21 @@ export default function StudentQRPass({
   const [timeLeft, setTimeLeft] = useState(15);
   const [tokenTimestamp, setTokenTimestamp] = useState(Date.now());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  // Offline detection listeners
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -147,6 +162,11 @@ export default function StudentQRPass({
               <span className="w-2 h-2 rounded-full bg-rose-500"></span>
               <span>EXPIRED PASS ❌</span>
             </div>
+          ) : !isOnline ? (
+            <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs animate-pulse">
+              <WifiOff className="w-3 h-3 text-amber-400" />
+              <span>OFFLINE PASS 📴</span>
+            </div>
           ) : eventTiming.isLive ? (
             <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-xs">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -159,6 +179,13 @@ export default function StudentQRPass({
             </div>
           )}
         </div>
+
+        {!isOnline && (
+          <div className="bg-amber-950/40 border border-amber-700/50 rounded-xl px-3 py-2 text-[11px] text-amber-300 flex items-center gap-2">
+            <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Offline cached pass active. You can still scan and enter the hall without internet.</span>
+          </div>
+        )}
 
         {/* Student Info: Name, Roll No badge, Dept & College */}
         <div className="space-y-2 relative z-10">

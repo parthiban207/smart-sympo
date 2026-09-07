@@ -24,6 +24,8 @@ import {
 import QRScannerModal from '../components/QRScannerModal';
 import ViewRegisteredStudentsModal from '../components/ViewRegisteredStudentsModal';
 import EmergencyBroadcastModal from '../components/EmergencyBroadcastModal';
+import SeatCapacityHeatmap from '../components/SeatCapacityHeatmap';
+import CoordinatorLeaderboard from '../components/CoordinatorLeaderboard';
 import {
   ShieldCheck, PlusCircle, MapPin, Radio, UserCheck, Users,
   Globe, Crosshair, Ruler, FileText, ScanLine, Clock, Hash, CheckCircle2, AlertCircle,
@@ -33,11 +35,11 @@ import {
 
 export default function AdminAnalytics() {
   const {
-    events, fetchEvents, registrations, setRegistrations, attendanceLogs, setAttendanceLogs,
-    addEvent, updateEvent, deleteEvent, unregisterForEvent, currentUser, profilesList, setProfilesList,
-    updateUserRole, createCoordinatorAccount, deleteUserAccount, clearAllAccounts, liveAlerts,
+    events = [], fetchEvents, registrations = [], setRegistrations, attendanceLogs = [], setAttendanceLogs,
+    addEvent, updateEvent, deleteEvent, unregisterForEvent, currentUser, profilesList = [], setProfilesList,
+    updateUserRole, createCoordinatorAccount, deleteUserAccount, clearAllAccounts, liveAlerts = [],
     clearGlobalEmergencyBroadcast
-  } = useApp();
+  } = useApp() || {};
   const { onlineUsers, onlineCount } = usePresence();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -93,7 +95,7 @@ export default function AdminAnalytics() {
 
   // Initial Data Fetch & Live Supabase Realtime Subscription on registrations
   useEffect(() => {
-    fetchEvents();
+    if (fetchEvents) fetchEvents();
     fetchAttendanceList();
 
     if (!isMockMode) {
@@ -131,6 +133,7 @@ export default function AdminAnalytics() {
 
   // Real-Time Attendance Search & Filter State
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState('');
+  const debouncedAttendanceQuery = useDebounce(attendanceSearchQuery, 200);
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('ALL'); // 'ALL' | 'ATTENDED' | 'PENDING'
 
   // Spreadsheet Export Feedback State
@@ -887,8 +890,8 @@ export default function AdminAnalytics() {
     (a) => a.isEmergency || a.severity === 'emergency' || a.type === 'emergency'
   );
 
-  const activeExportEvent = events.find((e) => e.id === (selectedExportEventId || events[0]?.id)) || events[0];
-  const activeExportEventRegs = activeExportEvent ? registrations.filter((r) => r.event_id === activeExportEvent.id) : [];
+  const activeExportEvent = (events || []).find((e) => e.id === (selectedExportEventId || events?.[0]?.id)) || events?.[0] || null;
+  const activeExportEventRegs = activeExportEvent ? (registrations || []).filter((r) => r.event_id === activeExportEvent.id) : [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -1344,6 +1347,11 @@ export default function AdminAnalytics() {
               </tbody>
             </table>
           </div>
+
+          {/* Coordinator Speed Leaderboard */}
+          <div className="pt-2">
+            <CoordinatorLeaderboard attendanceLogs={attendanceLogs} profilesList={profilesList} />
+          </div>
         </div>
       )}
 
@@ -1381,18 +1389,12 @@ export default function AdminAnalytics() {
                     </p>
                   </div>
 
-                  {/* Occupancy Indicator */}
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex justify-between text-xs font-semibold">
-                      <span className="text-slate-500">Occupancy</span>
-                      <span className="text-slate-900 font-bold">{regCount} / {evt.max_capacity || 100} ({occupancyPercent}%)</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div
-                        className="bg-indigo-600 h-full rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(100, occupancyPercent)}%` }}
-                      ></div>
-                    </div>
+                  {/* Dynamic Seat Capacity Heatmap */}
+                  <div className="pt-1">
+                    <SeatCapacityHeatmap
+                      registeredCount={regCount}
+                      maxCapacity={evt.max_capacity || evt.max_seats || 100}
+                    />
                   </div>
                 </div>
 

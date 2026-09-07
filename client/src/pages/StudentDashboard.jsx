@@ -1,10 +1,12 @@
-// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with memoized debounced search, dynamic event timing, countdowns, three-dots action menus, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/utils/calendarExport.js", "src/utils/eventTiming.js", "src/hooks/useDebounce.js", "lucide-react"], state: "active", last: "antigravity@2026-09-07" }
+// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with memoized debounced search, dynamic event timing, seat capacity heatmap, WhatsApp share, event ratings, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/components/SeatCapacityHeatmap.jsx", "src/components/EventFeedbackModal.jsx", "src/utils/calendarExport.js", "src/utils/eventTiming.js", "src/hooks/useDebounce.js", "lucide-react"], state: "active", last: "antigravity@2026-09-07" }
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import StudentQRModal from '../components/StudentQRModal';
 import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
 import SessionDetailsModal from '../components/SessionDetailsModal';
+import SeatCapacityHeatmap from '../components/SeatCapacityHeatmap';
+import EventFeedbackModal from '../components/EventFeedbackModal';
 import { getEventTimingStatus, useCurrentTime } from '../utils/eventTiming';
 import { useDebounce } from '../hooks/useDebounce';
 import {
@@ -29,12 +31,15 @@ import {
   ChevronDown,
   Info,
   Check,
+  Star,
+  MessageCircle,
 } from 'lucide-react';
 
 export default function StudentDashboard() {
   const { currentUser, events, fetchEvents, registrations, registerForEvent, unregisterForEvent } = useApp();
   const [selectedPassEvent, setSelectedPassEvent] = useState(null);
   const [selectedDetailEvent, setSelectedDetailEvent] = useState(null);
+  const [feedbackModalEvent, setFeedbackModalEvent] = useState(null);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [successModalData, setSuccessModalData] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -198,6 +203,20 @@ export default function StudentDashboard() {
   const handleOpenDetails = (event) => {
     setActiveMenuId(null);
     setSelectedDetailEvent(event);
+  };
+
+  const handleOpenFeedback = (event) => {
+    setActiveMenuId(null);
+    setFeedbackModalEvent(event);
+  };
+
+  const handleShareWhatsApp = (event) => {
+    setActiveMenuId(null);
+    const startFormatted = event.start_time
+      ? new Date(event.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : 'Scheduled';
+    const text = `🎓 *SmartSympo 2026 Session*: ${event.title}\n📍 *Hall / Venue*: ${event.hall_number || 'Main Venue'}\n⏰ *Time*: ${startFormatted}\n🏷️ *Track*: ${event.category || 'Technical Session'}\n\n👉 *Join and view pass*: ${window.location.origin}/student?session=${event.id}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handleCopyLink = (event) => {
@@ -594,6 +613,14 @@ export default function StudentDashboard() {
                                 </button>
 
                                 <button
+                                  onClick={() => handleShareWhatsApp(event)}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition cursor-pointer text-left font-medium"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                  <span>Share via WhatsApp</span>
+                                </button>
+
+                                <button
                                   onClick={() => handleCopyLink(event)}
                                   className="w-full flex items-center gap-2.5 px-3.5 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition cursor-pointer text-left font-medium"
                                 >
@@ -608,6 +635,14 @@ export default function StudentDashboard() {
                                       <span>Share Track Link</span>
                                     </>
                                   )}
+                                </button>
+
+                                <button
+                                  onClick={() => handleOpenFeedback(event)}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition cursor-pointer text-left font-medium"
+                                >
+                                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-500" />
+                                  <span>Rate & Review Event</span>
                                 </button>
 
                                 {!timing.isExpired && (
@@ -633,8 +668,8 @@ export default function StudentDashboard() {
                         {event.description}
                       </p>
 
-                      {/* Meta Bar: Time, Hall, Occupancy & Actions */}
-                      <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 flex-wrap gap-2">
+                      {/* Meta Bar: Time, Hall, Live Seat Heatmap & Actions */}
+                      <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 flex-wrap gap-3">
                         <div className="flex items-center gap-4 flex-wrap">
                           <span className="flex items-center gap-1 font-mono text-[11px] font-medium text-slate-700 dark:text-slate-300">
                             <Clock className="w-3.5 h-3.5 text-indigo-500" />
@@ -644,19 +679,27 @@ export default function StudentDashboard() {
                             <MapPin className="w-3.5 h-3.5" />
                             {event.hall_number}
                           </span>
-                          <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                            {capPct}% ({regCount}/{maxCap})
-                          </span>
+                          <SeatCapacityHeatmap registeredCount={regCount} maxCapacity={maxCap} compact={true} />
                         </div>
 
-                        {!timing.isExpired && (
+                        <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleUnregister(event.id)}
-                            className="text-[11px] font-mono text-rose-500 hover:text-rose-400 hover:underline font-semibold cursor-pointer"
+                            onClick={() => handleOpenFeedback(event)}
+                            className="text-[11px] font-mono text-amber-600 hover:text-amber-500 font-bold inline-flex items-center gap-1 cursor-pointer"
                           >
-                            Cancel
+                            <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
+                            <span>Feedback</span>
                           </button>
-                        )}
+
+                          {!timing.isExpired && (
+                            <button
+                              onClick={() => handleUnregister(event.id)}
+                              className="text-[11px] font-mono text-rose-500 hover:text-rose-400 hover:underline font-semibold cursor-pointer ml-2"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -783,6 +826,14 @@ export default function StudentDashboard() {
                                 </button>
 
                                 <button
+                                  onClick={() => handleShareWhatsApp(event)}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition cursor-pointer text-left font-medium"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />
+                                  <span>Share via WhatsApp</span>
+                                </button>
+
+                                <button
                                   onClick={() => handleCopyLink(event)}
                                   className="w-full flex items-center gap-2.5 px-3.5 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition cursor-pointer text-left font-medium"
                                 >
@@ -821,12 +872,10 @@ export default function StudentDashboard() {
                         {event.description}
                       </p>
 
-                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800 flex-wrap gap-2">
                         <span className="text-cyan-500 dark:text-cyan-400 font-semibold">{event.hall_number}</span>
                         <span>{formatTime(event.start_time)}</span>
-                        <span className="font-bold text-slate-700 dark:text-slate-300">
-                          {regCount}/{maxCap} Seats
-                        </span>
+                        <SeatCapacityHeatmap registeredCount={regCount} maxCapacity={maxCap} compact={true} />
                       </div>
                     </div>
                   );
@@ -846,6 +895,19 @@ export default function StudentDashboard() {
           </div>
         )}
       </div>
+
+      {/* Event Feedback & Rating Modal */}
+      {feedbackModalEvent && (
+        <EventFeedbackModal
+          isOpen={Boolean(feedbackModalEvent)}
+          onClose={() => setFeedbackModalEvent(null)}
+          event={feedbackModalEvent}
+          onSubmitted={() => {
+            setFeedback({ success: true, message: 'Thank you for your rating and feedback!' });
+            setTimeout(() => setFeedback(null), 3500);
+          }}
+        />
+      )}
 
       {/* Session Details Modal */}
       {selectedDetailEvent && (

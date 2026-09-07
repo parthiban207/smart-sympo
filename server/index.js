@@ -22,8 +22,8 @@ app.use(express.json());
 
 // 1. Email Service Configuration - Gmail SMTP Transporter
 const createGmailTransporter = () => {
-  const gmailUser = process.env.GMAIL_USER;
-  const gmailPass = process.env.GMAIL_APP_PASSWORD;
+  const gmailUser = (process.env.GMAIL_USER || '').trim();
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
 
   if (!gmailUser || !gmailPass) {
     console.warn('[Nodemailer Warning] GMAIL_USER or GMAIL_APP_PASSWORD not set in environment. Running in simulated fallback mode.');
@@ -42,8 +42,8 @@ const transporter = createGmailTransporter();
 
 // Helper to send email or simulate gracefully if credentials are not active
 const dispatchEmail = async ({ to, subject, text, html }) => {
-  const gmailUser = process.env.GMAIL_USER;
-  const gmailPass = process.env.GMAIL_APP_PASSWORD;
+  const gmailUser = (process.env.GMAIL_USER || '').trim();
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
   const senderEmail = gmailUser || 'noreply@smartsympo.edu';
 
   const mailOptions = {
@@ -436,7 +436,59 @@ app.post('/api/send-login-alert', async (req, res) => {
   }
 });
 
+// =========================================================================
+// 3. WHATSAPP & SMS RELAY ENDPOINTS
+// =========================================================================
+app.post('/api/relay-whatsapp', async (req, res) => {
+  try {
+    const { phone, message, eventTitle, venue } = req.body || {};
+    if (!message && !eventTitle) {
+      return res.status(400).json({ success: false, error: 'Message or eventTitle required.' });
+    }
+
+    const payloadText = message || `🎓 SmartSympo Alert: Session "${eventTitle}" update at venue "${venue || 'Main Hall'}".`;
+    const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+    const waLink = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(payloadText)}`
+      : `https://api.whatsapp.com/send?text=${encodeURIComponent(payloadText)}`;
+
+    console.log(`[WhatsApp Relay] Prepared message for ${cleanPhone || 'Broadcast'}:`, payloadText);
+    return res.status(200).json({
+      success: true,
+      relayed: true,
+      service: 'WhatsApp Relay Gateway',
+      phone: cleanPhone || 'Broadcast',
+      waLink,
+      message: payloadText,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/relay-sms', async (req, res) => {
+  try {
+    const { phone, message, eventTitle } = req.body || {};
+    if (!phone || (!message && !eventTitle)) {
+      return res.status(400).json({ success: false, error: 'Phone number and message required.' });
+    }
+
+    const smsText = message || `SmartSympo Notice: Important update for session ${eventTitle || 'Symposium'}.`;
+    console.log(`[SMS Gateway Simulated] Dispatched SMS to ${phone}: ${smsText}`);
+
+    return res.status(200).json({
+      success: true,
+      dispatched: true,
+      phone,
+      message: smsText,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
-  console.log(`[Smart-Sympo Email Service] Running on http://localhost:${PORT}`);
+  console.log(`[Smart-Sympo Email & Relay Service] Running on http://localhost:${PORT}`);
   console.log(`[SMTP Status] GMAIL_USER: ${process.env.GMAIL_USER ? process.env.GMAIL_USER : 'Not set (Simulation Mode Active)'}`);
 });

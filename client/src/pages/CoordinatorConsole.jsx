@@ -8,6 +8,8 @@ import PassCodeGuardModal from '../components/PassCodeGuardModal';
 import StudentQRModal from '../components/StudentQRModal';
 import ViewRegisteredStudentsModal from '../components/ViewRegisteredStudentsModal';
 import EmergencyBroadcastModal from '../components/EmergencyBroadcastModal';
+import SeatCapacityHeatmap from '../components/SeatCapacityHeatmap';
+import CoordinatorLeaderboard from '../components/CoordinatorLeaderboard';
 import {
   Camera,
   MapPin,
@@ -646,11 +648,18 @@ export default function CoordinatorConsole() {
                     End
                   </button>
                 </div>
+
+                <div className="pt-2 border-t border-slate-100">
+                  <SeatCapacityHeatmap
+                    registeredCount={stats?.totalRegistered || 0}
+                    maxCapacity={currentEvent?.max_capacity || 100}
+                  />
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Recent Scans Relational Feed (5 Cols) */}
+          {/* Recent Scans Relational Feed & Coordinator Leaderboard (5 Cols) */}
           <div className="lg:col-span-5 space-y-6">
             <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/90 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
@@ -664,7 +673,7 @@ export default function CoordinatorConsole() {
               </div>
 
               {/* Clean Lightweight Scans List with Real Student Names, Roll No, & Scanned Time */}
-              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
                 {(recentScans || []).length === 0 ? (
                   <div className="text-center py-12 text-xs text-slate-400 font-medium">
                     No scans recorded yet for {currentEvent?.title || 'this event'}.
@@ -722,6 +731,9 @@ export default function CoordinatorConsole() {
                 )}
               </div>
             </div>
+
+            {/* Coordinator Speed Leaderboard */}
+            <CoordinatorLeaderboard attendanceLogs={recentScans} profilesList={profilesList} />
           </div>
         </div>
       )}
