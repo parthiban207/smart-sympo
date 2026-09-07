@@ -1,8 +1,8 @@
-// agent-notes: { ctx: "Neo-Glass Fest Conference Lanyard Badge with dynamic 15s rotating TOTP QR token, offline PWA caching, live status indicator, and security watermark", deps: ["react-qr-code", "lucide-react", "src/utils/eventTiming.js"], state: "active", last: "antigravity@2026-09-07" }
+// agent-notes: { ctx: "Neo-Glass Fest Conference Lanyard Badge with dynamic 15s rotating TOTP QR token, direct X close button, offline PWA caching, live status indicator, and security watermark", deps: ["react-qr-code", "lucide-react", "src/utils/eventTiming.js"], state: "active", last: "antigravity@2026-09-07" }
 
 import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
-import { RefreshCw, Clock, MapPin, Sparkles, Building, BookOpen, ShieldCheck, AlertTriangle, WifiOff } from 'lucide-react';
+import { RefreshCw, Clock, MapPin, Sparkles, Building, BookOpen, ShieldCheck, AlertTriangle, WifiOff, X } from 'lucide-react';
 import { getEventTimingStatus } from '../utils/eventTiming';
 
 export default function StudentQRPass({
@@ -21,6 +21,7 @@ export default function StudentQRPass({
   endTime,
   user,
   profile,
+  onClose,
 }) {
   const [timeLeft, setTimeLeft] = useState(15);
   const [tokenTimestamp, setTokenTimestamp] = useState(Date.now());
@@ -145,8 +146,8 @@ export default function StudentQRPass({
         <div className="absolute -top-16 -right-16 w-36 h-36 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute -bottom-16 -left-16 w-36 h-36 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none"></div>
 
-        {/* Top: Event Title ("SmartSympo 2026") & Live Pulse Status */}
-        <div className="flex items-center justify-between border-b border-slate-700/50 pb-3 relative z-10">
+        {/* Top: Event Title ("SmartSympo 2026") & Live Pulse Status & Close X Button */}
+        <div className="flex items-center justify-between border-b border-slate-700/50 pb-3 relative z-10 gap-2">
           <div className="space-y-0.5">
             <div className="flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
@@ -157,27 +158,43 @@ export default function StudentQRPass({
             <p className="text-[10px] text-slate-400 font-mono">National Tech Symposium</p>
           </div>
 
-          {eventTiming.isExpired ? (
-            <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-              <span>EXPIRED PASS ❌</span>
-            </div>
-          ) : !isOnline ? (
-            <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs animate-pulse">
-              <WifiOff className="w-3 h-3 text-amber-400" />
-              <span>OFFLINE PASS 📴</span>
-            </div>
-          ) : eventTiming.isLive ? (
-            <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>LIVE NOW</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 shadow-xs">
-              <Clock className="w-2.5 h-2.5 text-indigo-400" />
-              <span>ENTRY PASS</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {eventTiming.isExpired ? (
+              <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                <span>EXPIRED PASS</span>
+              </div>
+            ) : !isOnline ? (
+              <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-xs animate-pulse">
+                <WifiOff className="w-3 h-3 text-amber-400" />
+                <span>OFFLINE PASS 📴</span>
+              </div>
+            ) : eventTiming.isLive ? (
+              <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>LIVE NOW</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 shadow-xs">
+                <Clock className="w-2.5 h-2.5 text-indigo-400" />
+                <span>ENTRY PASS</span>
+              </div>
+            )}
+
+            {onClose && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+                className="p-1.5 rounded-xl bg-slate-800/90 hover:bg-rose-500/25 text-slate-300 hover:text-rose-400 border border-slate-700/80 hover:border-rose-500/50 transition-all cursor-pointer shadow-xs active:scale-95"
+                title="Close Entry Pass (Esc)"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {!isOnline && (

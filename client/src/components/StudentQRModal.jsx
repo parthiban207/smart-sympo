@@ -74,17 +74,8 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm relative text-center animate-slideUp"
+        className="w-full max-w-sm relative text-center animate-slideUp flex flex-col items-center"
       >
-        {/* Floating Top-Right Close ('✕') Button */}
-        <button
-          onClick={onClose}
-          className="absolute -top-12 right-0 p-2 rounded-xl bg-slate-900/90 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 border border-slate-700/80 hover:border-rose-500/40 transition-all cursor-pointer shadow-lg backdrop-blur-md z-20"
-          title="Close Pass (Esc)"
-        >
-          <X className="w-4 h-4" />
-        </button>
-
         {/* Dynamic Refreshing Conference Lanyard Pass */}
         <StudentQRPass
           studentId={validStudentId}
@@ -106,7 +97,18 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
           endTime={displayEvent.end_time}
           user={currentUser}
           profile={currentUser}
+          onClose={onClose}
         />
+
+        {/* Bottom Floating Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-4 px-6 py-2.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-bold font-mono transition-all cursor-pointer shadow-lg inline-flex items-center gap-2 active:scale-95"
+        >
+          <X className="w-3.5 h-3.5 text-rose-400" />
+          <span>Close Entry Pass</span>
+        </button>
       </div>
     </div>
   );
