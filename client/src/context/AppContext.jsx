@@ -1074,10 +1074,13 @@ export const AppProvider = ({ children }) => {
     setIsAuthenticated(true);
     setSession(authSession);
 
-    // Check first_login flag for automated Welcome Email trigger
-    const isFirstLogin = Boolean(profile?.first_login === true || profile?.first_login === 'true');
+    // Guaranteed Welcome Email dispatch for first login or newly registered student
+    const welcomeDispatchedKey = `smart_sympo_welcome_dispatched_${synced.email?.toLowerCase()}`;
+    const wasWelcomeDispatched = typeof window !== 'undefined' ? localStorage.getItem(welcomeDispatchedKey) : null;
+    const isFirstLogin = Boolean(profile?.first_login === true || profile?.first_login === 'true' || !wasWelcomeDispatched);
 
-    if (isFirstLogin) {
+    if (isFirstLogin && !wasWelcomeDispatched) {
+      console.log('[Auth] Dispatching automated Welcome Email for student first login:', synced.email);
       // Send Welcome & First Login Email asynchronously in background
       sendWelcomeEmailApi({
         email: synced.email,
@@ -1097,6 +1100,10 @@ export const AppProvider = ({ children }) => {
         collegeName: synced.college_name || synced.college || '',
         department: synced.department || '',
       }).catch((err) => console.warn('[Welcome EmailJS Error]:', err));
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(welcomeDispatchedKey, new Date().toISOString());
+      }
 
       // Mark first_login = false in Supabase & Local state
       if (!isMockMode && isValidUUID(synced.id)) {
