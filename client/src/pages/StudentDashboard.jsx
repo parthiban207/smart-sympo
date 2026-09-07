@@ -109,48 +109,36 @@ export default function StudentDashboard() {
     return ['All', ...Array.from(new Set(events.map((e) => e.category || 'Technical Session').filter(Boolean)))];
   }, [events]);
 
-  // Memoized Multi-Field Filtering (Null-safe, Case-insensitive, Debounced)
+  // Memoized Multi-Field & Multi-Term Filtering (Null-safe, Case-insensitive, Debounced)
   const filteredRegisteredEvents = useMemo(() => {
     const q = debouncedSearchQuery.trim().toLowerCase();
+    const terms = q ? q.split(/\s+/).filter(Boolean) : [];
+
     return registeredEvents.filter((item) => {
       const matchesCategory =
         selectedCategory === 'All' || (item.category || item.type || 'Technical Session') === selectedCategory;
       if (!matchesCategory) return false;
-      if (!q) return true;
+      if (terms.length === 0) return true;
 
-      const title = (item.title || item.name || '').toLowerCase();
-      const venue = (item.venue || item.hall_number || '').toLowerCase();
-      const description = (item.description || '').toLowerCase();
-      const category = (item.category || item.type || 'Technical Session').toLowerCase();
+      const combined = `${item.title || ''} ${item.name || ''} ${item.venue || ''} ${item.hall_number || ''} ${item.description || ''} ${item.category || ''} ${item.type || ''}`.toLowerCase();
 
-      return (
-        title.includes(q) ||
-        venue.includes(q) ||
-        description.includes(q) ||
-        category.includes(q)
-      );
+      return terms.every((term) => combined.includes(term));
     });
   }, [registeredEvents, debouncedSearchQuery, selectedCategory]);
 
   const filteredAvailableEvents = useMemo(() => {
     const q = debouncedSearchQuery.trim().toLowerCase();
+    const terms = q ? q.split(/\s+/).filter(Boolean) : [];
+
     return availableEvents.filter((item) => {
       const matchesCategory =
         selectedCategory === 'All' || (item.category || item.type || 'Technical Session') === selectedCategory;
       if (!matchesCategory) return false;
-      if (!q) return true;
+      if (terms.length === 0) return true;
 
-      const title = (item.title || item.name || '').toLowerCase();
-      const venue = (item.venue || item.hall_number || '').toLowerCase();
-      const description = (item.description || '').toLowerCase();
-      const category = (item.category || item.type || 'Technical Session').toLowerCase();
+      const combined = `${item.title || ''} ${item.name || ''} ${item.venue || ''} ${item.hall_number || ''} ${item.description || ''} ${item.category || ''} ${item.type || ''}`.toLowerCase();
 
-      return (
-        title.includes(q) ||
-        venue.includes(q) ||
-        description.includes(q) ||
-        category.includes(q)
-      );
+      return terms.every((term) => combined.includes(term));
     });
   }, [availableEvents, debouncedSearchQuery, selectedCategory]);
 

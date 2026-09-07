@@ -286,18 +286,15 @@ export default function AdminAnalytics() {
   // Memoized filtering based on debounced search query and status filter
   const filteredAttendanceRecords = useMemo(() => {
     const q = debouncedAttendanceQuery.trim().toLowerCase();
+    const terms = q ? q.split(/\s+/).filter(Boolean) : [];
 
     return joinedAttendanceRecords.filter((record) => {
-      const matchesQuery =
-        !q ||
-        record.student_name.toLowerCase().includes(q) ||
-        record.roll_no.toLowerCase().includes(q) ||
-        record.college_name.toLowerCase().includes(q) ||
-        record.event_title.toLowerCase().includes(q) ||
-        record.email.toLowerCase().includes(q) ||
-        record.department.toLowerCase().includes(q);
+      if (terms.length > 0) {
+        const combined = `${record.student_name || ''} ${record.roll_no || ''} ${record.college_name || ''} ${record.event_title || ''} ${record.email || ''} ${record.department || ''} ${record.hall_number || ''}`.toLowerCase();
+        const matchesAllTerms = terms.every((term) => combined.includes(term));
+        if (!matchesAllTerms) return false;
+      }
 
-      if (!matchesQuery) return false;
       if (attendanceStatusFilter === 'ATTENDED') return record.is_attended;
       if (attendanceStatusFilter === 'PENDING') return !record.is_attended;
       return true;
