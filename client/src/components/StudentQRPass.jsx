@@ -1,8 +1,9 @@
-// agent-notes: { ctx: "Neo-Glass Fest Conference Lanyard Badge with dynamic 15s rotating TOTP QR token, live status indicator, and security watermark", deps: ["react-qr-code", "lucide-react"], state: "active", last: "antigravity@2026-09-01" }
+// agent-notes: { ctx: "Neo-Glass Fest Conference Lanyard Badge with dynamic 15s rotating TOTP QR token, live status indicator, security watermark, and expired pass banner overlay", deps: ["react-qr-code", "lucide-react", "src/utils/eventTiming.js"], state: "active", last: "antigravity@2026-09-07" }
 
 import { useState, useEffect } from 'react';
 import QRCode from 'react-qr-code';
-import { RefreshCw, Clock, MapPin, Sparkles, Building, BookOpen, ShieldCheck } from 'lucide-react';
+import { RefreshCw, Clock, MapPin, Sparkles, Building, BookOpen, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { getEventTimingStatus } from '../utils/eventTiming';
 
 export default function StudentQRPass({
   studentId,
@@ -15,6 +16,9 @@ export default function StudentQRPass({
   department,
   eventTitle,
   hallNumber,
+  event,
+  startTime,
+  endTime,
   user,
   profile,
 }) {
@@ -81,6 +85,16 @@ export default function StudentQRPass({
     profile?.email ||
     '';
 
+  // Calculate dynamic timing status for target event
+  const targetEvent = event || {
+    id: eventId,
+    title: eventTitle,
+    hall_number: hallNumber,
+    start_time: startTime,
+    end_time: endTime,
+  };
+  const eventTiming = getEventTimingStatus(targetEvent, tokenTimestamp);
+
   // Clean JSON payload encoding student ID, profile metadata, and timestamp
   const qrPayload = JSON.stringify({
     student_id: resolvedStudentId,
@@ -92,6 +106,7 @@ export default function StudentQRPass({
     event_id: eventId || 'general',
     registration_id: registrationId || '',
     email: resolvedEmail,
+    is_expired: eventTiming.isExpired,
   });
 
   const progressPercent = ((15 - timeLeft) / 15) * 100;
@@ -127,10 +142,22 @@ export default function StudentQRPass({
             <p className="text-[10px] text-slate-400 font-mono">National Tech Symposium</p>
           </div>
 
-          <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>LIVE BADGE</span>
-          </div>
+          {eventTiming.isExpired ? (
+            <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+              <span>EXPIRED PASS ❌</span>
+            </div>
+          ) : eventTiming.isLive ? (
+            <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>LIVE NOW</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 shadow-xs">
+              <Clock className="w-2.5 h-2.5 text-indigo-400" />
+              <span>ENTRY PASS</span>
+            </div>
+          )}
         </div>
 
         {/* Student Info: Name, Roll No badge, Dept & College */}
@@ -159,8 +186,8 @@ export default function StudentQRPass({
 
         {/* Centerpiece: High-Contrast QR Code Box with Luminous Gradient Border */}
         <div className="relative flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-900/80 border border-slate-800/80 z-10">
-          <div className="relative p-1 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 shadow-lg shadow-indigo-500/20">
-            <div className="bg-white p-3.5 rounded-[14px] flex items-center justify-center w-[200px] h-[200px] aspect-square shadow-inner">
+          <div className="relative p-1 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-cyan-400 shadow-lg shadow-indigo-500/20 overflow-hidden">
+            <div className="bg-white p-3.5 rounded-[14px] flex items-center justify-center w-[200px] h-[200px] aspect-square shadow-inner relative">
               <QRCode
                 value={qrPayload}
                 size={180}
@@ -168,10 +195,25 @@ export default function StudentQRPass({
                 style={{ height: '100%', maxWidth: '100%', width: '100%' }}
                 viewBox={`0 0 256 256`}
               />
+
+              {/* Expired Pass Banner Overlay over QR Code */}
+              {eventTiming.isExpired && (
+                <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md rounded-[14px] flex flex-col items-center justify-center p-4 text-center z-30 border-2 border-rose-500/60 shadow-2xl animate-fadeIn">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center mb-2 shadow-lg shadow-rose-950/50">
+                    <AlertTriangle className="w-5 h-5 text-rose-400" />
+                  </div>
+                  <span className="font-extrabold text-xs font-mono text-rose-400 uppercase tracking-wider leading-tight">
+                    Event Completed — Pass Expired
+                  </span>
+                  <p className="text-[10px] text-slate-300 mt-1 font-medium leading-tight">
+                    Unauthorized late entries restricted
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Refreshing Overlay */}
-            {isRefreshing && (
+            {!eventTiming.isExpired && isRefreshing && (
               <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-xs rounded-2xl flex flex-col items-center justify-center gap-2 text-white transition-opacity">
                 <RefreshCw className="w-7 h-7 text-cyan-400 animate-spin" />
                 <span className="text-[10px] font-mono font-bold text-cyan-300 uppercase tracking-widest">
@@ -181,21 +223,29 @@ export default function StudentQRPass({
             )}
           </div>
 
-          {/* 15s Countdown Progress Indicator Bar */}
+          {/* 15s Countdown Progress Indicator Bar or Expired Status */}
           <div className="w-full max-w-[210px] mt-3 space-y-1.5">
             <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3 text-indigo-400" />
-                <span>Auto-Refreshes in</span>
+                <span>{eventTiming.isExpired ? 'Pass Validity' : 'Auto-Refreshes in'}</span>
               </span>
-              <span className="font-bold text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">
-                {timeLeft}s
+              <span className={`font-bold px-1.5 py-0.5 rounded border ${
+                eventTiming.isExpired
+                  ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                  : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+              }`}>
+                {eventTiming.isExpired ? 'Expired' : `${timeLeft}s`}
               </span>
             </div>
             <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 h-1.5 transition-all duration-1000 ease-linear rounded-full"
-                style={{ width: `${progressPercent}%` }}
+                className={`h-1.5 transition-all duration-1000 ease-linear rounded-full ${
+                  eventTiming.isExpired
+                    ? 'bg-rose-500 w-full'
+                    : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400'
+                }`}
+                style={{ width: eventTiming.isExpired ? '100%' : `${progressPercent}%` }}
               ></div>
             </div>
           </div>
@@ -234,3 +284,4 @@ export default function StudentQRPass({
     </div>
   );
 }
+

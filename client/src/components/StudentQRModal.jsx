@@ -101,6 +101,9 @@ export default function StudentQRModal({ isOpen, onClose, event }) {
           department={currentUser?.department || 'CSE'}
           eventTitle={displayEvent.title}
           hallNumber={displayEvent.hall_number}
+          event={displayEvent}
+          startTime={displayEvent.start_time}
+          endTime={displayEvent.end_time}
           user={currentUser}
           profile={currentUser}
         />

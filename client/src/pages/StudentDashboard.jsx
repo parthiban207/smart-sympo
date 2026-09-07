@@ -1,10 +1,11 @@
-// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with three-dots action menus, metrics ribbon, certificate progress tracker, category filters, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/utils/calendarExport.js", "lucide-react"], state: "active", last: "antigravity@2026-09-01" }
+// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with dynamic event timing, countdowns, three-dots action menus, metrics ribbon, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/utils/calendarExport.js", "src/utils/eventTiming.js", "lucide-react"], state: "active", last: "antigravity@2026-09-07" }
 
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import StudentQRModal from '../components/StudentQRModal';
 import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
 import SessionDetailsModal from '../components/SessionDetailsModal';
+import { getEventTimingStatus, useCurrentTime } from '../utils/eventTiming';
 import {
   Clock,
   MapPin,
@@ -36,6 +37,9 @@ export default function StudentDashboard() {
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [successModalData, setSuccessModalData] = useState(null);
   const [feedback, setFeedback] = useState(null);
+
+  // Dynamic 60-second timer hook for auto-ticking countdowns
+  const currentTime = useCurrentTime(60000);
 
   // Search and Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -108,11 +112,22 @@ export default function StudentDashboard() {
 
   const handleRegister = async (eventId) => {
     setActiveMenuId(null);
+    const target = events.find((e) => e.id === eventId);
+    const timing = getEventTimingStatus(target, currentTime);
+    if (timing.isExpired) {
+      setFeedback({
+        success: false,
+        message: 'This event timing is over. Registration is closed.',
+      });
+      setTimeout(() => setFeedback(null), 4000);
+      return;
+    }
+
     const res = await registerForEvent(eventId);
     setFeedback(res);
     if (res?.success) {
       setSuccessModalData({
-        event: res.event || events.find((e) => e.id === eventId),
+        event: res.event || target,
         emailResult: res.emailResult,
         passToken: res.passToken,
       });
@@ -150,36 +165,40 @@ export default function StudentDashboard() {
     return new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const getStatusBadge = (status, delayMins) => {
-    if (delayMins > 0) {
+  const renderDynamicBadge = (event, timing) => {
+    if (event.delay_minutes > 0 && timing.status !== 'EXPIRED') {
       return (
-        <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800 inline-flex items-center gap-1">
-          <Clock className="w-3 h-3 text-amber-600" />
-          <span>Delayed ({delayMins}m)</span>
+        <span className="px-2.5 py-0.5 rounded-lg font-mono text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 inline-flex items-center gap-1.5 shadow-xs">
+          <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400 animate-pulse" />
+          <span>Delayed ({event.delay_minutes}m) • Starts in: {timing.countdownText} ⏳</span>
         </span>
       );
     }
-    switch (status) {
-      case 'In Progress':
-        return (
-          <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-emerald-50 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 inline-flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping"></span>
-            <span>Live Session</span>
-          </span>
-        );
-      case 'Completed':
-        return (
-          <span className="px-2 py-0.5 rounded font-mono text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-            Concluded
-          </span>
-        );
-      default:
-        return (
-          <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-blue-50 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-            Scheduled
-          </span>
-        );
+
+    if (timing.status === 'EXPIRED') {
+      return (
+        <span className="px-2.5 py-0.5 rounded-lg font-mono text-[10px] font-bold bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/30 inline-flex items-center gap-1.5 shadow-xs">
+          <span>Event Ended / Timing Over ❌</span>
+        </span>
+      );
     }
+
+    if (timing.status === 'LIVE_NOW') {
+      return (
+        <span className="px-2.5 py-0.5 rounded-lg font-mono text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 inline-flex items-center gap-1.5 shadow-xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+          <span>● Live Now (Hall: {timing.venue})</span>
+        </span>
+      );
+    }
+
+    // State A & State D: UPCOMING
+    return (
+      <span className="px-2.5 py-0.5 rounded-lg font-mono text-[10px] font-bold bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30 inline-flex items-center gap-1.5 shadow-xs">
+        <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+        <span>Starts in: {timing.countdownText} ⏳</span>
+      </span>
+    );
   };
 
   // Certificate Eligibility: 2+ tracks registered = 100% eligibility
@@ -265,7 +284,7 @@ export default function StudentDashboard() {
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-extrabold text-slate-900 dark:text-white">
-              {events.filter((e) => e.status === 'In Progress').length}
+              {events.filter((e) => getEventTimingStatus(e, currentTime).isLive).length}
             </span>
             <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
               Active Now
@@ -444,13 +463,14 @@ export default function StudentDashboard() {
                   const capPct = Math.min(100, Math.round((regCount / maxCap) * 100));
                   const paperCode = `TRACK-${2026}-${String(idx + 1).padStart(2, '0')}`;
                   const isMenuOpen = activeMenuId === event.id;
+                  const timing = getEventTimingStatus(event, currentTime);
 
                   return (
                     <div
                       key={event.id}
                       className="neo-glass-card p-5 space-y-3.5 hover:border-indigo-500/40 transition-all relative"
                     >
-                      {/* Top Row: Track Code, Category, Status & Three-Dots Menu */}
+                      {/* Top Row: Track Code, Category, Dynamic Status & Actions */}
                       <div className="flex items-start justify-between gap-4">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -460,7 +480,7 @@ export default function StudentDashboard() {
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-mono">
                               {event.category || 'Technical Session'}
                             </span>
-                            {getStatusBadge(event.status, event.delay_minutes || 0)}
+                            {renderDynamicBadge(event, timing)}
                           </div>
 
                           <h3
@@ -471,7 +491,16 @@ export default function StudentDashboard() {
                           </h3>
                         </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap sm:flex-nowrap justify-end">
+                          {/* State A / Enrolled Action Badge Button */}
+                          <button
+                            disabled
+                            className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-xs font-bold font-mono inline-flex items-center gap-1 cursor-default shadow-xs"
+                          >
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>Registered ✅</span>
+                          </button>
+
                           <button
                             onClick={() => handleOpenQRPass(event)}
                             className="px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-bold font-mono transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs"
@@ -533,15 +562,18 @@ export default function StudentDashboard() {
                                   )}
                                 </button>
 
-                                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
-
-                                <button
-                                  onClick={() => handleUnregister(event.id)}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer text-left font-medium"
-                                >
-                                  <AlertCircle className="w-3.5 h-3.5" />
-                                  <span>Cancel Registration</span>
-                                </button>
+                                {!timing.isExpired && (
+                                  <>
+                                    <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                                    <button
+                                      onClick={() => handleUnregister(event.id)}
+                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer text-left font-medium"
+                                    >
+                                      <AlertCircle className="w-3.5 h-3.5" />
+                                      <span>Cancel Registration</span>
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
@@ -569,12 +601,14 @@ export default function StudentDashboard() {
                           </span>
                         </div>
 
-                        <button
-                          onClick={() => handleUnregister(event.id)}
-                          className="text-[11px] font-mono text-rose-500 hover:text-rose-400 hover:underline font-semibold cursor-pointer"
-                        >
-                          Cancel
-                        </button>
+                        {!timing.isExpired && (
+                          <button
+                            onClick={() => handleUnregister(event.id)}
+                            className="text-[11px] font-mono text-rose-500 hover:text-rose-400 hover:underline font-semibold cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -613,6 +647,7 @@ export default function StudentDashboard() {
                   const maxCap = event.max_capacity || 100;
                   const isFull = regCount >= maxCap;
                   const isMenuOpen = activeMenuId === event.id;
+                  const timing = getEventTimingStatus(event, currentTime);
 
                   return (
                     <div
@@ -621,9 +656,12 @@ export default function StudentDashboard() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
-                          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                            {event.category || 'Technical Session'}
-                          </span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                              {event.category || 'Technical Session'}
+                            </span>
+                            {renderDynamicBadge(event, timing)}
+                          </div>
                           <h4
                             onClick={() => handleOpenDetails(event)}
                             className="text-sm font-extrabold text-slate-900 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-400 transition cursor-pointer"
@@ -633,17 +671,29 @@ export default function StudentDashboard() {
                         </div>
 
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            onClick={() => handleRegister(event.id)}
-                            disabled={isFull}
-                            className={`px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer shrink-0 font-mono shadow-xs ${
-                              isFull
-                                ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                                : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20'
-                            }`}
-                          >
-                            {isFull ? 'Full' : 'Register'}
-                          </button>
+                          {/* Dynamic State Buttons: State B (Expired), State D (Register Now), or Full */}
+                          {timing.status === 'EXPIRED' ? (
+                            <button
+                              disabled
+                              className="px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700 cursor-not-allowed font-mono shadow-xs"
+                            >
+                              Registrations Closed
+                            </button>
+                          ) : isFull ? (
+                            <button
+                              disabled
+                              className="px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed font-mono shadow-xs"
+                            >
+                              Full
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleRegister(event.id)}
+                              className="px-3.5 py-1.5 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20 font-mono transition cursor-pointer flex items-center gap-1 shrink-0 active:scale-95"
+                            >
+                              <span>Register Now →</span>
+                            </button>
+                          )}
 
                           {/* Three Dots Action Menu */}
                           <div className="relative">
@@ -690,7 +740,7 @@ export default function StudentDashboard() {
                                   )}
                                 </button>
 
-                                {!isFull && (
+                                {!timing.isExpired && !isFull && (
                                   <>
                                     <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
                                     <button

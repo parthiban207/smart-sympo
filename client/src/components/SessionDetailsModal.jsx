@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Neo-glass Session Details Modal displaying comprehensive symposium track info, speaker details, live capacity bar, room directions, and calendar export", deps: ["lucide-react", "src/utils/calendarExport.js"], state: "active", last: "antigravity@2026-09-01" }
+// agent-notes: { ctx: "Neo-glass Session Details Modal displaying comprehensive symposium track info, dynamic event timing countdowns, speaker details, live capacity bar, room directions, and calendar export", deps: ["lucide-react", "src/utils/calendarExport.js", "src/utils/eventTiming.js"], state: "active", last: "antigravity@2026-09-07" }
 
 import { useState } from 'react';
 import {
@@ -20,6 +20,7 @@ import {
   Check,
 } from 'lucide-react';
 import { generateEventICS, downloadICSFile } from '../utils/calendarExport';
+import { getEventTimingStatus, useCurrentTime } from '../utils/eventTiming';
 
 export default function SessionDetailsModal({
   isOpen,
@@ -32,12 +33,14 @@ export default function SessionDetailsModal({
   regCount = 0,
 }) {
   const [copied, setCopied] = useState(false);
+  const currentTime = useCurrentTime(60000);
 
   if (!isOpen || !event) return null;
 
   const maxCap = event.max_capacity || 100;
   const isFull = regCount >= maxCap;
   const capPct = Math.min(100, Math.round((regCount / maxCap) * 100));
+  const timing = getEventTimingStatus(event, currentTime);
 
   const formatTime = (isoStr) => {
     if (!isoStr) return '--:--';
@@ -82,14 +85,28 @@ export default function SessionDetailsModal({
               <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
                 {event.category || 'Technical Session'}
               </span>
-              {isRegistered ? (
-                <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Enrolled
+
+              {/* Dynamic Timing Status Badges */}
+              {timing.status === 'EXPIRED' ? (
+                <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                  Event Ended / Timing Over ❌
+                </span>
+              ) : timing.status === 'LIVE_NOW' ? (
+                <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                  <span>● Live Now (Hall: {timing.venue})</span>
                 </span>
               ) : (
-                <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                  {isFull ? 'Sold Out' : 'Registration Open'}
+                <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  <span>Starts in: {timing.countdownText} ⏳</span>
+                </span>
+              )}
+
+              {isRegistered && (
+                <span className="font-mono text-xs font-bold px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Registered ✅
                 </span>
               )}
             </div>
@@ -247,16 +264,25 @@ export default function SessionDetailsModal({
                   <QrCode className="w-4 h-4" />
                   <span>Digital Pass</span>
                 </button>
-                <button
-                  onClick={() => {
-                    onClose();
-                    onUnregister && onUnregister(event.id);
-                  }}
-                  className="px-3.5 py-2 rounded-xl text-xs font-mono font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 transition cursor-pointer"
-                >
-                  Cancel Registration
-                </button>
+                {!timing.isExpired && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onUnregister && onUnregister(event.id);
+                    }}
+                    className="px-3.5 py-2 rounded-xl text-xs font-mono font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 transition cursor-pointer"
+                  >
+                    Cancel Registration
+                  </button>
+                )}
               </>
+            ) : timing.status === 'EXPIRED' ? (
+              <button
+                disabled
+                className="px-5 py-2 rounded-xl font-bold text-xs bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed font-mono"
+              >
+                Registrations Closed
+              </button>
             ) : (
               <button
                 onClick={() => {
@@ -271,7 +297,7 @@ export default function SessionDetailsModal({
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{isFull ? 'Session Full' : 'Register for Track'}</span>
+                <span>{isFull ? 'Session Full' : 'Register Now →'}</span>
               </button>
             )}
           </div>
