@@ -1,11 +1,12 @@
-// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with dynamic event timing, countdowns, three-dots action menus, metrics ribbon, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/utils/calendarExport.js", "src/utils/eventTiming.js", "lucide-react"], state: "active", last: "antigravity@2026-09-07" }
+// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with memoized debounced search, dynamic event timing, countdowns, three-dots action menus, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/utils/calendarExport.js", "src/utils/eventTiming.js", "src/hooks/useDebounce.js", "lucide-react"], state: "active", last: "antigravity@2026-09-07" }
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import StudentQRModal from '../components/StudentQRModal';
 import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
 import SessionDetailsModal from '../components/SessionDetailsModal';
 import { getEventTimingStatus, useCurrentTime } from '../utils/eventTiming';
+import { useDebounce } from '../hooks/useDebounce';
 import {
   Clock,
   MapPin,
@@ -41,10 +42,15 @@ export default function StudentDashboard() {
   // Dynamic 60-second timer hook for auto-ticking countdowns
   const currentTime = useCurrentTime(60000);
 
-  // Search and Filter states
+  // Search and Filter states with 200ms debounce
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 200);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [viewFilter, setViewFilter] = useState('all'); // 'all' | 'registered' | 'available'
+
+  // Visible rows limit for large datasets
+  const [registeredLimit, setRegisteredLimit] = useState(25);
+  const [availableLimit, setAvailableLimit] = useState(25);
 
   // Active 3-dots popup state
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -72,43 +78,84 @@ export default function StudentDashboard() {
 
   if (!currentUser) return null;
 
-  const studentRegIds = registrations
-    .filter(
-      (r) =>
-        r.student_id === currentUser.id ||
-        (r.student_email && currentUser.email && r.student_email.toLowerCase() === currentUser.email.toLowerCase()) ||
-        (r.student_username && currentUser.username && r.student_username.toLowerCase() === currentUser.username.toLowerCase())
-    )
-    .map((r) => r.event_id);
+  const studentRegIds = useMemo(() => {
+    return registrations
+      .filter(
+        (r) =>
+          r.student_id === currentUser.id ||
+          (r.student_email && currentUser.email && r.student_email.toLowerCase() === currentUser.email.toLowerCase()) ||
+          (r.student_username && currentUser.username && r.student_username.toLowerCase() === currentUser.username.toLowerCase())
+      )
+      .map((r) => r.event_id);
+  }, [registrations, currentUser]);
 
-  const registeredEvents = events
-    .filter((e) => studentRegIds.includes(e.id))
-    .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+  const registeredEvents = useMemo(() => {
+    return events
+      .filter((e) => studentRegIds.includes(e.id))
+      .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+  }, [events, studentRegIds]);
 
-  const availableEvents = events.filter((e) => !studentRegIds.includes(e.id));
+  const availableEvents = useMemo(() => {
+    return events.filter((e) => !studentRegIds.includes(e.id));
+  }, [events, studentRegIds]);
 
   // Extract unique categories from events
-  const categories = ['All', ...Array.from(new Set(events.map((e) => e.category || 'Technical Session').filter(Boolean)))];
+  const categories = useMemo(() => {
+    return ['All', ...Array.from(new Set(events.map((e) => e.category || 'Technical Session').filter(Boolean)))];
+  }, [events]);
 
-  // Filtering Logic
-  const filterEventsList = (list) => {
-    return list.filter((event) => {
-      const matchesSearch =
-        searchQuery === '' ||
-        (event.title && event.title.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (event.description && event.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (event.hall_number && event.hall_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (event.category && event.category.toLowerCase().includes(searchQuery.toLowerCase()));
-
+  // Memoized Multi-Field Filtering (Null-safe, Case-insensitive, Debounced)
+  const filteredRegisteredEvents = useMemo(() => {
+    const q = debouncedSearchQuery.trim().toLowerCase();
+    return registeredEvents.filter((item) => {
       const matchesCategory =
-        selectedCategory === 'All' || (event.category || 'Technical Session') === selectedCategory;
+        selectedCategory === 'All' || (item.category || item.type || 'Technical Session') === selectedCategory;
+      if (!matchesCategory) return false;
+      if (!q) return true;
 
-      return matchesSearch && matchesCategory;
+      const title = (item.title || item.name || '').toLowerCase();
+      const venue = (item.venue || item.hall_number || '').toLowerCase();
+      const description = (item.description || '').toLowerCase();
+      const category = (item.category || item.type || 'Technical Session').toLowerCase();
+
+      return (
+        title.includes(q) ||
+        venue.includes(q) ||
+        description.includes(q) ||
+        category.includes(q)
+      );
     });
-  };
+  }, [registeredEvents, debouncedSearchQuery, selectedCategory]);
 
-  const filteredRegisteredEvents = filterEventsList(registeredEvents);
-  const filteredAvailableEvents = filterEventsList(availableEvents);
+  const filteredAvailableEvents = useMemo(() => {
+    const q = debouncedSearchQuery.trim().toLowerCase();
+    return availableEvents.filter((item) => {
+      const matchesCategory =
+        selectedCategory === 'All' || (item.category || item.type || 'Technical Session') === selectedCategory;
+      if (!matchesCategory) return false;
+      if (!q) return true;
+
+      const title = (item.title || item.name || '').toLowerCase();
+      const venue = (item.venue || item.hall_number || '').toLowerCase();
+      const description = (item.description || '').toLowerCase();
+      const category = (item.category || item.type || 'Technical Session').toLowerCase();
+
+      return (
+        title.includes(q) ||
+        venue.includes(q) ||
+        description.includes(q) ||
+        category.includes(q)
+      );
+    });
+  }, [availableEvents, debouncedSearchQuery, selectedCategory]);
+
+  const visibleRegisteredEvents = useMemo(() => {
+    return filteredRegisteredEvents.slice(0, registeredLimit);
+  }, [filteredRegisteredEvents, registeredLimit]);
+
+  const visibleAvailableEvents = useMemo(() => {
+    return filteredAvailableEvents.slice(0, availableLimit);
+  }, [filteredAvailableEvents, availableLimit]);
 
   const handleRegister = async (eventId) => {
     setActiveMenuId(null);
@@ -457,7 +504,7 @@ export default function StudentDashboard() {
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredRegisteredEvents.map((event, idx) => {
+                {visibleRegisteredEvents.map((event, idx) => {
                   const regCount = registrations.filter((r) => r.event_id === event.id).length;
                   const maxCap = event.max_capacity || 100;
                   const capPct = Math.min(100, Math.round((regCount / maxCap) * 100));
@@ -469,6 +516,7 @@ export default function StudentDashboard() {
                     <div
                       key={event.id}
                       className="neo-glass-card p-5 space-y-3.5 hover:border-indigo-500/40 transition-all relative"
+                      style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}
                     >
                       {/* Top Row: Track Code, Category, Dynamic Status & Actions */}
                       <div className="flex items-start justify-between gap-4">
@@ -613,6 +661,16 @@ export default function StudentDashboard() {
                     </div>
                   );
                 })}
+
+                {filteredRegisteredEvents.length > registeredLimit && (
+                  <button
+                    onClick={() => setRegisteredLimit((prev) => prev + 25)}
+                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-2xl border border-slate-200 dark:border-slate-700/60 transition cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    <span>Show More Registered Sessions ({filteredRegisteredEvents.length - registeredLimit} remaining)</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -642,7 +700,7 @@ export default function StudentDashboard() {
               </div>
             ) : (
               <div className="space-y-3.5">
-                {filteredAvailableEvents.map((event) => {
+                {visibleAvailableEvents.map((event) => {
                   const regCount = registrations.filter((r) => r.event_id === event.id).length;
                   const maxCap = event.max_capacity || 100;
                   const isFull = regCount >= maxCap;
@@ -653,6 +711,7 @@ export default function StudentDashboard() {
                     <div
                       key={event.id}
                       className="neo-glass-card p-4 space-y-3 hover:border-indigo-500/30 transition-all relative"
+                      style={{ contentVisibility: 'auto', containIntrinsicSize: '150px' }}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-1">
@@ -772,6 +831,16 @@ export default function StudentDashboard() {
                     </div>
                   );
                 })}
+
+                {filteredAvailableEvents.length > availableLimit && (
+                  <button
+                    onClick={() => setAvailableLimit((prev) => prev + 25)}
+                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-2xl border border-slate-200 dark:border-slate-700/60 transition cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+                  >
+                    <span>Show More Available Tracks ({filteredAvailableEvents.length - availableLimit} remaining)</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             )}
           </div>

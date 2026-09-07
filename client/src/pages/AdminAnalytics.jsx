@@ -1,8 +1,9 @@
-// agent-notes: { ctx: "Admin analytics dashboard with realtime registrations subscription, Excel spreadsheet export system, and role management", deps: ["src/context/AppContext.jsx", "src/hooks/usePresence.ts", "src/components/QRScannerModal.jsx", "src/utils/exportReports.ts", "src/supabaseClient.js", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
+// agent-notes: { ctx: "Admin analytics dashboard with realtime registrations subscription, Excel spreadsheet export system, and role management", deps: ["src/context/AppContext.jsx", "src/hooks/usePresence.ts", "src/hooks/useDebounce.js", "src/components/QRScannerModal.jsx", "src/utils/exportReports.ts", "src/supabaseClient.js", "lucide-react"], state: "active", last: "antigravity@2026-09-07" }
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { usePresence } from '../hooks/usePresence';
+import { useDebounce } from '../hooks/useDebounce';
 import { supabase, isMockMode } from '../supabaseClient';
 import {
   exportAttendanceCSV,
@@ -184,116 +185,121 @@ export default function AdminAnalytics() {
     ? Math.round((totalAttendedCount / totalRegistrationsCount) * 100)
     : 0;
 
-  // Combined Real-Time Joined Attendance Table with Real-Name Resolution
-  const joinedAttendanceRecords = (registrations || []).map((reg) => {
-    const matchedProfile =
-      reg.profiles ||
-      (profilesList || []).find(
-        (p) =>
-          p.id === reg.student_id ||
-          (p.email && reg.student_email && p.email.toLowerCase() === reg.student_email.toLowerCase()) ||
-          (p.username && reg.student_username && p.username.toLowerCase() === reg.student_username.toLowerCase())
+  // Combined Real-Time Joined Attendance Table with Real-Name Resolution (Memoized)
+  const joinedAttendanceRecords = useMemo(() => {
+    return (registrations || []).map((reg) => {
+      const matchedProfile =
+        reg.profiles ||
+        (profilesList || []).find(
+          (p) =>
+            p.id === reg.student_id ||
+            (p.email && reg.student_email && p.email.toLowerCase() === reg.student_email.toLowerCase()) ||
+            (p.username && reg.student_username && p.username.toLowerCase() === reg.student_username.toLowerCase())
+        );
+      const matchedEvent = reg.events || (events || []).find((e) => e.id === reg.event_id);
+      const matchedLog = (attendanceLogs || []).find(
+        (log) =>
+          (log.student_id && log.student_id === reg.student_id && log.event_id === reg.event_id) ||
+          (log.student_id && log.student_id === reg.student_id)
       );
-    const matchedEvent = reg.events || (events || []).find((e) => e.id === reg.event_id);
-    const matchedLog = (attendanceLogs || []).find(
-      (log) =>
-        (log.student_id && log.student_id === reg.student_id && log.event_id === reg.event_id) ||
-        (log.student_id && log.student_id === reg.student_id)
-    );
-    const coordinatorProfile = reg.scanned_by
-      ? (profilesList || []).find((p) => p.id === reg.scanned_by || p.email === reg.scanned_by || p.full_name === reg.scanned_by)
-      : null;
+      const coordinatorProfile = reg.scanned_by
+        ? (profilesList || []).find((p) => p.id === reg.scanned_by || p.email === reg.scanned_by || p.full_name === reg.scanned_by)
+        : null;
 
-    const isAttended = Boolean(reg.attended || reg.checked_in_at || reg.attended_at || matchedLog);
-    const checkInTime = reg.checked_in_at || reg.attended_at || matchedLog?.check_in_time || null;
+      const isAttended = Boolean(reg.attended || reg.checked_in_at || reg.attended_at || matchedLog);
+      const checkInTime = reg.checked_in_at || reg.attended_at || matchedLog?.check_in_time || null;
 
-    // Helper to resolve clean, human-readable student name without generic fallback
-    const resolveRegistrantName = () => {
-      const explicitName = matchedProfile?.full_name || matchedProfile?.name || reg.student_name;
-      if (explicitName && explicitName !== 'Student Attendee' && explicitName.trim() !== '') {
-        return explicitName.trim();
-      }
-
-      const targetEmail = matchedProfile?.email || reg.student_email;
-      if (targetEmail && targetEmail.includes('@')) {
-        const handle = targetEmail.split('@')[0].toLowerCase();
-        if (handle === 'munichamyparthi' || handle === 'parthi' || handle === 'parthiban') {
-          return 'Parthiban M';
+      // Helper to resolve clean, human-readable student name without generic fallback
+      const resolveRegistrantName = () => {
+        const explicitName = matchedProfile?.full_name || matchedProfile?.name || reg.student_name;
+        if (explicitName && explicitName !== 'Student Attendee' && explicitName.trim() !== '') {
+          return explicitName.trim();
         }
-        const words = handle
-          .replace(/[0-9._-]+/g, ' ')
-          .trim()
-          .split(' ')
-          .filter(Boolean)
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
-        if (words.length > 0) return words.join(' ');
-      }
 
-      const uName = matchedProfile?.username || reg.student_username;
-      if (uName && uName !== 'student' && uName !== 'sympo') {
-        return uName.charAt(0).toUpperCase() + uName.slice(1);
-      }
-      if (uName === 'sympo') {
+        const targetEmail = matchedProfile?.email || reg.student_email;
+        if (targetEmail && targetEmail.includes('@')) {
+          const handle = targetEmail.split('@')[0].toLowerCase();
+          if (handle === 'munichamyparthi' || handle === 'parthi' || handle === 'parthiban') {
+            return 'Parthiban M';
+          }
+          const words = handle
+            .replace(/[0-9._-]+/g, ' ')
+            .trim()
+            .split(' ')
+            .filter(Boolean)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+          if (words.length > 0) return words.join(' ');
+        }
+
+        const uName = matchedProfile?.username || reg.student_username;
+        if (uName && uName !== 'student' && uName !== 'sympo') {
+          return uName.charAt(0).toUpperCase() + uName.slice(1);
+        }
+
         return 'Parthiban M';
-      }
+      };
 
-      return 'Parthiban M';
-    };
+      const studentName = resolveRegistrantName();
 
-    const studentName = resolveRegistrantName();
+      const rollNo =
+        matchedProfile?.roll_no ||
+        matchedProfile?.college_id ||
+        reg.roll_no ||
+        reg.college_id ||
+        (reg.student_id ? `STU-${reg.student_id.slice(0, 6).toUpperCase()}` : 'STU-2026');
 
-    const rollNo =
-      matchedProfile?.roll_no ||
-      matchedProfile?.college_id ||
-      reg.roll_no ||
-      reg.college_id ||
-      (reg.student_id ? `STU-${reg.student_id.slice(0, 6).toUpperCase()}` : 'STU-2026');
+      const collegeName =
+        matchedProfile?.college ||
+        matchedProfile?.college_name ||
+        reg.college ||
+        reg.college_name ||
+        'College of Engineering';
 
-    const collegeName =
-      matchedProfile?.college ||
-      matchedProfile?.college_name ||
-      reg.college ||
-      reg.college_name ||
-      'College of Engineering';
+      const email = matchedProfile?.email || reg.student_email || 'parthi@college.edu';
 
-    const email = matchedProfile?.email || reg.student_email || 'parthi@college.edu';
+      return {
+        id: reg.id || `${reg.student_id}-${reg.event_id}`,
+        registration_id: reg.id,
+        student_id: reg.student_id,
+        student_name: studentName,
+        roll_no: rollNo,
+        college_name: collegeName,
+        department: matchedProfile?.department || reg.department || 'Computer Science & Engineering',
+        phone: matchedProfile?.phone || matchedProfile?.phone_number || 'N/A',
+        email: email,
+        event_id: reg.event_id,
+        event_title: matchedEvent?.title || reg.event_title || 'Symposium Session',
+        hall_number: matchedEvent?.venue || matchedEvent?.hall_number || matchedLog?.hall_number || 'Main Venue',
+        category: matchedEvent?.type || matchedEvent?.category || reg.category || 'Technical',
+        is_attended: isAttended,
+        checked_in_at: checkInTime,
+        attended_at: checkInTime,
+        registered_at: reg.registered_at,
+        scanned_by_name: reg.scanned_by || coordinatorProfile?.full_name || coordinatorProfile?.name || null,
+      };
+    });
+  }, [registrations, profilesList, events, attendanceLogs]);
 
-    return {
-      id: reg.id || `${reg.student_id}-${reg.event_id}`,
-      registration_id: reg.id,
-      student_id: reg.student_id,
-      student_name: studentName,
-      roll_no: rollNo,
-      college_name: collegeName,
-      department: matchedProfile?.department || reg.department || 'Computer Science & Engineering',
-      phone: matchedProfile?.phone || matchedProfile?.phone_number || 'N/A',
-      email: email,
-      event_id: reg.event_id,
-      event_title: matchedEvent?.title || reg.event_title || 'Symposium Session',
-      hall_number: matchedEvent?.venue || matchedEvent?.hall_number || matchedLog?.hall_number || 'Main Venue',
-      category: matchedEvent?.type || matchedEvent?.category || reg.category || 'Technical',
-      is_attended: isAttended,
-      checked_in_at: checkInTime,
-      attended_at: checkInTime,
-      registered_at: reg.registered_at,
-      scanned_by_name: reg.scanned_by || coordinatorProfile?.full_name || coordinatorProfile?.name || null,
-    };
-  });
+  // Memoized filtering based on debounced search query and status filter
+  const filteredAttendanceRecords = useMemo(() => {
+    const q = debouncedAttendanceQuery.trim().toLowerCase();
 
-  const filteredAttendanceRecords = joinedAttendanceRecords.filter((record) => {
-    const query = attendanceSearchQuery.toLowerCase();
-    const matchesQuery =
-      record.student_name.toLowerCase().includes(query) ||
-      record.roll_no.toLowerCase().includes(query) ||
-      record.college_name.toLowerCase().includes(query) ||
-      record.event_title.toLowerCase().includes(query) ||
-      record.email.toLowerCase().includes(query);
+    return joinedAttendanceRecords.filter((record) => {
+      const matchesQuery =
+        !q ||
+        record.student_name.toLowerCase().includes(q) ||
+        record.roll_no.toLowerCase().includes(q) ||
+        record.college_name.toLowerCase().includes(q) ||
+        record.event_title.toLowerCase().includes(q) ||
+        record.email.toLowerCase().includes(q) ||
+        record.department.toLowerCase().includes(q);
 
-    if (!matchesQuery) return false;
-    if (attendanceStatusFilter === 'ATTENDED') return record.is_attended;
-    if (attendanceStatusFilter === 'PENDING') return !record.is_attended;
-    return true;
-  });
+      if (!matchesQuery) return false;
+      if (attendanceStatusFilter === 'ATTENDED') return record.is_attended;
+      if (attendanceStatusFilter === 'PENDING') return !record.is_attended;
+      return true;
+    });
+  }, [joinedAttendanceRecords, debouncedAttendanceQuery, attendanceStatusFilter]);
 
   const handleRoleChange = async (targetUserId, newRole) => {
     setUpdatingUser(targetUserId);

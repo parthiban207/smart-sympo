@@ -1,9 +1,10 @@
-// agent-notes: { ctx: "View registered students modal with search, attendance status pills, CSV/PDF export, and remove actions", deps: ["src/context/AppContext.jsx", "src/utils/exportReports.ts", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
+// agent-notes: { ctx: "View registered students modal with debounced search, memoized filtering, attendance status pills, CSV/PDF export, and remove actions", deps: ["src/context/AppContext.jsx", "src/utils/exportReports.ts", "src/hooks/useDebounce.js", "lucide-react"], state: "active", last: "antigravity@2026-09-07" }
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { X, Users, Search, FileSpreadsheet, FileText, Trash2, CheckCircle2, Clock } from 'lucide-react';
 import { exportToCSV, exportToPDF } from '../utils/exportReports';
 import { useApp } from '../context/AppContext';
+import { useDebounce } from '../hooks/useDebounce';
 
 export default function ViewRegisteredStudentsModal({
   isOpen,
@@ -14,72 +15,79 @@ export default function ViewRegisteredStudentsModal({
 }) {
   const { unregisterForEvent } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 200);
   const [removingId, setRemovingId] = useState(null);
 
-  if (!isOpen || !event) return null;
+  // Filter registrations for this specific event with useMemo
+  const registeredStudents = useMemo(() => {
+    if (!isOpen || !event) return [];
+    const eventRegs = registrations.filter((r) => r.event_id === event.id);
 
-  // Filter registrations for this specific event
-  const eventRegs = registrations.filter((r) => r.event_id === event.id);
+    return eventRegs.map((reg) => {
+      const profile =
+        reg.profiles ||
+        profilesList.find(
+          (p) =>
+            p.id === reg.student_id ||
+            (p.email && reg.student_email && p.email.toLowerCase() === reg.student_email.toLowerCase()) ||
+            (p.username && reg.student_username && p.username.toLowerCase() === reg.student_username.toLowerCase())
+        );
+      const resolvedName =
+        profile?.full_name ||
+        profile?.name ||
+        reg.student_name ||
+        (profile?.email ? profile.email.split('@')[0] : null) ||
+        (reg.student_email ? reg.student_email.split('@')[0] : null) ||
+        `Student (${reg.student_id?.slice(0, 8) || 'Attendee'})`;
+      const resolvedEmail = profile?.email || reg.student_email || 'N/A';
+      const resolvedRollNo =
+        profile?.roll_no ||
+        profile?.college_id ||
+        reg.roll_no ||
+        reg.college_id ||
+        (reg.student_id ? `STU-${reg.student_id.slice(0, 6).toUpperCase()}` : 'N/A');
+      const resolvedCollege =
+        profile?.college ||
+        profile?.college_name ||
+        reg.college ||
+        reg.college_name ||
+        'Main Campus';
 
-  // Map to full student profile objects with real student names & roll numbers
-  const registeredStudents = eventRegs.map((reg) => {
-    const profile =
-      reg.profiles ||
-      profilesList.find(
-        (p) =>
-          p.id === reg.student_id ||
-          (p.email && reg.student_email && p.email.toLowerCase() === reg.student_email.toLowerCase()) ||
-          (p.username && reg.student_username && p.username.toLowerCase() === reg.student_username.toLowerCase())
+      return {
+        id: reg.id || reg.student_id,
+        student_id: reg.student_id,
+        registered_at: reg.registered_at,
+        attended: Boolean(reg.attended || reg.checked_in_at || reg.attended_at),
+        checked_in_at: reg.checked_in_at || reg.attended_at,
+        name: resolvedName,
+        username: profile?.username || (profile?.email ? profile.email.split('@')[0] : 'student'),
+        email: resolvedEmail,
+        college_id: resolvedRollNo,
+        roll_no: resolvedRollNo,
+        college: resolvedCollege,
+        role: profile?.role || 'student',
+      };
+    });
+  }, [isOpen, event, registrations, profilesList]);
+
+  // Memoized filter based on debounced search query
+  const filteredStudents = useMemo(() => {
+    const q = debouncedSearchQuery.trim().toLowerCase();
+    if (!q) return registeredStudents;
+
+    return registeredStudents.filter((student) => {
+      return (
+        student.name.toLowerCase().includes(q) ||
+        student.email.toLowerCase().includes(q) ||
+        student.college_id.toLowerCase().includes(q) ||
+        student.roll_no.toLowerCase().includes(q) ||
+        student.college.toLowerCase().includes(q) ||
+        student.username.toLowerCase().includes(q)
       );
-    const resolvedName =
-      profile?.full_name ||
-      profile?.name ||
-      reg.student_name ||
-      (profile?.email ? profile.email.split('@')[0] : null) ||
-      (reg.student_email ? reg.student_email.split('@')[0] : null) ||
-      `Student (${reg.student_id?.slice(0, 8) || 'Attendee'})`;
-    const resolvedEmail = profile?.email || reg.student_email || 'N/A';
-    const resolvedRollNo =
-      profile?.roll_no ||
-      profile?.college_id ||
-      reg.roll_no ||
-      reg.college_id ||
-      (reg.student_id ? `STU-${reg.student_id.slice(0, 6).toUpperCase()}` : 'N/A');
-    const resolvedCollege =
-      profile?.college ||
-      profile?.college_name ||
-      reg.college ||
-      reg.college_name ||
-      'Main Campus';
+    });
+  }, [registeredStudents, debouncedSearchQuery]);
 
-    return {
-      id: reg.id || reg.student_id,
-      student_id: reg.student_id,
-      registered_at: reg.registered_at,
-      attended: Boolean(reg.attended || reg.checked_in_at || reg.attended_at),
-      checked_in_at: reg.checked_in_at || reg.attended_at,
-      name: resolvedName,
-      username: profile?.username || (profile?.email ? profile.email.split('@')[0] : 'student'),
-      email: resolvedEmail,
-      college_id: resolvedRollNo,
-      roll_no: resolvedRollNo,
-      college: resolvedCollege,
-      role: profile?.role || 'student',
-    };
-  });
-
-  // Filter based on search query
-  const filteredStudents = registeredStudents.filter((student) => {
-    const query = searchQuery.toLowerCase();
-    return (
-      student.name.toLowerCase().includes(query) ||
-      student.email.toLowerCase().includes(query) ||
-      student.college_id.toLowerCase().includes(query) ||
-      student.roll_no.toLowerCase().includes(query) ||
-      student.college.toLowerCase().includes(query) ||
-      student.username.toLowerCase().includes(query)
-    );
-  });
+  if (!isOpen || !event) return null;
 
   const handleRemoveRegistration = async (student) => {
     if (!window.confirm(`Are you sure you want to remove ${student.name} from "${event.title}"?`)) {
