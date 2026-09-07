@@ -1,19 +1,56 @@
-// agent-notes: { ctx: "Client API helper for Nodemailer automated Welcome, Signup Confirmation, and Event Registration emails", deps: [], state: "active", last: "antigravity@2026-09-01" }
+// agent-notes: { ctx: "Client API helper for Nodemailer automated Welcome, Signup Confirmation, and Event Registration emails with resilient fallback", deps: [], state: "active", last: "antigravity@2026-09-07" }
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL ||
-  (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000' : '');
+const getCandidateUrls = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  const isBrowser = typeof window !== 'undefined';
+  const isLocal = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+  const candidates = [];
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    candidates.push(envUrl.trim().replace(/\/+$/, ''));
+  }
+  // Relative URL (proxied by Vite in dev or same-origin in prod)
+  candidates.push('');
+  // Direct localhost port 5000
+  if (isLocal) {
+    candidates.push('http://localhost:5000');
+    candidates.push('http://127.0.0.1:5000');
+  }
+
+  return [...new Set(candidates)];
+};
+
+async function fetchWithFallback(endpoint, payload) {
+  const candidates = getCandidateUrls();
+  let lastError = null;
+
+  for (const baseUrl of candidates) {
+    const url = `${baseUrl}${endpoint}`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        return { success: true, dispatched: true, url, ...data };
+      } else {
+        console.warn(`[BackendEmailService] Call to ${url} failed with status:`, response.status, data);
+        lastError = data.error || `HTTP ${response.status}`;
+      }
+    } catch (err) {
+      lastError = err?.message || 'Network error';
+    }
+  }
+
+  console.warn(`[BackendEmailService] All API candidate routes failed for ${endpoint}:`, lastError);
+  return { success: false, error: lastError };
+}
 
 /**
  * Dispatch Welcome & Signup Confirmation email via Express/Nodemailer backend API
- * @param {Object} params
- * @param {string} params.email
- * @param {string} [params.name]
- * @param {string} [params.role]
- * @param {string} [params.roll_no]
- * @param {string} [params.collegeName]
- * @param {string} [params.department]
- * @param {string} [params.loginUrl]
  */
 export async function sendWelcomeEmailApi({
   email,
@@ -29,10 +66,6 @@ export async function sendWelcomeEmailApi({
     return { success: false, error: 'Recipient email required' };
   }
 
-  const resolvedUrl =
-    API_BASE_URL ||
-    (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000' : '');
-
   const payload = {
     email: email.trim(),
     name: name || email.split('@')[0] || 'Student Delegate',
@@ -43,25 +76,11 @@ export async function sendWelcomeEmailApi({
     loginUrl: loginUrl || (typeof window !== 'undefined' ? `${window.location.origin}/login/student` : ''),
   };
 
-  try {
-    const response = await fetch(`${resolvedUrl}/api/send-welcome-email`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      console.warn('[BackendEmailService] Welcome email API returned status:', response.status, data);
-      return { success: false, status: response.status, ...data };
-    }
-
-    console.log('[BackendEmailService] Welcome email dispatched successfully:', data);
-    return { success: true, ...data };
-  } catch (err) {
-    console.warn('[BackendEmailService] Non-blocking error calling welcome-email API:', err?.message || err);
-    return { success: false, error: err?.message || 'Network error' };
+  const result = await fetchWithFallback('/api/send-welcome-email', payload);
+  if (result.success) {
+    console.log('[BackendEmailService] Welcome email dispatched successfully to:', email);
   }
+  return result;
 }
 
 /**
@@ -75,15 +94,14 @@ export async function sendEventConfirmationApi({
   venue,
   timeSlot,
   eventDate,
+  passToken,
+  roll_no,
+  collegeName,
 }) {
   if (!email) {
     console.warn('[BackendEmailService] sendEventConfirmationApi called without recipient email.');
     return { success: false, error: 'Recipient email required' };
   }
-
-  const resolvedUrl =
-    API_BASE_URL ||
-    (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000' : '');
 
   const payload = {
     email: email.trim(),
@@ -93,27 +111,16 @@ export async function sendEventConfirmationApi({
     venue: venue || 'Main Auditorium',
     timeSlot: timeSlot || 'Scheduled Time Slot',
     eventDate: eventDate || new Date().toLocaleDateString('en-US', { dateStyle: 'long' }),
+    passToken: passToken || '',
+    roll_no: roll_no || '',
+    collegeName: collegeName || '',
   };
 
-  try {
-    const response = await fetch(`${resolvedUrl}/api/send-event-confirmation`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      console.warn('[BackendEmailService] Event confirmation API returned status:', response.status, data);
-      return { success: false, status: response.status, ...data };
-    }
-
-    console.log('[BackendEmailService] Event confirmation email dispatched successfully:', data);
-    return { success: true, ...data };
-  } catch (err) {
-    console.warn('[BackendEmailService] Non-blocking error calling event-confirmation API:', err?.message || err);
-    return { success: false, error: err?.message || 'Network error' };
+  const result = await fetchWithFallback('/api/send-event-confirmation', payload);
+  if (result.success) {
+    console.log('[BackendEmailService] Event confirmation email dispatched successfully to:', email);
   }
+  return result;
 }
 
 /**
@@ -121,10 +128,6 @@ export async function sendEventConfirmationApi({
  */
 export async function sendLoginAlertApi({ email, name, role, ipAddress, userAgent }) {
   if (!email) return { success: false };
-
-  const resolvedUrl =
-    API_BASE_URL ||
-    (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:5000' : '');
 
   const payload = {
     email: email.trim(),
@@ -134,15 +137,6 @@ export async function sendLoginAlertApi({ email, name, role, ipAddress, userAgen
     userAgent: userAgent || (typeof navigator !== 'undefined' ? navigator.userAgent : 'Web'),
   };
 
-  try {
-    const response = await fetch(`${resolvedUrl}/api/send-login-alert`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json().catch(() => ({}));
-    return { success: response.ok, ...data };
-  } catch (err) {
-    return { success: false, error: err?.message || 'Network error' };
-  }
+  return await fetchWithFallback('/api/send-login-alert', payload);
 }
+

@@ -8,7 +8,9 @@
     "client"
   ],
   "scripts": {
-    "dev": "npm run dev --prefix client",
+    "dev": "node scripts/dev.js",
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "node server/index.js",
     "server": "node server/index.js",
     "build": "npm run build --prefix client",
     "preview": "npm run preview --prefix client",

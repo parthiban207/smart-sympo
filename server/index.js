@@ -272,10 +272,9 @@ app.post('/api/send-first-login-email', handleWelcomeEmail);
 // =========================================================================
 // 2. EVENT REGISTRATION CONFIRMATION EMAIL
 // Trigger: Immediately after a student successfully registers for any event.
-// =========================================================================
 const handleEventConfirmationEmail = async (req, res) => {
   try {
-    const { email, name, eventName, category, venue, timeSlot, eventDate } = req.body || {};
+    const { email, name, eventName, category, venue, timeSlot, eventDate, passToken, roll_no, collegeName } = req.body || {};
 
     if (!email) {
       return res.status(400).json({ success: false, error: 'Missing recipient email address.' });
@@ -287,10 +286,13 @@ const handleEventConfirmationEmail = async (req, res) => {
     const eventVenue = venue || 'Main Auditorium';
     const slot = timeSlot || 'Scheduled Time Slot';
     const date = eventDate || new Date().toLocaleDateString('en-US', { dateStyle: 'long' });
+    const token = passToken || `PASS-${Date.now().toString(36).toUpperCase()}`;
+    const studentRoll = roll_no || '';
+    const studentCollege = collegeName || '';
 
-    const subject = `✅ Registration Confirmed: ${title} - Smart-Sympo`;
+    const subject = `✅ Registration Confirmed: ${title} - Smart-Sympo 2026`;
 
-    const textContent = `Hi ${studentName},\n\nYou have successfully registered for ${title} (${eventCategory}).\n- Venue / Hall: ${eventVenue}\n- Scheduled Time: ${slot}\n- Date: ${date}\n\nPlease keep your profile QR pass ready at the venue for coordinator check-in.\n\nBest of luck!\n\nSmart-Sympo Organizing Team`;
+    const textContent = `Hi ${studentName},\n\nYou have successfully registered for ${title} (${eventCategory}).\n- Venue / Hall: ${eventVenue}\n- Scheduled Time: ${slot}\n- Date: ${date}\n- Pass Token: ${token}\n\nPlease keep your digital TOTP QR pass ready at the venue for coordinator check-in.\n\nBest of luck!\nSmart-Sympo Organizing Team`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -348,11 +350,19 @@ const handleEventConfirmationEmail = async (req, res) => {
                               </td>
                             </tr>
                             <tr>
-                              <td>
+                              <td style="padding-bottom: 12px;">
                                 <span style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 600;">📅 Date</span>
                                 <div style="font-size: 14px; color: #e2e8f0; font-weight: 600; margin-top: 2px;">${date}</div>
                               </td>
                             </tr>
+                            ${token ? `
+                            <tr>
+                              <td>
+                                <span style="font-size: 11px; text-transform: uppercase; color: #34d399; font-weight: 700;">🎫 Entry Pass Token</span>
+                                <div style="font-size: 14px; color: #6ee7b7; font-family: monospace; font-weight: 700; margin-top: 2px; letter-spacing: 1px;">${token}</div>
+                              </td>
+                            </tr>
+                            ` : ''}
                           </table>
                         </td>
                       </tr>
@@ -364,12 +374,15 @@ const handleEventConfirmationEmail = async (req, res) => {
                         📲 Venue Check-in Pass
                       </p>
                       <p style="margin: 6px 0 0 0; font-size: 13px; color: #ecfdf5; line-height: 1.5;">
-                        Please keep your profile QR pass ready at the venue for coordinator check-in.
+                        Please keep your student portal QR pass ready at the venue for coordinator scanning and instant attendance verification.
                       </p>
                     </div>
 
                     <p style="font-size: 15px; font-weight: 600; color: #34d399; margin: 20px 0 0 0;">
                       Best of luck!
+                    </p>
+                    <p style="font-size: 13px; color: #94a3b8; margin: 6px 0 0 0;">
+                      Smart-Sympo Organizing Committee
                     </p>
                   </td>
                 </tr>

@@ -1291,6 +1291,9 @@ export const AppProvider = ({ children }) => {
       venue: targetEvent.hall_number || targetEvent.venue || 'Main Auditorium',
       timeSlot,
       eventDate,
+      passToken,
+      roll_no: currentUser.roll_no || currentUser.college_id || '',
+      collegeName: currentUser.college_name || currentUser.college || '',
     }).catch((err) => console.warn('[Event Confirmation Email Error]:', err));
 
     // Append confirmation to In-App Notification Center
