@@ -49,6 +49,7 @@ const dispatchEmail = async ({ to, subject, text, html }) => {
   const mailOptions = {
     from: `"Smart-Sympo 2026" <${senderEmail}>`,
     to,
+    replyTo: senderEmail,
     subject,
     text,
     html,
@@ -57,7 +58,8 @@ const dispatchEmail = async ({ to, subject, text, html }) => {
   if (!gmailUser || !gmailPass) {
     console.log(`\n======================================================`);
     console.log(`[Email Service Simulated] Transporter missing GMAIL_USER/GMAIL_APP_PASSWORD.`);
-    console.log(`To: ${to}`);
+    console.log(`From (Sender): ${senderEmail}`);
+    console.log(`To (Recipient User Account): ${to}`);
     console.log(`Subject: ${subject}`);
     console.log(`Body:\n${text || 'HTML Content'}`);
     console.log(`======================================================\n`);
@@ -72,10 +74,10 @@ const dispatchEmail = async ({ to, subject, text, html }) => {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log(`[Nodemailer Success] Email sent to ${to}:`, info.messageId);
+    console.log(`[Nodemailer Success] Email dispatched from ${senderEmail} -> TO user mailbox: ${to} (MessageID: ${info.messageId})`);
     return { success: true, dispatched: true, messageId: info.messageId, to, subject };
   } catch (err) {
-    console.error(`[Nodemailer Error] Delivery failed to ${to}:`, err.message);
+    console.error(`[Nodemailer Error] Delivery failed from ${senderEmail} to ${to}:`, err.message);
     throw err;
   }
 };

@@ -759,7 +759,7 @@ export const AppProvider = ({ children }) => {
     const roleLoginPath = cleanRole === 'admin' ? '/login/admin' : (cleanRole === 'coordinator' || cleanRole === 'staff' ? '/login/staff' : '/login/student');
     const targetLoginUrl = `${origin}${roleLoginPath}`;
 
-    console.log(`[AppContext] Dispatching automated Welcome Email for ${cleanRole} first login:`, email);
+    console.log(`[AppContext] Dispatching automated Welcome Email for ${cleanRole} (From: smartsympo@gmail.com -> To: ${email})`);
 
     if (typeof window !== 'undefined') {
       localStorage.setItem(welcomeKey, new Date().toISOString());
@@ -775,14 +775,9 @@ export const AppProvider = ({ children }) => {
       loginUrl: targetLoginUrl,
     };
 
-    // Primary: Backend Express / Vite Nodemailer SMTP dispatch
-    sendWelcomeEmailApi(emailPayload).catch((err) =>
-      console.warn('[Welcome Email Backend Error]:', err)
-    );
-
-    // Fallback: EmailJS if configured
+    // Primary automated dispatch via Nodemailer SMTP with EmailJS fallback
     sendWelcomeEmail(emailPayload).catch((err) =>
-      console.warn('[Welcome EmailJS Error]:', err)
+      console.warn('[Welcome Email Dispatch Error]:', err)
     );
 
     // Mark first_login = false in Supabase & Local state

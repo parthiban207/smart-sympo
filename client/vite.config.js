@@ -182,15 +182,16 @@ function emailApiPlugin() {
                 const info = await transporter.sendMail({
                   from: `"SmartSympo 2026" <${senderUser}>`,
                   to: email,
+                  replyTo: senderUser,
                   subject,
                   text: `Welcome ${userName}! Your SmartSympo ${roleName} account has been activated. Email: ${email}, ID: ${idVal}. Access link: ${targetUrl}`,
                   html,
                 });
-                console.log(`[Vite Email Gateway] Welcome email dispatched to ${email}:`, info.messageId);
+                console.log(`[Vite Email Gateway] Dispatched from ${senderUser} -> TO user mailbox: ${email} (MessageID: ${info.messageId})`);
                 res.setHeader('Content-Type', 'application/json');
                 return res.end(JSON.stringify({ success: true, dispatched: true, messageId: info.messageId, to: email }));
               } catch (err) {
-                console.error(`[Vite Email Gateway Error] Failed to send welcome email to ${email}:`, err.message);
+                console.error(`[Vite Email Gateway Error] Failed to send welcome email from ${senderUser} to ${email}:`, err.message);
                 res.statusCode = 500;
                 res.setHeader('Content-Type', 'application/json');
                 return res.end(JSON.stringify({ success: false, error: err.message }));
@@ -243,15 +244,16 @@ function emailApiPlugin() {
                 const info = await transporter.sendMail({
                   from: `"SmartSympo 2026" <${senderUser}>`,
                   to: email,
+                  replyTo: senderUser,
                   subject,
                   text: `Registration Confirmed for ${title}! Venue: ${eventVenue}, Time: ${eventSlot}.`,
                   html,
                 });
-                console.log(`[Vite Email Gateway] Event confirmation dispatched to ${email}:`, info.messageId);
+                console.log(`[Vite Email Gateway] Dispatched from ${senderUser} -> TO user mailbox: ${email} (MessageID: ${info.messageId})`);
                 res.setHeader('Content-Type', 'application/json');
                 return res.end(JSON.stringify({ success: true, dispatched: true, messageId: info.messageId, to: email }));
               } catch (err) {
-                console.error(`[Vite Email Gateway Error] Failed to send event confirmation to ${email}:`, err.message);
+                console.error(`[Vite Email Gateway Error] Failed to send event confirmation from ${senderUser} to ${email}:`, err.message);
                 res.statusCode = 500;
                 res.setHeader('Content-Type', 'application/json');
                 return res.end(JSON.stringify({ success: false, error: err.message }));
