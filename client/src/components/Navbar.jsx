@@ -23,9 +23,7 @@ import {
   Calendar,
   Layers,
   Sparkles,
-  Ticket,
   FileSpreadsheet,
-  User,
 } from 'lucide-react';
 
 export default function Navbar({ onToggleMobileMenu }) {

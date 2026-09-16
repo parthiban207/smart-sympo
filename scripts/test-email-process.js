@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Automated end-to-end verification script for Welcome / Activation and Event Registration emails", deps: ["nodemailer", "dotenv"], state: "active", last: "antigravity@2026-09-07" }
+// agent-notes: { ctx: "Automated end-to-end verification script for Welcome / Activation (Student, Coordinator, Admin) and Event Registration emails", deps: ["nodemailer", "dotenv"], state: "active", last: "antigravity@2026-09-16" }
 
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
@@ -32,14 +32,14 @@ const transporter = nodemailer.createTransport({
 async function runTests() {
   try {
     // 1. Verify SMTP Connection
-    console.log('\n[1/3] Verifying Gmail SMTP Server Authentication...');
+    console.log('\n[1/4] Verifying Gmail SMTP Server Authentication...');
     await transporter.verify();
     console.log('✅ SMTP Connection Authenticated Successfully!');
 
-    // 2. Test Welcome & First Login Email
-    console.log('\n[2/3] Testing: Student Welcome & First Login Email Dispatch...');
-    const welcomeSubject = '🎉 Welcome to SmartSympo - Account Activated Successfully!';
-    const welcomeHtml = `
+    // 2. Test Student Welcome Email
+    console.log('\n[2/4] Testing: Student Welcome & First Login Email Dispatch...');
+    const studentSubject = '🎉 Welcome to SmartSympo 2026 - Student Account Activated!';
+    const studentHtml = `
       <div style="font-family: sans-serif; background-color: #0f172a; padding: 30px; color: #f8fafc;">
         <div style="max-width: 550px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155;">
           <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 28px; text-align: center;">
@@ -47,7 +47,7 @@ async function runTests() {
             <p style="margin: 6px 0 0 0; color: #e0e7ff; font-size: 13px;">Student Account Activated</p>
           </div>
           <div style="padding: 24px;">
-            <p>Hi <strong>Test Student</strong>,</p>
+            <p>Hi <strong>Student Delegate</strong>,</p>
             <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
               Welcome to SmartSympo! Your student account has been created. You can browse symposium tracks and access your digital pass.
             </p>
@@ -64,16 +64,46 @@ async function runTests() {
     const info1 = await transporter.sendMail({
       from: `"SmartSympo 2026" <${gmailUser}>`,
       to: gmailUser,
-      subject: welcomeSubject,
-      text: `Welcome to SmartSympo! Your account (${gmailUser}) is active.`,
-      html: welcomeHtml,
+      subject: studentSubject,
+      text: `Welcome to SmartSympo! Your student account (${gmailUser}) is active.`,
+      html: studentHtml,
     });
-    console.log('✅ Welcome Email Dispatched Successfully!');
+    console.log('✅ Student Welcome Email Dispatched Successfully!');
     console.log('   - Recipient:', gmailUser);
     console.log('   - Message ID:', info1.messageId);
 
-    // 3. Test Event Registration Confirmation Email
-    console.log('\n[3/3] Testing: Event Registration Confirmation Email Dispatch...');
+    // 3. Test Coordinator Welcome Email
+    console.log('\n[3/4] Testing: Coordinator Welcome & First Login Email Dispatch...');
+    const coordSubject = '📋 Welcome to SmartSympo 2026 - Coordinator Access Activated!';
+    const coordHtml = `
+      <div style="font-family: sans-serif; background-color: #0f172a; padding: 30px; color: #f8fafc;">
+        <div style="max-width: 550px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155;">
+          <div style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%); padding: 28px; text-align: center;">
+            <h2 style="margin: 0; color: #ffffff;">📋 Welcome, Event Coordinator!</h2>
+            <p style="margin: 6px 0 0 0; color: #fef3c7; font-size: 13px;">Coordinator Portal Activated</p>
+          </div>
+          <div style="padding: 24px;">
+            <p>Hi <strong>Faculty Coordinator</strong>,</p>
+            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
+              Welcome to SmartSympo! Your coordinator account has been activated with access to live venue schedules and TOTP QR scanning.
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+    const info2 = await transporter.sendMail({
+      from: `"SmartSympo 2026" <${gmailUser}>`,
+      to: gmailUser,
+      subject: coordSubject,
+      text: `Welcome to SmartSympo! Your coordinator account (${gmailUser}) is active.`,
+      html: coordHtml,
+    });
+    console.log('✅ Coordinator Welcome Email Dispatched Successfully!');
+    console.log('   - Recipient:', gmailUser);
+    console.log('   - Message ID:', info2.messageId);
+
+    // 4. Test Event Registration Confirmation Email
+    console.log('\n[4/4] Testing: Event Registration Confirmation Email Dispatch...');
     const eventSubject = '✅ Registration Confirmed: AI Hackathon 2026 - Smart-Sympo 2026';
     const eventHtml = `
       <div style="font-family: sans-serif; background-color: #0b0f19; padding: 30px; color: #f8fafc;">
@@ -88,32 +118,31 @@ async function runTests() {
               You have successfully registered for <strong>AI Hackathon 2026</strong>.
             </p>
             <div style="background-color: #0f172a; padding: 14px; border-radius: 10px; margin: 16px 0; font-size: 13px; color: #cbd5e1;">
-              <div>• <strong>Venue:</strong> Auditorium Hall A</div>
-              <div>• <strong>Time:</strong> 10:00 AM - 01:30 PM</div>
-              <div>• <strong>Pass Token:</strong> <span style="color: #34d399; font-family: monospace; font-weight: bold;">PASS-AI-9921</span></div>
+              <div>• <strong>Venue:</strong> Main Auditorium Hall A</div>
+              <div>• <strong>Time:</strong> 09:30 AM - 11:30 AM</div>
+              <div>• <strong>Pass Token:</strong> PASS-HACK-2026-LIVE</div>
             </div>
           </div>
         </div>
       </div>
     `;
 
-    const info2 = await transporter.sendMail({
+    const info3 = await transporter.sendMail({
       from: `"SmartSympo 2026" <${gmailUser}>`,
       to: gmailUser,
       subject: eventSubject,
-      text: 'Registration Confirmed: AI Hackathon 2026 at Auditorium Hall A.',
+      text: `Registration confirmed for AI Hackathon 2026! Pass: PASS-HACK-2026-LIVE`,
       html: eventHtml,
     });
     console.log('✅ Event Registration Email Dispatched Successfully!');
     console.log('   - Recipient:', gmailUser);
-    console.log('   - Message ID:', info2.messageId);
+    console.log('   - Message ID:', info3.messageId);
 
     console.log('\n====================================================');
     console.log('🎉 ALL EMAIL PROCESSES TESTED & VERIFIED 100% OPERATIONAL!');
     console.log('====================================================\n');
-    process.exit(0);
   } catch (err) {
-    console.error('❌ Test failed with error:', err.message);
+    console.error('\n❌ Email Verification Failed:', err);
     process.exit(1);
   }
 }

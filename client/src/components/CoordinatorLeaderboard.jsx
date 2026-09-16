@@ -1,7 +1,5 @@
-// agent-notes: { ctx: "Live Coordinator Scanning Leaderboard with speed metrics, throughput rates, and podium ranks", deps: ["lucide-react"], state: "active", last: "antigravity@2026-09-07" }
-
-import React, { useMemo } from 'react';
-import { Trophy, Zap, Award, CheckCircle2, UserCheck, ShieldCheck, Flame, Clock } from 'lucide-react';
+import { useMemo } from 'react';
+import { Trophy, Zap } from 'lucide-react';
 
 export default function CoordinatorLeaderboard({
   attendanceLogs = [],

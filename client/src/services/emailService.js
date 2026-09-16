@@ -6,16 +6,20 @@ import { sendEventConfirmationApi, sendWelcomeEmailApi } from './backendEmailSer
 /**
  * Service to dispatch automated welcome and first login emails
  */
-export async function sendWelcomeEmail({ name, email, role, roll_no, collegeName, department }) {
+export async function sendWelcomeEmail({ name, email, role, roll_no, collegeName, department, loginUrl }) {
   const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_smartsympo';
   const templateId = import.meta.env.VITE_EMAILJS_WELCOME_TEMPLATE_ID || 'template_welcome';
   const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || '';
 
-  const studentName = name || email?.split('@')[0] || 'Student Delegate';
+  const userRole = (role || 'student').toLowerCase();
+  const defaultRoleTitle = userRole === 'admin' ? 'Administrator' : (userRole === 'coordinator' ? 'Event Coordinator' : 'Student Delegate');
+  const studentName = name || email?.split('@')[0] || defaultRoleTitle;
   const studentEmail = email || '';
-  const userRole = role || 'student';
-  const studentRollNo = roll_no || 'STU-2026';
-  const studentCollege = collegeName || 'College of Engineering';
+  const studentRollNo = roll_no || (userRole === 'admin' ? 'ADM-2026' : userRole === 'coordinator' ? 'FAC-2026' : 'STU-2026');
+  const studentCollege = collegeName || 'Symposium Campus';
+
+  const defaultPath = userRole === 'admin' ? '/login/admin' : (userRole === 'coordinator' || userRole === 'staff' ? '/login/staff' : '/login/student');
+  const effectiveLoginUrl = loginUrl || (typeof window !== 'undefined' ? `${window.location.origin}${defaultPath}` : `http://localhost:5173${defaultPath}`);
 
   // 1. Primary: Dispatch via Express / Nodemailer Backend SMTP Server
   try {
@@ -26,6 +30,7 @@ export async function sendWelcomeEmail({ name, email, role, roll_no, collegeName
       roll_no: studentRollNo,
       collegeName: studentCollege,
       department: department || '',
+      loginUrl: effectiveLoginUrl,
     });
     if (backendRes?.success && backendRes?.dispatched) {
       return { success: true, dispatched: true, message: `Welcome email sent to ${studentEmail}`, backendRes };
@@ -44,7 +49,12 @@ export async function sendWelcomeEmail({ name, email, role, roll_no, collegeName
         role: userRole,
         roll_no: studentRollNo,
         college: studentCollege,
-        subject: '🎉 Welcome to SmartSympo - Account Activated Successfully!',
+        login_url: effectiveLoginUrl,
+        subject: userRole === 'admin'
+          ? '👑 Welcome to SmartSympo - Administrator Access Activated!'
+          : userRole === 'coordinator'
+          ? '📋 Welcome to SmartSympo - Coordinator Access Activated!'
+          : '🎉 Welcome to SmartSympo - Student Account Activated!',
         symposium_name: 'SmartSympo 2026',
         year: new Date().getFullYear(),
       };

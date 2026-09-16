@@ -1,6 +1,6 @@
 // agent-notes: { ctx: "Post-event rating and feedback modal with interactive star ratings, quick topic tags, and review submission", deps: ["src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-09-07" }
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Star, X, CheckCircle2, MessageSquare, ThumbsUp, Sparkles, Send } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 

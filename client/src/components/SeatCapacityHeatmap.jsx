@@ -1,6 +1,5 @@
 // agent-notes: { ctx: "Live Seat Capacity Heatmap and Occupancy visual indicator with color tiers and remaining seat badges", deps: ["lucide-react"], state: "active", last: "antigravity@2026-09-07" }
 
-import React from 'react';
 import { Users, AlertTriangle, Flame, CheckCircle2 } from 'lucide-react';
 
 /**

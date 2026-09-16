@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import {
   X,
-  Calendar,
   Clock,
   MapPin,
   Users,
@@ -12,11 +11,8 @@ import {
   Share2,
   CalendarPlus,
   BookOpen,
-  Info,
   Navigation,
   Sparkles,
-  ExternalLink,
-  ShieldCheck,
   Check,
 } from 'lucide-react';
 import { generateEventICS, downloadICSFile } from '../utils/calendarExport';

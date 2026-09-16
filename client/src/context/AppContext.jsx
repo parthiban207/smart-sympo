@@ -729,6 +729,72 @@ export const AppProvider = ({ children }) => {
     }
   }, []);
 
+  // Centralized robust Welcome Email dispatcher for Student, Coordinator, and Admin first-time logins
+  const triggerWelcomeEmailIfNeeded = async (userProfile, forceDispatch = false) => {
+    if (!userProfile || !userProfile.email) return;
+
+    const email = userProfile.email.trim().toLowerCase();
+    const welcomeKey = `smart_sympo_welcome_dispatched_${email}`;
+    const wasAlreadyDispatched = typeof window !== 'undefined' ? localStorage.getItem(welcomeKey) : null;
+    const isFirstTime = Boolean(
+      userProfile.first_login === true ||
+      userProfile.first_login === 'true' ||
+      !wasAlreadyDispatched ||
+      forceDispatch
+    );
+
+    if (!isFirstTime && wasAlreadyDispatched) {
+      // Dispatch routine login security alert for subsequent logins
+      sendLoginAlertApi({
+        email,
+        name: userProfile.full_name || userProfile.name || userProfile.username || 'User',
+        role: userProfile.role || 'student',
+        timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
+      }).catch((err) => console.warn('[Login Alert Email Error]:', err));
+      return;
+    }
+
+    const cleanRole = (userProfile.role || (email.includes('admin') ? 'admin' : email.includes('coord') ? 'coordinator' : 'student')).toLowerCase();
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
+    const roleLoginPath = cleanRole === 'admin' ? '/login/admin' : (cleanRole === 'coordinator' || cleanRole === 'staff' ? '/login/staff' : '/login/student');
+    const targetLoginUrl = `${origin}${roleLoginPath}`;
+
+    console.log(`[AppContext] Dispatching automated Welcome Email for ${cleanRole} first login:`, email);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(welcomeKey, new Date().toISOString());
+    }
+
+    const emailPayload = {
+      email,
+      name: userProfile.full_name || userProfile.name || userProfile.username || email.split('@')[0],
+      role: cleanRole,
+      roll_no: userProfile.roll_no || userProfile.college_id || '',
+      collegeName: userProfile.college_name || userProfile.college || '',
+      department: userProfile.department || '',
+      loginUrl: targetLoginUrl,
+    };
+
+    // Primary: Backend Express / Vite Nodemailer SMTP dispatch
+    sendWelcomeEmailApi(emailPayload).catch((err) =>
+      console.warn('[Welcome Email Backend Error]:', err)
+    );
+
+    // Fallback: EmailJS if configured
+    sendWelcomeEmail(emailPayload).catch((err) =>
+      console.warn('[Welcome EmailJS Error]:', err)
+    );
+
+    // Mark first_login = false in Supabase & Local state
+    if (!isMockMode && isValidUUID(userProfile.id)) {
+      try {
+        await supabase.from('profiles').update({ first_login: false }).eq('id', userProfile.id);
+      } catch (updateErr) {
+        console.warn('[First Login Flag Update Warning]:', updateErr);
+      }
+    }
+  };
+
   // Supabase Auth Signup with complete validation & explicit profiles table insertion
   const signUpWithSupabase = async ({
     email,
@@ -827,6 +893,7 @@ export const AppProvider = ({ children }) => {
               const savedUser = syncUserStorage(profile);
               setIsAuthenticated(true);
               setSession(loginRes.data.session || null);
+              triggerWelcomeEmailIfNeeded(savedUser, false);
               return { success: true, user: savedUser, profile: savedUser, role: savedUser.role };
             }
           } catch (loginErr) {
@@ -874,25 +941,8 @@ export const AppProvider = ({ children }) => {
       setIsAuthenticated(true);
       setSession(data.session || null);
 
-      // Async background Welcome Email trigger (non-blocking)
-      sendWelcomeEmailApi({
-        email: cleanEmail,
-        name: fullName.trim(),
-        role: role,
-        roll_no: finalCollegeId,
-        collegeName: finalCollegeName,
-        department: finalDepartment,
-        loginUrl: typeof window !== 'undefined' ? `${window.location.origin}/login/student` : '',
-      }).catch((err) => console.warn('[Welcome Email Backend Error]:', err));
-
-      sendWelcomeEmail({
-        name: fullName.trim(),
-        email: cleanEmail,
-        role: role,
-        roll_no: finalCollegeId,
-        collegeName: finalCollegeName,
-        department: finalDepartment,
-      }).catch((err) => console.warn('[Welcome EmailJS Error]:', err));
+      // Async background Welcome Email trigger for new user
+      triggerWelcomeEmailIfNeeded(savedUser, true);
 
       return { success: true, user: savedUser, profile: savedUser, role: savedUser.role };
     } catch (err) {
@@ -1003,6 +1053,7 @@ export const AppProvider = ({ children }) => {
         }
         const synced = syncUserStorage(fallbackProfile);
         setIsAuthenticated(true);
+        triggerWelcomeEmailIfNeeded(synced);
         return { success: true, user: synced, profile: synced, role: synced.role };
       }
 
@@ -1074,56 +1125,8 @@ export const AppProvider = ({ children }) => {
     setIsAuthenticated(true);
     setSession(authSession);
 
-    // Guaranteed Welcome Email dispatch for first login or newly registered student
-    const welcomeDispatchedKey = `smart_sympo_welcome_dispatched_${synced.email?.toLowerCase()}`;
-    const wasWelcomeDispatched = typeof window !== 'undefined' ? localStorage.getItem(welcomeDispatchedKey) : null;
-    const isFirstLogin = Boolean(profile?.first_login === true || profile?.first_login === 'true' || !wasWelcomeDispatched);
-
-    if (isFirstLogin && !wasWelcomeDispatched) {
-      console.log('[Auth] Dispatching automated Welcome Email for student first login:', synced.email);
-      // Send Welcome & First Login Email asynchronously in background
-      sendWelcomeEmailApi({
-        email: synced.email,
-        name: synced.full_name || synced.name || synced.username || 'Student Delegate',
-        role: synced.role || 'student',
-        roll_no: synced.roll_no || synced.college_id || '',
-        collegeName: synced.college_name || synced.college || '',
-        department: synced.department || '',
-        loginUrl: typeof window !== 'undefined' ? `${window.location.origin}/login/student` : '',
-      }).catch((err) => console.warn('[Welcome Email Backend Error]:', err));
-
-      sendWelcomeEmail({
-        name: synced.full_name || synced.name || synced.username || 'Student Delegate',
-        email: synced.email,
-        role: synced.role || 'student',
-        roll_no: synced.roll_no || synced.college_id || '',
-        collegeName: synced.college_name || synced.college || '',
-        department: synced.department || '',
-      }).catch((err) => console.warn('[Welcome EmailJS Error]:', err));
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(welcomeDispatchedKey, new Date().toISOString());
-      }
-
-      // Mark first_login = false in Supabase & Local state
-      if (!isMockMode && isValidUUID(synced.id)) {
-        try {
-          await supabase.from('profiles').update({ first_login: false }).eq('id', synced.id);
-        } catch (updateErr) {
-          console.warn('[First Login Flag Update Warning]:', updateErr);
-        }
-      }
-      synced.first_login = false;
-      syncUserStorage(synced);
-    } else {
-      // Routine login security alert
-      sendLoginAlertApi({
-        email: synced.email,
-        name: synced.full_name || synced.name || synced.username || 'User',
-        role: synced.role || 'student',
-        timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
-      }).catch((err) => console.warn('[Login Alert Email Error]:', err));
-    }
+    // Guaranteed Welcome Email dispatch for first login or newly registered user
+    triggerWelcomeEmailIfNeeded(synced);
 
     return { success: true, user: synced, profile: synced, role: synced.role };
   };
@@ -2415,7 +2418,10 @@ export const AppProvider = ({ children }) => {
       const updated = [newFeedback, ...(prev || [])];
       try {
         localStorage.setItem('smart_sympo_event_feedbacks', JSON.stringify(updated));
-      } catch (_) {}
+      } catch (err) {
+        // Ignore localStorage quota errors in incognito/restricted mode
+        console.debug('Failed to cache event feedback locally:', err);
+      }
       return updated;
     });
 

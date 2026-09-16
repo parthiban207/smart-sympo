@@ -66,19 +66,24 @@ export async function sendWelcomeEmailApi({
     return { success: false, error: 'Recipient email required' };
   }
 
+  const cleanRole = (role || 'student').toLowerCase();
+  const defaultLoginPath = cleanRole === 'admin' ? '/login/admin' : (cleanRole === 'coordinator' || cleanRole === 'staff' ? '/login/staff' : '/login/student');
+  const defaultLoginUrl = typeof window !== 'undefined' ? `${window.location.origin}${defaultLoginPath}` : `http://localhost:5173${defaultLoginPath}`;
+  const defaultRoleName = cleanRole === 'admin' ? 'Administrator' : (cleanRole === 'coordinator' ? 'Event Coordinator' : 'Student Delegate');
+
   const payload = {
     email: email.trim(),
-    name: name || email.split('@')[0] || 'Student Delegate',
-    role: role || 'student',
+    name: name || (email.includes('@') ? email.split('@')[0] : defaultRoleName),
+    role: cleanRole,
     roll_no: roll_no || '',
     collegeName: collegeName || '',
     department: department || '',
-    loginUrl: loginUrl || (typeof window !== 'undefined' ? `${window.location.origin}/login/student` : ''),
+    loginUrl: loginUrl || defaultLoginUrl,
   };
 
   const result = await fetchWithFallback('/api/send-welcome-email', payload);
   if (result.success) {
-    console.log('[BackendEmailService] Welcome email dispatched successfully to:', email);
+    console.log(`[BackendEmailService] Welcome email dispatched successfully (${cleanRole}) to:`, email);
   }
   return result;
 }

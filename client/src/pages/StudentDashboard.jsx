@@ -24,10 +24,7 @@ import {
   Sparkles,
   Search,
   Filter,
-  Layers,
   Award,
-  Calendar,
-  ExternalLink,
   ChevronDown,
   Info,
   Check,
@@ -514,7 +511,6 @@ export default function StudentDashboard() {
                 {visibleRegisteredEvents.map((event, idx) => {
                   const regCount = registrations.filter((r) => r.event_id === event.id).length;
                   const maxCap = event.max_capacity || 100;
-                  const capPct = Math.min(100, Math.round((regCount / maxCap) * 100));
                   const paperCode = `TRACK-${2026}-${String(idx + 1).padStart(2, '0')}`;
                   const isMenuOpen = activeMenuId === event.id;
                   const timing = getEventTimingStatus(event, currentTime);

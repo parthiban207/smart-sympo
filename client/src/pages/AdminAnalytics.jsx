@@ -1357,10 +1357,6 @@ export default function AdminAnalytics() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {events.map((evt) => {
             const regCount = registrations.filter((r) => r.event_id === evt.id).length;
-            const checkedInCount = attendanceLogs.filter(
-              (log) => log.event_id === evt.id && log.status === 'Checked-In'
-            ).length;
-            const occupancyPercent = Math.round((checkedInCount / (evt.max_capacity || 100)) * 100);
 
             return (
               <div

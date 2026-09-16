@@ -90,27 +90,19 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// =========================================================================
-// 1. WELCOME & STUDENT SIGNUP CONFIRMATION EMAIL
-// Trigger: When a student signs up or logs into SmartSympo.
-// =========================================================================
-const handleWelcomeEmail = async (req, res) => {
-  try {
-    const { email, name, role, roll_no, collegeName, department, loginUrl } = req.body || {};
+// Helper to generate role-specific Welcome Email HTML & text content
+const generateWelcomeEmailContent = ({ email, name, role, roll_no, collegeName, department, loginUrl }) => {
+  const normRole = (role || 'student').toLowerCase();
+  const userCollege = collegeName || 'Symposium Campus';
+  const userDept = department || 'Computer Science & Engineering';
 
-    if (!email) {
-      return res.status(400).json({ success: false, error: 'Missing recipient email address.' });
-    }
+  if (normRole === 'admin') {
+    const adminId = roll_no || `ADM-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+    const targetUrl = loginUrl || 'http://localhost:5173/login/admin';
+    const userName = name || email.split('@')[0] || 'Administrator';
+    const subject = '👑 Welcome to SmartSympo 2026 - Administrator Access Activated!';
 
-    const studentName = name || email.split('@')[0] || 'Student Delegate';
-    const userRole = role || 'student';
-    const studentRollNo = roll_no || 'STU-2026';
-    const studentCollege = collegeName || 'College of Engineering';
-    const studentDept = department || 'Computer Science & Engineering';
-    const targetLoginUrl = loginUrl || 'http://localhost:5173/login/student';
-    const subject = '🎉 Welcome to SmartSympo - Account Activated Successfully!';
-
-    const textContent = `Hi ${studentName},\n\nWelcome to SmartSympo! You have successfully signed up and your account has been activated.\n\nYou can now log in to SmartSympo, browse symposium tracks, register for events with 1-click clash detection, and access your live digital TOTP pass.\n\nAccount Details:\n- Name: ${studentName}\n- Email: ${email}\n- Roll No: ${studentRollNo}\n- College: ${studentCollege}\n- Department: ${studentDept}\n- Login Link: ${targetLoginUrl}\n\nBest regards,\nSmartSympo Organizing Team`;
+    const textContent = `Hi ${userName},\n\nWelcome to SmartSympo! Your Administrator account has been successfully activated.\n\nYou now have full administrative governance over SmartSympo 2026.\n\nAccount Details:\n- Role: Administrator\n- Name: ${userName}\n- Email: ${email}\n- Admin ID: ${adminId}\n- College / Campus: ${userCollege}\n- Department: ${userDept}\n- Admin Console: ${targetUrl}\n\nBest regards,\nSmartSympo Organizing Team`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -118,121 +110,110 @@ const handleWelcomeEmail = async (req, res) => {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Welcome to SmartSympo 2026</title>
+        <title>Welcome to SmartSympo - Administrator Access</title>
       </head>
       <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
         <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 10px;">
           <tr>
             <td align="center">
               <table width="100%" max-width="580" cellpadding="0" cellspacing="0" style="max-width: 580px; background-color: #1e293b; border: 1px solid #334155; border-radius: 20px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);">
-                
-                <!-- Hero Header Banner -->
                 <tr>
-                  <td style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%); padding: 36px 32px; text-align: center;">
+                  <td style="background: linear-gradient(135deg, #e11d48 0%, #be123c 50%, #881337 100%); padding: 36px 32px; text-align: center;">
                     <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.2); padding: 6px 16px; border-radius: 9999px; font-size: 12px; font-weight: 700; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">
-                      SmartSympo 2026
+                      Administrator Access
                     </div>
                     <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">
-                      🎉 Welcome to SmartSympo!
+                      👑 Welcome, Administrator!
                     </h1>
-                    <p style="margin: 8px 0 0 0; color: #e0e7ff; font-size: 14px; font-weight: 500;">
-                      Student Account Successfully Created & Activated
+                    <p style="margin: 8px 0 0 0; color: #ffe4e6; font-size: 14px; font-weight: 500;">
+                      Master Governance & Symposium Administration Activated
                     </p>
                   </td>
                 </tr>
-
-                <!-- Email Body -->
                 <tr>
                   <td style="padding: 36px 32px;">
                     <p style="font-size: 16px; line-height: 1.6; color: #f1f5f9; margin-top: 0;">
-                      Hi <strong>${studentName}</strong>,
+                      Hi <strong>${userName}</strong>,
                     </p>
-                    
                     <p style="font-size: 15px; line-height: 1.65; color: #cbd5e1; margin-top: 12px;">
-                      Welcome to SmartSympo! Your student registration is complete and your account is now ready for use. 
-                      You can log in, explore paper presentations, hackathons, and technical tracks, claim your digital passes, and track your attendance in real-time.
+                      Welcome to SmartSympo! Your Administrator account has been activated with full governance privileges. You can manage coordinators, approve event tracks, oversee global attendance in real-time, and access live analytical reporting.
                     </p>
-
-                    <!-- Student Credentials Box -->
                     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; border: 1px solid #334155; border-radius: 14px; margin: 24px 0; border-collapse: separate;">
                       <tr>
                         <td style="padding: 20px;">
-                          <div style="font-size: 12px; font-weight: 700; color: #818cf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
-                            📋 Your Registered Profile Details
+                          <div style="font-size: 12px; font-weight: 700; color: #fb7185; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
+                            📋 Administrator Profile Details
                           </div>
                           <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
                             <tr>
                               <td style="padding: 4px 0; color: #94a3b8; width: 35%;">Name:</td>
-                              <td style="padding: 4px 0; color: #f8fafc; font-weight: 600;">${studentName}</td>
+                              <td style="padding: 4px 0; color: #f8fafc; font-weight: 600;">${userName}</td>
                             </tr>
                             <tr>
                               <td style="padding: 4px 0; color: #94a3b8;">Email:</td>
                               <td style="padding: 4px 0; color: #f8fafc; font-weight: 600;">${email}</td>
                             </tr>
                             <tr>
-                              <td style="padding: 4px 0; color: #94a3b8;">Roll No / ID:</td>
-                              <td style="padding: 4px 0; color: #a5b4fc; font-family: monospace; font-weight: 700;">${studentRollNo}</td>
+                              <td style="padding: 4px 0; color: #94a3b8;">Role:</td>
+                              <td style="padding: 4px 0; color: #fb7185; font-weight: 700;">Administrator</td>
                             </tr>
                             <tr>
-                              <td style="padding: 4px 0; color: #94a3b8;">College:</td>
-                              <td style="padding: 4px 0; color: #f8fafc;">${studentCollege}</td>
+                              <td style="padding: 4px 0; color: #94a3b8;">Admin ID:</td>
+                              <td style="padding: 4px 0; color: #fda4af; font-family: monospace; font-weight: 700;">${adminId}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">College / Campus:</td>
+                              <td style="padding: 4px 0; color: #f8fafc;">${userCollege}</td>
                             </tr>
                             <tr>
                               <td style="padding: 4px 0; color: #94a3b8;">Department:</td>
-                              <td style="padding: 4px 0; color: #f8fafc;">${studentDept}</td>
+                              <td style="padding: 4px 0; color: #f8fafc;">${userDept}</td>
                             </tr>
                           </table>
                         </td>
                       </tr>
                     </table>
-
-                    <!-- Login Button CTA -->
                     <table width="100%" cellpadding="0" cellspacing="0" style="margin: 28px 0; text-align: center;">
                       <tr>
                         <td align="center">
-                          <a href="${targetLoginUrl}" style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 12px; box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.5);">
-                            🚀 Log In to SmartSympo
+                          <a href="${targetUrl}" style="display: inline-block; background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 12px; box-shadow: 0 10px 20px -5px rgba(225, 29, 72, 0.5);">
+                            🚀 Open Admin Console
                           </a>
                         </td>
                       </tr>
                     </table>
-
-                    <!-- Key Feature Highlights -->
                     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; border: 1px solid #334155; border-radius: 14px; margin: 24px 0; border-collapse: separate;">
                       <tr>
                         <td style="padding: 20px;">
                           <table width="100%" cellpadding="0" cellspacing="0">
                             <tr>
                               <td style="padding-bottom: 12px;">
-                                <div style="color: #818cf8; font-weight: 700; font-size: 14px;">⚡ 1-Click Instant Registration</div>
-                                <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Smart clash-detection prevents overlapping event schedules.</div>
+                                <div style="color: #fb7185; font-weight: 700; font-size: 14px;">🏛️ Master Symposium Governance</div>
+                                <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Oversee tracks, approve schedules, and manage venue allocations.</div>
                               </td>
                             </tr>
                             <tr>
                               <td style="padding-bottom: 12px;">
-                                <div style="color: #34d399; font-weight: 700; font-size: 14px;">📲 Dynamic TOTP Entry Pass</div>
-                                <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Rotating 15-second secure QR token for venue hall access.</div>
+                                <div style="color: #38bdf8; font-weight: 700; font-size: 14px;">👥 Staff & Coordinator Management</div>
+                                <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Assign coordinator roles and monitor check-in staff activity.</div>
                               </td>
                             </tr>
                             <tr>
                               <td>
-                                <div style="color: #fbbf24; font-weight: 700; font-size: 14px;">📍 Real-Time Hall Updates</div>
-                                <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Live delay broadcasts, navigation routing, and agenda updates.</div>
+                                <div style="color: #34d399; font-weight: 700; font-size: 14px;">📊 Real-Time Analytics & Reports</div>
+                                <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Live registration metrics, seat capacity heatmaps, and instant data exports.</div>
                               </td>
                             </tr>
                           </table>
                         </td>
                       </tr>
                     </table>
-
                     <p style="font-size: 14px; line-height: 1.6; color: #cbd5e1; margin-bottom: 0;">
                       Best regards,<br>
                       <strong style="color: #f8fafc;">SmartSympo Organizing Team</strong>
                     </p>
                   </td>
                 </tr>
-
-                <!-- Footer -->
                 <tr>
                   <td style="background-color: #0f172a; padding: 24px 32px; border-top: 1px solid #334155; text-align: center;">
                     <p style="margin: 0; font-size: 12px; color: #64748b;">
@@ -247,6 +228,301 @@ const handleWelcomeEmail = async (req, res) => {
       </body>
       </html>
     `;
+    return { subject, textContent, htmlContent };
+  }
+
+  if (normRole === 'coordinator' || normRole === 'staff') {
+    const staffId = roll_no || `FAC-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+    const targetUrl = loginUrl || 'http://localhost:5173/login/staff';
+    const userName = name || email.split('@')[0] || 'Event Coordinator';
+    const subject = '📋 Welcome to SmartSympo 2026 - Coordinator Access Activated!';
+
+    const textContent = `Hi ${userName},\n\nWelcome to SmartSympo! Your Coordinator account has been successfully activated.\n\nYou now have authorized access to manage venue tracks and check in attendees.\n\nAccount Details:\n- Role: Event Coordinator\n- Name: ${userName}\n- Email: ${email}\n- Coordinator ID: ${staffId}\n- College: ${userCollege}\n- Department: ${userDept}\n- Coordinator Portal: ${targetUrl}\n\nBest regards,\nSmartSympo Organizing Team`;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to SmartSympo - Coordinator Access</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 10px;">
+          <tr>
+            <td align="center">
+              <table width="100%" max-width="580" cellpadding="0" cellspacing="0" style="max-width: 580px; background-color: #1e293b; border: 1px solid #334155; border-radius: 20px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);">
+                <tr>
+                  <td style="background: linear-gradient(135deg, #d97706 0%, #b45309 50%, #78350f 100%); padding: 36px 32px; text-align: center;">
+                    <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.2); padding: 6px 16px; border-radius: 9999px; font-size: 12px; font-weight: 700; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">
+                      Coordinator Portal
+                    </div>
+                    <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">
+                      📋 Welcome, Coordinator!
+                    </h1>
+                    <p style="margin: 8px 0 0 0; color: #fef3c7; font-size: 14px; font-weight: 500;">
+                      Venue & Track Coordination Access Activated
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 36px 32px;">
+                    <p style="font-size: 16px; line-height: 1.6; color: #f1f5f9; margin-top: 0;">
+                      Hi <strong>${userName}</strong>,
+                    </p>
+                    <p style="font-size: 15px; line-height: 1.65; color: #cbd5e1; margin-top: 12px;">
+                      Welcome to SmartSympo! Your Coordinator account is ready. You have authorized access to manage venue schedules, broadcast live delay alerts, scan student TOTP QR passes at entry gates, and verify attendance in real time.
+                    </p>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; border: 1px solid #334155; border-radius: 14px; margin: 24px 0; border-collapse: separate;">
+                      <tr>
+                        <td style="padding: 20px;">
+                          <div style="font-size: 12px; font-weight: 700; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
+                            📋 Coordinator Profile Details
+                          </div>
+                          <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8; width: 35%;">Name:</td>
+                              <td style="padding: 4px 0; color: #f8fafc; font-weight: 600;">${userName}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">Email:</td>
+                              <td style="padding: 4px 0; color: #f8fafc; font-weight: 600;">${email}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">Role:</td>
+                              <td style="padding: 4px 0; color: #fbbf24; font-weight: 700;">Event Coordinator</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">Staff ID:</td>
+                              <td style="padding: 4px 0; color: #fde68a; font-family: monospace; font-weight: 700;">${staffId}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">College:</td>
+                              <td style="padding: 4px 0; color: #f8fafc;">${userCollege}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 4px 0; color: #94a3b8;">Department:</td>
+                              <td style="padding: 4px 0; color: #f8fafc;">${userDept}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin: 28px 0; text-align: center;">
+                      <tr>
+                        <td align="center">
+                          <a href="${targetUrl}" style="display: inline-block; background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 12px; box-shadow: 0 10px 20px -5px rgba(217, 119, 6, 0.5);">
+                            🚀 Open Coordinator Portal
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; border: 1px solid #334155; border-radius: 14px; margin: 24px 0; border-collapse: separate;">
+                      <tr>
+                        <td style="padding: 20px;">
+                          <table width="100%" cellpadding="0" cellspacing="0">
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <div style="color: #fbbf24; font-weight: 700; font-size: 14px;">📡 Live Hall & Track Control</div>
+                                <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Update session stages, adjust timings, and broadcast delay alerts.</div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding-bottom: 12px;">
+                                <div style="color: #34d399; font-weight: 700; font-size: 14px;">📷 Fast-Lane TOTP QR Scanner</div>
+                                <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Instant QR code gate check-in with fraud prevention.</div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td>
+                                <div style="color: #818cf8; font-weight: 700; font-size: 14px;">📢 Live Student Announcements</div>
+                                <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Broadcast urgent alerts directly to registered student attendees.</div>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="font-size: 14px; line-height: 1.6; color: #cbd5e1; margin-bottom: 0;">
+                      Best regards,<br>
+                      <strong style="color: #f8fafc;">SmartSympo Organizing Team</strong>
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background-color: #0f172a; padding: 24px 32px; border-top: 1px solid #334155; text-align: center;">
+                    <p style="margin: 0; font-size: 12px; color: #64748b;">
+                      SmartSympo 2026 • Real-Time Multi-Venue Event Management System
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
+    return { subject, textContent, htmlContent };
+  }
+
+  // Default: Student Delegate
+  const studentId = roll_no || `STU-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+  const targetUrl = loginUrl || 'http://localhost:5173/login/student';
+  const userName = name || email.split('@')[0] || 'Student Delegate';
+  const subject = '🎉 Welcome to SmartSympo 2026 - Student Account Activated!';
+
+  const textContent = `Hi ${userName},\n\nWelcome to SmartSympo! You have successfully signed up and your account has been activated.\n\nYou can now log in to SmartSympo, browse symposium tracks, register for events with 1-click clash detection, and access your live digital TOTP pass.\n\nAccount Details:\n- Role: Student Delegate\n- Name: ${userName}\n- Email: ${email}\n- Roll No: ${studentId}\n- College: ${userCollege}\n- Department: ${userDept}\n- Login Link: ${targetUrl}\n\nBest regards,\nSmartSympo Organizing Team`;
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Welcome to SmartSympo 2026</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; padding: 40px 10px;">
+        <tr>
+          <td align="center">
+            <table width="100%" max-width="580" cellpadding="0" cellspacing="0" style="max-width: 580px; background-color: #1e293b; border: 1px solid #334155; border-radius: 20px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);">
+              <tr>
+                <td style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #06b6d4 100%); padding: 36px 32px; text-align: center;">
+                  <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.2); padding: 6px 16px; border-radius: 9999px; font-size: 12px; font-weight: 700; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">
+                    SmartSympo 2026
+                  </div>
+                  <h1 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 800; letter-spacing: -0.5px;">
+                    🎉 Welcome to SmartSympo!
+                  </h1>
+                  <p style="margin: 8px 0 0 0; color: #e0e7ff; font-size: 14px; font-weight: 500;">
+                    Student Account Successfully Activated
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 36px 32px;">
+                  <p style="font-size: 16px; line-height: 1.6; color: #f1f5f9; margin-top: 0;">
+                    Hi <strong>${userName}</strong>,
+                  </p>
+                  <p style="font-size: 15px; line-height: 1.65; color: #cbd5e1; margin-top: 12px;">
+                    Welcome to SmartSympo! Your student registration is complete and your account is now ready for use. 
+                    You can log in, explore paper presentations, hackathons, and technical tracks, claim your digital passes, and track your attendance in real-time.
+                  </p>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; border: 1px solid #334155; border-radius: 14px; margin: 24px 0; border-collapse: separate;">
+                    <tr>
+                      <td style="padding: 20px;">
+                        <div style="font-size: 12px; font-weight: 700; color: #818cf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">
+                          📋 Your Registered Profile Details
+                        </div>
+                        <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
+                          <tr>
+                            <td style="padding: 4px 0; color: #94a3b8; width: 35%;">Name:</td>
+                            <td style="padding: 4px 0; color: #f8fafc; font-weight: 600;">${userName}</td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 4px 0; color: #94a3b8;">Email:</td>
+                            <td style="padding: 4px 0; color: #f8fafc; font-weight: 600;">${email}</td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 4px 0; color: #94a3b8;">Role:</td>
+                            <td style="padding: 4px 0; color: #818cf8; font-weight: 700;">Student Delegate</td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 4px 0; color: #94a3b8;">Roll No / ID:</td>
+                            <td style="padding: 4px 0; color: #a5b4fc; font-family: monospace; font-weight: 700;">${studentId}</td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 4px 0; color: #94a3b8;">College:</td>
+                            <td style="padding: 4px 0; color: #f8fafc;">${userCollege}</td>
+                          </tr>
+                          <tr>
+                            <td style="padding: 4px 0; color: #94a3b8;">Department:</td>
+                            <td style="padding: 4px 0; color: #f8fafc;">${userDept}</td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="margin: 28px 0; text-align: center;">
+                    <tr>
+                      <td align="center">
+                        <a href="${targetUrl}" style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700; padding: 14px 32px; border-radius: 12px; box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.5);">
+                          🚀 Log In to Student Portal
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0f172a; border: 1px solid #334155; border-radius: 14px; margin: 24px 0; border-collapse: separate;">
+                    <tr>
+                      <td style="padding: 20px;">
+                        <table width="100%" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="padding-bottom: 12px;">
+                              <div style="color: #818cf8; font-weight: 700; font-size: 14px;">⚡ 1-Click Instant Registration</div>
+                              <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Smart clash-detection prevents overlapping event schedules.</div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding-bottom: 12px;">
+                              <div style="color: #34d399; font-weight: 700; font-size: 14px;">📲 Dynamic TOTP Entry Pass</div>
+                              <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Rotating 15-second secure QR token for venue hall access.</div>
+                            </td>
+                          </tr>
+                          <tr>
+                            <td>
+                              <div style="color: #fbbf24; font-weight: 700; font-size: 14px;">📍 Real-Time Hall Updates</div>
+                              <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Live delay broadcasts, navigation routing, and agenda updates.</div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                  <p style="font-size: 14px; line-height: 1.6; color: #cbd5e1; margin-bottom: 0;">
+                    Best regards,<br>
+                    <strong style="color: #f8fafc;">SmartSympo Organizing Team</strong>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td style="background-color: #0f172a; padding: 24px 32px; border-top: 1px solid #334155; text-align: center;">
+                  <p style="margin: 0; font-size: 12px; color: #64748b;">
+                    SmartSympo 2026 • Real-Time Multi-Venue Event Management System
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+  return { subject, textContent, htmlContent };
+};
+
+// =========================================================================
+// 1. WELCOME & USER SIGNUP / FIRST LOGIN CONFIRMATION EMAIL
+// Trigger: When a student, coordinator, or admin registers or logs in for the first time.
+// =========================================================================
+const handleWelcomeEmail = async (req, res) => {
+  try {
+    const { email, name, role, roll_no, collegeName, department, loginUrl } = req.body || {};
+
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Missing recipient email address.' });
+    }
+
+    const { subject, textContent, htmlContent } = generateWelcomeEmailContent({
+      email,
+      name,
+      role,
+      roll_no,
+      collegeName,
+      department,
+      loginUrl,
+    });
 
     const result = await dispatchEmail({
       to: email,

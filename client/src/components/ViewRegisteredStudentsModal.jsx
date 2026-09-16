@@ -125,7 +125,7 @@ export default function ViewRegisteredStudentsModal({
               <span>{event.hall_number || 'Main Venue'}</span>
               <span>•</span>
               <span className="font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                {eventRegs.length} / {event.max_capacity || event.max_seats || 100} Registered
+                {registeredStudents.length} / {event.max_capacity || event.max_seats || 100} Registered
               </span>
             </p>
           </div>
