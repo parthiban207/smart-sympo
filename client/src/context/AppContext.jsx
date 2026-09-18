@@ -95,7 +95,7 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const isDarkMode = false;
-  const toggleDarkMode = () => {};
+  const toggleDarkMode = () => { };
 
   const defaultSeedEvents = [
     {
@@ -260,7 +260,7 @@ export const AppProvider = ({ children }) => {
 
     const emailStr = (userObj.email || '').trim().toLowerCase();
     const defaultName = emailStr.includes('@') ? emailStr.split('@')[0] : 'User';
-    
+
     // Explicitly identify admin vs coordinator vs student role
     let cleanRole = userObj.role;
     if (emailStr.includes('admin') || userObj.username === 'admin') {
@@ -1011,8 +1011,8 @@ export const AppProvider = ({ children }) => {
         const resolvedRole = (cleanEmail.includes('admin') || targetRole === 'admin')
           ? 'admin'
           : (targetRole === 'coordinator' || cleanEmail.includes('coord'))
-          ? 'coordinator'
-          : 'student';
+            ? 'coordinator'
+            : 'student';
 
         fallbackProfile = {
           id: 'usr-' + Date.now().toString(36),
@@ -1382,6 +1382,7 @@ export const AppProvider = ({ children }) => {
 
     try {
       await supabase.from('live_alerts').insert([
+
         {
           title: alertObj.title,
           message: alertObj.message,
@@ -1728,8 +1729,8 @@ export const AppProvider = ({ children }) => {
                 if (existingDbReg) {
                   await supabase
                     .from('registrations')
-                    .update({ 
-                      attended: true, 
+                    .update({
+                      attended: true,
                       checked_in_at: nowISO,
                       attended_at: nowISO,
                       ...(coordinatorUuid ? { scanned_by: coordinatorUuid } : {})
@@ -1770,7 +1771,7 @@ export const AppProvider = ({ children }) => {
                   check_in_time: nowISO,
                   status: 'Checked-In',
                 },
-              ]).catch(() => {});
+              ]).catch(() => { });
             }
           } catch (dbErr) {
             console.warn('[Supabase Registration Attendance Background Write Catch]:', dbErr);

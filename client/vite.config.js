@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Vite dev config with built-in Gmail SMTP Nodemailer API middleware fallback and proxy for 100% reliable email dispatch", deps: ["vite", "@vitejs/plugin-react", "@tailwindcss/vite", "nodemailer", "dotenv"], state: "active", last: "antigravity@2026-09-07" }
+// agent-notes: { ctx: "Vite dev config with built-in Gmail SMTP Nodemailer API middleware fallback and proxy for 100% reliable email dispatch", deps: ["vite", "@vitejs/plugin-react", "@tailwindcss/vite", "nodemailer", "dotenv"], state: "active", last: "antigravity@2026-09-18" }
 
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -11,10 +11,9 @@ import path from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load env variables
-dotenv.config({ path: path.join(__dirname, '.env') });
-dotenv.config({ path: path.join(__dirname, '../server/.env') });
+// Load env variables from root .env
 dotenv.config({ path: path.join(__dirname, '../.env') });
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const getGmailTransporter = () => {
   const gmailUser = (process.env.GMAIL_USER || 'smartsympo@gmail.com').trim();
@@ -285,6 +284,7 @@ function emailApiPlugin() {
 
 // https://vite.dev/config/
 export default defineConfig({
+  envDir: path.resolve(__dirname, '..'),
   plugins: [react(), tailwindcss(), emailApiPlugin()],
   resolve: {
     alias: {

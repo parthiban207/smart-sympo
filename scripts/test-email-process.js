@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Automated verification script for Welcome / Activation emails from smartsympo@gmail.com to user inboxes", deps: ["nodemailer", "dotenv"], state: "active", last: "antigravity@2026-09-16" }
+// agent-notes: { ctx: "Automated verification script for Welcome / Activation emails from smartsympo@gmail.com to user inboxes", deps: ["nodemailer", "dotenv"], state: "active", last: "antigravity@2026-09-18" }
 
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
@@ -8,8 +8,6 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.join(__dirname, '../server/.env') });
-dotenv.config({ path: path.join(__dirname, '../client/.env') });
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const senderUser = (process.env.GMAIL_USER || 'smartsympo@gmail.com').trim();
