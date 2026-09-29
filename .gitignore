@@ -56,3 +56,8 @@ ehthumbs.db
 # yarn.lock
 # pnpm-lock.yaml
 # bun.lockb
+
+# Documentation artifacts
+docs/*.pdf
+docs/PROJECT_DOCUMENTATION.md
+scripts/generate_documentation_pdf.js
