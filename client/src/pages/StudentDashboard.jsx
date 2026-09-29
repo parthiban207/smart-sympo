@@ -1,6 +1,7 @@
-// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with memoized debounced search, dynamic event timing, seat capacity heatmap, WhatsApp share, event ratings, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/components/SeatCapacityHeatmap.jsx", "src/components/EventFeedbackModal.jsx", "src/utils/calendarExport.js", "src/utils/eventTiming.js", "src/hooks/useDebounce.js", "lucide-react"], state: "active", last: "antigravity@2026-09-07" }
+// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with memoized debounced search, dynamic event timing, seat capacity heatmap, WhatsApp share, event ratings, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/components/SeatCapacityHeatmap.jsx", "src/components/EventFeedbackModal.jsx", "src/utils/calendarExport.js", "src/utils/eventTiming.js", "src/hooks/useDebounce.js", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-09-24" }
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import StudentQRModal from '../components/StudentQRModal';
 import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
@@ -30,6 +31,7 @@ import {
   Check,
   Star,
   MessageCircle,
+  Compass,
 } from 'lucide-react';
 
 export default function StudentDashboard() {
@@ -299,6 +301,13 @@ export default function StudentDashboard() {
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+          <Link
+            to="/navigation"
+            className="flex-1 md:flex-none px-4 py-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold text-xs rounded-xl shadow-xs border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2 transition cursor-pointer shrink-0 active:scale-95"
+          >
+            <Compass className="w-4 h-4 text-indigo-500" />
+            <span>Campus Navigation & Map</span>
+          </Link>
           {registeredEvents.length > 0 && (
             <button
               onClick={() => handleOpenQRPass(registeredEvents[0])}
@@ -659,10 +668,15 @@ export default function StudentDashboard() {
                             <Clock className="w-3.5 h-3.5 text-indigo-500" />
                             {formatTime(event.start_time)} – {formatTime(event.end_time)}
                           </span>
-                          <span className="flex items-center gap-1 font-mono text-[11px] font-medium text-cyan-500 dark:text-cyan-400">
-                            <MapPin className="w-3.5 h-3.5" />
-                            {event.hall_number}
-                          </span>
+                          <Link
+                            to={`/navigation?venue=${encodeURIComponent(event.hall_number || '')}`}
+                            className="flex items-center gap-1 font-mono text-[11px] font-medium text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 hover:underline"
+                            title="Locate venue on Campus Map"
+                          >
+                            <MapPin className="w-3.5 h-3.5 text-cyan-500" />
+                            <span>{event.hall_number}</span>
+                            <span className="text-[9px] bg-cyan-100 dark:bg-cyan-950/70 text-cyan-700 dark:text-cyan-300 px-1 py-0.5 rounded font-sans font-bold">Map</span>
+                          </Link>
                           <SeatCapacityHeatmap registeredCount={regCount} maxCapacity={maxCap} compact={true} />
                         </div>
 
@@ -857,7 +871,14 @@ export default function StudentDashboard() {
                       </p>
 
                       <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800 flex-wrap gap-2">
-                        <span className="text-cyan-500 dark:text-cyan-400 font-semibold">{event.hall_number}</span>
+                        <Link
+                          to={`/navigation?venue=${encodeURIComponent(event.hall_number || '')}`}
+                          className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 font-semibold inline-flex items-center gap-1 hover:underline"
+                          title="Locate venue on Campus Map"
+                        >
+                          <MapPin className="w-3 h-3 text-cyan-500" />
+                          <span>{event.hall_number}</span>
+                        </Link>
                         <span>{formatTime(event.start_time)}</span>
                         <SeatCapacityHeatmap registeredCount={regCount} maxCapacity={maxCap} compact={true} />
                       </div>

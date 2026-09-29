@@ -30,8 +30,9 @@ import {
   ShieldCheck, PlusCircle, MapPin, Radio, UserCheck, Users,
   Globe, Crosshair, Ruler, FileText, ScanLine, Clock, Hash, CheckCircle2, AlertCircle,
   Pencil, Trash2, KeyRound, Lock, FileSpreadsheet, Download, FileDown,
-  StopCircle, Mail, Search, Building, Eye, MoreHorizontal
+  StopCircle, Mail, Search, Building, Eye, MoreHorizontal, Sparkles
 } from 'lucide-react';
+import { CAMPUS_VENUES } from '../services/campusNavigationData';
 
 export default function AdminAnalytics() {
   const {
@@ -848,26 +849,77 @@ export default function AdminAnalytics() {
   };
 
   const handleUseCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      console.warn('Geolocation is not supported by your browser.');
+    if (!('geolocation' in navigator)) {
+      setExportFeedback({
+        message: 'Geolocation is not supported by your browser.',
+        type: 'error',
+      });
+      setTimeout(() => setExportFeedback(null), 4000);
       return;
     }
+
     setGeoLoading(true);
+
+    const onGeoSuccess = (position) => {
+      const lat = position.coords.latitude.toFixed(6);
+      const lng = position.coords.longitude.toFixed(6);
+      setFormData((prev) => ({
+        ...prev,
+        latitude: lat,
+        longitude: lng,
+      }));
+      setGeoLoading(false);
+      setExportFeedback({
+        message: `📍 Current GPS detected: ${lat}, ${lng}`,
+        type: 'success',
+      });
+      setTimeout(() => setExportFeedback(null), 3500);
+    };
+
+    const onGeoFallback = (err) => {
+      console.warn('High-accuracy GPS timed out or failed, trying standard network location:', err);
+      // Fallback attempt: low accuracy (fast Wi-Fi/IP provider, ideal for laptops & indoor desktops)
+      navigator.geolocation.getCurrentPosition(
+        onGeoSuccess,
+        (fallbackErr) => {
+          console.warn('Geolocation fallback failed:', fallbackErr);
+          setGeoLoading(false);
+          setExportFeedback({
+            message: 'Device GPS unavailable or permission denied. You can select an assigned hall above to autofill coordinates.',
+            type: 'error',
+          });
+          setTimeout(() => setExportFeedback(null), 5000);
+        },
+        { enableHighAccuracy: false, timeout: 6000 }
+      );
+    };
+
+    // First attempt: high accuracy (5s timeout)
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setFormData((prev) => ({
-          ...prev,
-          latitude: position.coords.latitude.toFixed(6),
-          longitude: position.coords.longitude.toFixed(6),
-        }));
-        setGeoLoading(false);
-      },
-      () => {
-        console.warn('Unable to retrieve location. Please enter coordinates manually.');
-        setGeoLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
+      onGeoSuccess,
+      onGeoFallback,
+      { enableHighAccuracy: true, timeout: 5000 }
     );
+  };
+
+  const handleSelectVenuePreset = (venueId) => {
+    if (!venueId) return;
+    const venue = CAMPUS_VENUES.find((v) => v.id === venueId);
+    if (venue) {
+      setFormData((prev) => ({
+        ...prev,
+        hall_number: venue.name,
+        latitude: venue.coords[0].toFixed(6),
+        longitude: venue.coords[1].toFixed(6),
+        allowed_radius: prev.allowed_radius || 200,
+        max_capacity: venue.capacity ? String(venue.capacity) : prev.max_capacity,
+      }));
+      setExportFeedback({
+        message: `📍 Auto-filled coordinates for ${venue.name} (${venue.coords[0]}, ${venue.coords[1]})`,
+        type: 'success',
+      });
+      setTimeout(() => setExportFeedback(null), 3500);
+    }
   };
 
   const getRoleBadgeStyle = (role) => {
@@ -2031,31 +2083,72 @@ export default function AdminAnalytics() {
                   <MapPin className="w-3.5 h-3.5 text-amber-600" />
                   Assigned Hall / Venue
                 </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Hall 1 (Main Auditorium)"
-                  value={formData.hall_number}
-                  onChange={(e) => setFormData({ ...formData, hall_number: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
-                />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <select
+                      onChange={(e) => handleSelectVenuePreset(e.target.value)}
+                      defaultValue=""
+                      className="w-full bg-indigo-50/70 border border-indigo-200 text-indigo-900 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-indigo-600 cursor-pointer"
+                    >
+                      <option value="" disabled>-- 📍 Quick Preset: Select from Campus Venues --</option>
+                      {CAMPUS_VENUES.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name} ({v.building}, Floor {v.floor}) - [{v.coords.join(', ')}]
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Hall 1 (Main Auditorium)"
+                    value={formData.hall_number}
+                    onChange={(e) => setFormData({ ...formData, hall_number: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 font-medium"
+                  />
+                </div>
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-slate-800 font-bold flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-indigo-600" />
-                    Location Coordinates
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleUseCurrentLocation}
-                    disabled={geoLoading}
-                    className="px-3 py-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <Crosshair className="w-3 h-3" />
-                    {geoLoading ? 'Detecting...' : 'Use My Location'}
-                  </button>
+                  <div>
+                    <label className="text-slate-800 font-bold flex items-center gap-1.5">
+                      <Globe className="w-3.5 h-3.5 text-indigo-600" />
+                      Location Coordinates
+                    </label>
+                    <span className="text-[10px] text-slate-500">Auto-filled or detected via GPS</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({
+                          ...prev,
+                          latitude: '13.082700',
+                          longitude: '80.270700',
+                          allowed_radius: prev.allowed_radius || 250,
+                        }));
+                        setExportFeedback({
+                          message: '📍 Campus Center coordinates set (13.0827, 80.2707)',
+                          type: 'success',
+                        });
+                        setTimeout(() => setExportFeedback(null), 3000);
+                      }}
+                      className="px-2.5 py-1 text-[10px] font-bold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-all cursor-pointer"
+                      title="Set to Main Campus Center"
+                    >
+                      Main Campus Center
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleUseCurrentLocation}
+                      disabled={geoLoading}
+                      className="px-3 py-1 text-[10px] font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50 shadow-xs"
+                    >
+                      <Crosshair className={`w-3 h-3 ${geoLoading ? 'animate-spin' : ''}`} />
+                      {geoLoading ? 'Detecting GPS...' : 'Use My Location'}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -2082,6 +2175,13 @@ export default function AdminAnalytics() {
                     />
                   </div>
                 </div>
+
+                {formData.latitude && formData.longitude && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Geo-fenced check-in enabled at ({formData.latitude}, {formData.longitude})</span>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-slate-700 font-bold flex items-center gap-1.5 mb-1">

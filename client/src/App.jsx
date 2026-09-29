@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Main App container with PASSWORD_RECOVERY global listener, collapsible left sidebar shell, dark mode support, and protected routes", deps: ["src/components/Sidebar.jsx", "src/components/Navbar.jsx", "src/components/LiveAlertBanner.jsx", "src/components/Chatbot.jsx", "src/components/ProtectedRoute.tsx", "src/context/AppContext.jsx"], state: "active", last: "antigravity@2026-08-31" }
+// agent-notes: { ctx: "Main App container with PASSWORD_RECOVERY global listener, collapsible left sidebar shell, dark mode support, and protected routes", deps: ["src/components/Sidebar.jsx", "src/components/Navbar.jsx", "src/components/LiveAlertBanner.jsx", "src/components/Chatbot.jsx", "src/components/ProtectedRoute.tsx", "src/pages/CampusNavigationPage.jsx", "src/context/AppContext.jsx"], state: "active", last: "antigravity@2026-09-24" }
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
@@ -13,6 +13,7 @@ import StudentDashboard from './pages/StudentDashboard';
 import CoordinatorConsole from './pages/CoordinatorConsole';
 import CoordinatorScanner from './pages/CoordinatorScanner';
 import AdminAnalytics from './pages/AdminAnalytics';
+import CampusNavigationPage from './pages/CampusNavigationPage';
 import LoginPage from './pages/LoginPage';
 import StudentLoginPage from './pages/StudentLoginPage';
 import StaffLoginPage from './pages/StaffLoginPage';
@@ -135,6 +136,14 @@ function AppShell() {
               element={
                 <ProtectedRoute allowedRoles={['student', 'coordinator', 'admin']}>
                   <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/navigation"
+              element={
+                <ProtectedRoute allowedRoles={['student', 'coordinator', 'admin']}>
+                  <CampusNavigationPage />
                 </ProtectedRoute>
               }
             />
