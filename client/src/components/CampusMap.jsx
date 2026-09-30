@@ -45,9 +45,16 @@ import {
 } from '../services/campusNavigationData';
 import LandmarkScannerModal from './LandmarkScannerModal';
 import CampusConfigModal from './CampusConfigModal';
+import CollegeStreetView from './CollegeStreetView';
+import { QUICK_STARTING_LOCATIONS, findClosestStreetNode } from '../services/collegeStreetData';
 
 export default function CampusMap({ selectedVenueId = null, onSelectVenue = null }) {
   const { events = [] } = useApp();
+
+  // Navigation View Mode: 'street' (3D First-Person College Street View & Walkthrough) or 'top' (2D/Satellite Leaflet Map)
+  const [viewMode, setViewMode] = useState('street');
+  const [streetViewTargetNode, setStreetViewTargetNode] = useState('main_gate');
+  const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
 
   // State
   const [selectedCampus, setSelectedCampus] = useState(() => {
@@ -74,7 +81,28 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
       ) || null
     );
   });
-  const [userLocation, setUserLocation] = useState(null); // { coords: [lat, lng], name: '...', isGps: boolean, isCustom: boolean }
+
+  // User starting location - persistent to user's wish
+  const [userLocation, setUserLocation] = useState(() => {
+    try {
+      const saved = localStorage.getItem('user_custom_start_location');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          coords: parsed.coords,
+          name: parsed.name,
+          landmarkId: parsed.id,
+          isCustom: true,
+        };
+      }
+    } catch (e) {}
+    return {
+      coords: [13.0822, 80.2694],
+      name: 'Main Entrance Arch & Gate',
+      landmarkId: 'main_gate',
+      isCustom: true,
+    };
+  });
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [routeInfo, setRouteInfo] = useState(null);
   const [showSteps, setShowSteps] = useState(false);
@@ -694,6 +722,9 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
         setUserLocation(null);
         setRouteInfo(null);
         setShowSteps(false);
+        try {
+          localStorage.removeItem('user_custom_start_location');
+        } catch (e) {}
         return;
       }
 
@@ -709,12 +740,25 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
 
       const landmark = CAMPUS_LANDMARKS.find((l) => l.id === landmarkIdOrValue);
       if (landmark) {
-        setUserLocation({
+        const newLoc = {
           coords: landmark.coords,
           name: `${landmark.name} (${landmark.building})`,
           landmarkId: landmark.id,
           isGps: false,
-        });
+          isCustom: true,
+        };
+        setUserLocation(newLoc);
+        setStreetViewTargetNode(landmark.id);
+        try {
+          localStorage.setItem(
+            'user_custom_start_location',
+            JSON.stringify({
+              id: landmark.id,
+              name: newLoc.name,
+              coords: landmark.coords,
+            })
+          );
+        } catch (e) {}
         mapInstanceRef.current?.flyTo(landmark.coords, 18, { duration: 0.8 });
       }
     },
@@ -734,6 +778,18 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
       );
     });
   }, [activeVenue, events]);
+
+  const handleSwitchToTopView = useCallback(() => {
+    setViewMode('top');
+    setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+        if (userLocation?.coords) {
+          mapInstanceRef.current.panTo(userLocation.coords);
+        }
+      }
+    }, 100);
+  }, [userLocation]);
 
   return (
     <div className="relative w-full h-[calc(100vh-4rem)] flex flex-col md:flex-row overflow-hidden bg-slate-50 dark:bg-slate-950 font-sans">
@@ -756,6 +812,40 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
               </button>
             </div>
           )}
+
+          {/* View Mode Switcher: 3D Street View vs Top View Map */}
+          <div className="bg-slate-900/95 backdrop-blur-md p-1 rounded-2xl shadow-xl border border-slate-700/80 flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                if (activeVenue) {
+                  const closest = findClosestStreetNode(activeVenue.coords || activeVenue.id);
+                  setStreetViewTargetNode(closest?.id || 'main_gate');
+                } else if (userLocation?.landmarkId) {
+                  setStreetViewTargetNode(userLocation.landmarkId);
+                }
+                setViewMode('street');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-md hover:scale-105 transition-all"
+              title="Open 3D College Street View & Walkthrough"
+            >
+              <Footprints className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+              <span>🚶 Street View</span>
+            </button>
+          </div>
+
+          {/* Quick "Set My Location Wish" Button */}
+          <button
+            type="button"
+            onClick={() => setIsLocationPickerOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/80 dark:border-slate-800 text-slate-800 dark:text-slate-100 text-xs font-bold shadow-lg hover:border-indigo-500 transition shrink-0"
+            title="Fix or customize your starting location"
+          >
+            <MapPin className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            <span className="truncate max-w-[130px] sm:max-w-[180px]">
+              {userLocation?.name ? userLocation.name.split('(')[0].trim() : 'Set My Location'}
+            </span>
+          </button>
           {/* Campus Switcher Dropdown & Custom Settings Button */}
           <div className="relative bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-lg border border-slate-200/80 dark:border-slate-800 p-1 flex items-center">
             <Building className="w-4 h-4 ml-2.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
@@ -1308,6 +1398,20 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
                         </div>
                       </div>
                       <div className="space-y-2">
+                        {/* Walk Inside in 3D Street View */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const closest = findClosestStreetNode(activeVenue.coords || activeVenue.id);
+                            setStreetViewTargetNode(closest?.id || 'main_gate');
+                            setViewMode('street');
+                          }}
+                          className="w-full py-2.5 px-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl font-extrabold text-xs shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 transition cursor-pointer"
+                        >
+                          <Footprints className="w-4 h-4 text-amber-300 animate-pulse" />
+                          <span>Walk Inside {activeVenue.name} in 3D Street View</span>
+                        </button>
+
                         {/* Start Navigation Action in Details Card */}
                         <button
                           onClick={() => {
@@ -1503,6 +1607,129 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
           mapInstanceRef.current?.setView(updatedCampus.center, updatedCampus.defaultZoom);
         }}
       />
+
+      {/* 5. 3D College Street View & Hallway Walkthrough Overlay */}
+      {viewMode === 'street' && (
+        <div className="absolute inset-0 z-40 w-full h-full animate-in fade-in duration-300">
+          <CollegeStreetView
+            initialNodeId={streetViewTargetNode || userLocation?.landmarkId || 'main_gate'}
+            userLocation={userLocation}
+            onSetUserLocation={(newLoc) => {
+              setUserLocation(newLoc);
+              setStreetViewTargetNode(newLoc.landmarkId);
+              try {
+                localStorage.setItem(
+                  'user_custom_start_location',
+                  JSON.stringify({
+                    id: newLoc.landmarkId,
+                    name: newLoc.name,
+                    coords: newLoc.coords,
+                  })
+                );
+              } catch (e) {}
+            }}
+            onSwitchToTopView={handleSwitchToTopView}
+            destinationVenue={activeVenue}
+          />
+        </div>
+      )}
+
+      {/* 6. Quick Starting Location Picker Modal ("Set My Wish to Location") */}
+      {isLocationPickerOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in pointer-events-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-6 max-w-lg w-full shadow-2xl text-left">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                    Set Your Starting Location
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Fix your current starting point to your exact wish
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsLocationPickerOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-xl transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+              {QUICK_STARTING_LOCATIONS.map((loc) => {
+                const isCurrent = userLocation?.landmarkId === loc.id;
+                return (
+                  <button
+                    key={loc.id}
+                    onClick={() => {
+                      const newLoc = {
+                        coords: [13.0822, 80.2694],
+                        name: `${loc.name} (${loc.building})`,
+                        landmarkId: loc.id,
+                        isCustom: true,
+                      };
+                      setUserLocation(newLoc);
+                      setStreetViewTargetNode(loc.id);
+                      try {
+                        localStorage.setItem(
+                          'user_custom_start_location',
+                          JSON.stringify({
+                            id: loc.id,
+                            name: newLoc.name,
+                            coords: newLoc.coords,
+                            floor: loc.floor,
+                          })
+                        );
+                      } catch (e) {}
+                      setIsLocationPickerOpen(false);
+                      if (mapInstanceRef.current && newLoc.coords) {
+                        mapInstanceRef.current.flyTo(newLoc.coords, 18, { duration: 0.8 });
+                      }
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl border text-left transition-all ${
+                      isCurrent
+                        ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-900 dark:text-white shadow-sm'
+                        : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200'
+                    }`}
+                  >
+                    <div>
+                      <div className="text-xs sm:text-sm font-bold flex items-center gap-1.5">
+                        <span>{loc.name}</span>
+                        {isCurrent && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {loc.building} &bull; {loc.floorName}
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                Saved permanently in your browser.
+              </span>
+              <button
+                onClick={() => setIsLocationPickerOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

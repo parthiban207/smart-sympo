@@ -21,12 +21,12 @@ export default function CampusNavigationPage() {
               <h1 className="text-base font-extrabold text-slate-900 dark:text-white">
                 Campus Navigation & Wayfinding
               </h1>
-              <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300">
-                Google Satellite &bull; Live GPS Walk
+              <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm">
+                3D Street View &bull; Floor Navigation &bull; Hall Walkthrough
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Photorealistic Google Maps satellite imagery, floor-by-floor venue directory, live voice turn-by-turn guidance, and QR landmark tracking
+              Interactive 3D first-person college street view, stairs & floor navigation, hallway arrows, customizable starting location, and hall interior visits
             </p>
           </div>
         </div>
