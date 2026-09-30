@@ -443,6 +443,11 @@ function smoothCampusPath(points) {
 export function generateCampusPath(startCoord, endCoord, campusId = 'main-campus') {
   if (!startCoord || !endCoord) return [];
 
+  // If this is a custom campus, route directly between the points
+  if (String(campusId).startsWith('custom-')) {
+    return [startCoord, endCoord];
+  }
+
   // Determine appropriate campus walkway graph
   const isAnnex = campusId === 'city-campus' || Math.abs(startCoord[1] - 80.2341) < 0.02;
   const graph = isAnnex ? ANNEX_CAMPUS_WALKWAYS : MAIN_CAMPUS_WALKWAYS;
@@ -452,6 +457,13 @@ export function generateCampusPath(startCoord, endCoord, campusId = 'main-campus
   const endNode = findNearestWalkwayNode(endCoord, graph);
 
   if (!startNode || !endNode) {
+    return [startCoord, endCoord];
+  }
+
+  // If start or end is far from the campus walkway graph (>400m), avoid distortion and route directly
+  const distStart = calculateDistanceMeters(startCoord, startNode.coords);
+  const distEnd = calculateDistanceMeters(endCoord, endNode.coords);
+  if (distStart > 400 || distEnd > 400) {
     return [startCoord, endCoord];
   }
 

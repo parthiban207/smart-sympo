@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   ArrowRight,
   RotateCcw,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
@@ -37,12 +38,22 @@ import {
   generateTurnByTurnInstructions,
 } from '../services/campusNavigationData';
 import LandmarkScannerModal from './LandmarkScannerModal';
+import CampusConfigModal from './CampusConfigModal';
 
 export default function CampusMap({ selectedVenueId = null, onSelectVenue = null }) {
   const { events = [] } = useApp();
 
   // State
-  const [selectedCampus, setSelectedCampus] = useState(CAMPUSES[0]);
+  const [selectedCampus, setSelectedCampus] = useState(() => {
+    try {
+      const saved = localStorage.getItem('custom_campus_config');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn('Could not read saved campus config:', e);
+    }
+    return CAMPUSES[0];
+  });
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [activeFloor, setActiveFloor] = useState('all'); // 'all' | 0 | 1 | 2
   const [selectedCategory, setSelectedCategory] = useState('all'); // 'all' | 'hall' | 'food' | 'registration' | 'restroom' | 'parking'
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,12 +68,23 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
       ) || null
     );
   });
-  const [userLocation, setUserLocation] = useState(null); // { coords: [lat, lng], name: '...', isGps: boolean }
+  const [userLocation, setUserLocation] = useState(null); // { coords: [lat, lng], name: '...', isGps: boolean, isCustom: boolean }
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [routeInfo, setRouteInfo] = useState(null);
   const [showSteps, setShowSteps] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState(null);
+
+  // Stable references for Leaflet map event handlers
+  const setUserLocationRef = useRef(setUserLocation);
+  const setActiveVenueRef = useRef(setActiveVenue);
+  const onSelectVenueRef = useRef(onSelectVenue);
+
+  useEffect(() => {
+    setUserLocationRef.current = setUserLocation;
+    setActiveVenueRef.current = setActiveVenue;
+    onSelectVenueRef.current = onSelectVenue;
+  });
 
   // Synchronize active venue reactively if selectedVenueId prop changes
   useEffect(() => {
@@ -111,14 +133,13 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
         zoomControl: false,
       });
 
-      // Add high-contrast voyager base layer
+      // 100% Free OpenStreetMap base layer (no watermarks, no API keys needed)
       L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         {
           attribution:
-            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-          subdomains: 'abcd',
-          maxZoom: 20,
+            '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+          maxZoom: 19,
         }
       ).addTo(map);
 
@@ -129,6 +150,68 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
       buildingsLayerRef.current = L.layerGroup().addTo(map);
       markersLayerRef.current = L.layerGroup().addTo(map);
       routeLayerRef.current = L.layerGroup().addTo(map);
+
+      // Click anywhere on map to freely set Start point or Destination
+      map.on('click', (e) => {
+        const { lat, lng } = e.latlng;
+        const container = document.createElement('div');
+        container.className = 'p-1 font-sans text-xs text-slate-800';
+        container.innerHTML = `
+          <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4f46e5;"></span>
+            <span>Selected Map Location</span>
+          </div>
+          <div style="font-size: 11px; color: #64748b; font-family: monospace; margin-bottom: 8px;">
+            ${lat.toFixed(5)}, ${lng.toFixed(5)}
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <button id="map-btn-set-start" style="width: 100%; background: #10b981; color: white; border: none; border-radius: 8px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer;">
+              🟢 Set as Starting Point
+            </button>
+            <button id="map-btn-set-dest" style="width: 100%; background: #4f46e5; color: white; border: none; border-radius: 8px; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer;">
+              🎯 Set as Destination
+            </button>
+          </div>
+        `;
+
+        L.popup({ minWidth: 200, offset: [0, -4] })
+          .setLatLng(e.latlng)
+          .setContent(container)
+          .openOn(map);
+
+        setTimeout(() => {
+          const btnStart = container.querySelector('#map-btn-set-start');
+          const btnDest = container.querySelector('#map-btn-set-dest');
+
+          if (btnStart) {
+            btnStart.onclick = () => {
+              setUserLocationRef.current({
+                coords: [lat, lng],
+                name: `Custom Point (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+                isCustom: true,
+              });
+              map.closePopup();
+            };
+          }
+
+          if (btnDest) {
+            btnDest.onclick = () => {
+              const customDest = {
+                id: `custom-dest-${Date.now()}`,
+                name: `Custom Destination (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+                coords: [lat, lng],
+                category: 'custom',
+                isCustom: true,
+                type: 'Custom Point',
+                description: `Manual location set via map click at [${lat.toFixed(5)}, ${lng.toFixed(5)}]`,
+              };
+              setActiveVenueRef.current(customDest);
+              if (onSelectVenueRef.current) onSelectVenueRef.current(customDest);
+              map.closePopup();
+            };
+          }
+        }, 20);
+      });
 
       mapInstanceRef.current = map;
     } else {
@@ -289,6 +372,39 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
 
       markersLayerRef.current.addLayer(marker);
     });
+
+    // Render custom destination pin if activeVenue was set by clicking the map
+    if (activeVenue && activeVenue.isCustom && activeVenue.coords) {
+      const customDestHtml = `
+        <div class="relative group cursor-pointer animate-bounce">
+          <div class="w-8 h-8 rounded-full bg-rose-600 text-white flex items-center justify-center shadow-xl ring-4 ring-rose-300">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+              <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2" />
+              <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+            </svg>
+          </div>
+          <div class="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap bg-rose-950 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow pointer-events-none">
+            ${activeVenue.name}
+          </div>
+        </div>
+      `;
+
+      const customIcon = L.divIcon({
+        html: customDestHtml,
+        className: 'custom-dest-pin',
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+      });
+
+      const destMarker = L.marker(activeVenue.coords, { icon: customIcon, zIndexOffset: 950 });
+      destMarker.bindPopup(`
+        <div class="p-1 text-xs">
+          <strong class="text-rose-600 font-bold block mb-1">🎯 Destination</strong>
+          <span>${activeVenue.name}</span>
+        </div>
+      `);
+      markersLayerRef.current.addLayer(destMarker);
+    }
   }, [filteredVenues, activeVenue, onSelectVenue]);
 
   // Draw Dynamic Route when user has location and active target venue
@@ -355,13 +471,19 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
     }
 
     if (userLocation?.coords) {
+      const badgeText = userLocation.isGps
+        ? 'You Are Here'
+        : userLocation.isCustom
+        ? 'Start Point'
+        : 'Starting Point';
+
       const userHtml = `
         <div class="relative flex items-center justify-center">
           <div class="absolute w-10 h-10 bg-indigo-500/30 rounded-full animate-ping"></div>
           <div class="absolute w-8 h-8 bg-indigo-500/50 rounded-full animate-pulse"></div>
           <div class="w-4 h-4 bg-indigo-600 border-2 border-white rounded-full shadow-lg relative z-10"></div>
           <div class="absolute -top-7 whitespace-nowrap bg-indigo-600 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-md">
-            You Are Here
+            ${badgeText}
           </div>
         </div>
       `;
@@ -379,7 +501,7 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
 
       marker.bindPopup(`
         <div class="text-xs p-1">
-          <strong class="text-indigo-600 font-bold block mb-1">📍 You Are Here</strong>
+          <strong class="text-indigo-600 font-bold block mb-1">📍 ${badgeText}</strong>
           <span>${userLocation.name}</span>
         </div>
       `);
@@ -388,7 +510,7 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
     }
   }, [userLocation]);
 
-  // GPS Locate Me Handler
+  // Calibrated GPS Locate Me Handler with two-stage fallback
   const handleLocateMe = useCallback(() => {
     setGpsLoading(true);
     setGpsError(null);
@@ -399,36 +521,60 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
       return;
     }
 
+    const applyPosition = (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      const coords = [latitude, longitude];
+
+      const distFromCenter = calculateDistanceMeters(coords, selectedCampus.center);
+      let locName = 'Current Location';
+      if (distFromCenter < 1200) {
+        locName = `Campus GPS (±${Math.round(accuracy || 10)}m)`;
+      } else {
+        locName = `GPS Location (${(distFromCenter / 1000).toFixed(1)}km from center)`;
+      }
+
+      setUserLocation({
+        coords,
+        name: locName,
+        isGps: true,
+        accuracy,
+      });
+
+      setGpsLoading(false);
+      mapInstanceRef.current?.flyTo(coords, Math.min(18, Math.max(16, mapInstanceRef.current.getZoom() || 17)), {
+        duration: 1,
+      });
+    };
+
+    // Stage 1: Try High-Accuracy (GPS Hardware) with 9s timeout
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const coords = [latitude, longitude];
-
-        // Check if within campus distance, else snap or notify
-        const distFromCenter = calculateDistanceMeters(coords, selectedCampus.center);
-
-        let locName = 'GPS Position';
-        if (distFromCenter > 3000) {
-          locName = 'Current GPS Position (Off-Campus)';
-        } else {
-          locName = 'Current Campus Coordinates';
-        }
-
-        setUserLocation({
-          coords,
-          name: locName,
-          isGps: true,
-        });
-
-        setGpsLoading(false);
-        mapInstanceRef.current?.flyTo(coords, 18, { duration: 1 });
+        applyPosition(pos);
       },
       (err) => {
-        console.warn('Geolocation error:', err);
-        setGpsError('GPS permission denied or timeout. Try scanning a Landmark QR code.');
-        setGpsLoading(false);
+        console.warn('High-accuracy GPS failed or timed out, trying network fallback...', err);
+        // Stage 2: Fallback to standard network/WiFi geolocation with 15s timeout
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            applyPosition(pos);
+          },
+          (fallbackErr) => {
+            console.error('All geolocation attempts failed:', fallbackErr);
+            let msg = 'Could not retrieve GPS position.';
+            if (fallbackErr.code === 1) {
+              msg = 'Location permission denied. Please allow location access in your browser address bar.';
+            } else if (fallbackErr.code === 2) {
+              msg = 'Position unavailable. Check your device location service or WiFi connection.';
+            } else if (fallbackErr.code === 3) {
+              msg = 'GPS timed out. You can tap or click anywhere on the map to set your location manually.';
+            }
+            setGpsError(msg);
+            setGpsLoading(false);
+          },
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 9000, maximumAge: 10000 }
     );
   }, [selectedCampus]);
 
@@ -512,7 +658,7 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
               </button>
             </div>
           )}
-          {/* Campus Switcher Dropdown */}
+          {/* Campus Switcher Dropdown & Custom Settings Button */}
           <div className="relative bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-lg border border-slate-200/80 dark:border-slate-800 p-1 flex items-center">
             <Building className="w-4 h-4 ml-2.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
             <select
@@ -521,7 +667,7 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
                 const found = CAMPUSES.find((c) => c.id === e.target.value);
                 if (found) setSelectedCampus(found);
               }}
-              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 py-1.5 pl-2 pr-6 appearance-none focus:outline-none cursor-pointer"
+              className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 py-1.5 pl-2 pr-6 appearance-none focus:outline-none cursor-pointer max-w-[130px] sm:max-w-none truncate"
             >
               {CAMPUSES.map((c) => (
                 <option
@@ -532,19 +678,40 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
                   {c.shortName} &bull; {c.city}
                 </option>
               ))}
+              {selectedCampus.isCustom && (
+                <option
+                  value={selectedCampus.id}
+                  className="bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 font-bold"
+                >
+                  📍 {selectedCampus.shortName} (Custom)
+                </option>
+              )}
             </select>
-            <ChevronDown className="w-3.5 h-3.5 mr-2 text-slate-400 pointer-events-none shrink-0" />
+            <button
+              type="button"
+              onClick={() => setIsConfigOpen(true)}
+              title="Customize Campus Center Coordinates"
+              className="p-1 mr-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {/* Start Location Selector */}
           <div className="relative bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-lg border border-slate-200/80 dark:border-slate-800 p-1 flex items-center">
             <Compass className="w-4 h-4 ml-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <select
-              value={userLocation?.landmarkId || (userLocation?.isGps ? 'gps' : '')}
+              value={
+                userLocation?.landmarkId ||
+                (userLocation?.isGps ? 'gps' : userLocation?.isCustom ? 'custom' : '')
+              }
               onChange={(e) => handleSelectStartPoint(e.target.value)}
               className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 py-1.5 pl-2 pr-6 appearance-none focus:outline-none cursor-pointer max-w-[140px] sm:max-w-none truncate"
             >
               <option value="">Start: Choose Point ▾</option>
+              {userLocation?.isCustom && (
+                <option value="custom">📍 Selected Map Point</option>
+              )}
               <option value="gps">📍 My Current GPS</option>
               {CAMPUS_LANDMARKS.map((lm) => (
                 <option key={lm.id} value={lm.id}>
@@ -584,6 +751,12 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
             <QrCode className="w-4 h-4" />
             <span>Scan Landmark</span>
           </button>
+        </div>
+
+        {/* Floating Interactive Tip */}
+        <div className="absolute top-16 left-3 z-10 hidden sm:flex items-center gap-2 bg-slate-900/85 backdrop-blur-md text-white text-[11px] font-medium px-3 py-1.5 rounded-2xl shadow-xl border border-slate-700/60 pointer-events-none">
+          <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+          <span>Click anywhere on the map to set custom Start or Destination</span>
         </div>
 
         {/* Floating Quick Action Buttons (Bottom Left on Map) */}
@@ -793,34 +966,46 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
                       getCategoryTheme(activeVenue.category).bg
                     } text-white`}
                   >
-                    {activeVenue.type}
+                    {activeVenue.type || 'Custom Destination'}
                   </span>
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                    Floor {activeVenue.floor} ({activeVenue.floorLabel})
-                  </span>
+                  {activeVenue.floor !== undefined && activeVenue.floorLabel ? (
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      Floor {activeVenue.floor} ({activeVenue.floorLabel})
+                    </span>
+                  ) : (
+                    <span className="text-xs font-semibold text-indigo-500">
+                      Custom Pin
+                    </span>
+                  )}
                 </div>
 
                 <h4 className="text-base font-extrabold text-slate-900 dark:text-white">
                   {activeVenue.name}
                 </h4>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">
-                  {activeVenue.building}
-                </p>
+                {activeVenue.building && (
+                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 font-medium">
+                    {activeVenue.building}
+                  </p>
+                )}
 
                 <p className="text-xs text-slate-600 dark:text-slate-300 mt-2.5 leading-relaxed">
-                  {activeVenue.description}
+                  {activeVenue.description || 'Target navigation destination.'}
                 </p>
 
-                <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 text-xs">
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <Users className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Capacity: {activeVenue.capacity} seats</span>
+                {!activeVenue.isCustom && (activeVenue.capacity || activeVenue.airConditioned !== undefined) && (
+                  <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 text-xs">
+                    {activeVenue.capacity && (
+                      <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                        <Users className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Capacity: {activeVenue.capacity} seats</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{activeVenue.airConditioned ? 'Air Conditioned' : 'Well Ventilated'}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>{activeVenue.airConditioned ? 'Air Conditioned' : 'Well Ventilated'}</span>
-                  </div>
-                </div>
+                )}
 
                 {/* Primary Action: Navigate Here */}
                 <div className="mt-4 pt-3 space-y-2">
@@ -977,6 +1162,17 @@ export default function CampusMap({ selectedVenueId = null, onSelectVenue = null
         onClose={() => setIsScannerOpen(false)}
         onLandmarkDetected={handleLandmarkScanned}
         initialTargetVenue={activeVenue}
+      />
+
+      {/* 4. Campus Configuration Modal */}
+      <CampusConfigModal
+        isOpen={isConfigOpen}
+        onClose={() => setIsConfigOpen(false)}
+        currentCampus={selectedCampus}
+        onSaveCampus={(updatedCampus) => {
+          setSelectedCampus(updatedCampus);
+          mapInstanceRef.current?.setView(updatedCampus.center, updatedCampus.defaultZoom);
+        }}
       />
     </div>
   );
