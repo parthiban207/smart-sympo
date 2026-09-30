@@ -815,10 +815,6 @@ export const AppProvider = ({ children }) => {
 
     console.log(`[AppContext] Dispatching automated Welcome Email for ${cleanRole} (From: smartsympo@gmail.com -> To: ${email})`);
 
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(welcomeKey, new Date().toISOString());
-    }
-
     const emailPayload = {
       email,
       name: userProfile.full_name || userProfile.name || userProfile.username || email.split('@')[0],
@@ -830,9 +826,20 @@ export const AppProvider = ({ children }) => {
     };
 
     // Primary automated dispatch via Nodemailer SMTP with EmailJS fallback
-    sendWelcomeEmail(emailPayload).catch((err) =>
-      console.warn('[Welcome Email Dispatch Error]:', err)
-    );
+    sendWelcomeEmail(emailPayload)
+      .then((res) => {
+        if (res?.success) {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(welcomeKey, new Date().toISOString());
+          }
+          console.log(`[AppContext] Welcome email successfully dispatched to ${email}`);
+        } else {
+          console.warn('[AppContext] Welcome email dispatch did not confirm delivery:', res);
+        }
+      })
+      .catch((err) =>
+        console.warn('[Welcome Email Dispatch Error]:', err)
+      );
 
     // Mark first_login = false in Supabase & Local state
     if (!isMockMode && isValidUUID(userProfile.id)) {

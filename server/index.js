@@ -21,13 +21,17 @@ app.use(cors());
 app.use(express.json());
 
 // 1. Email Service Configuration - Gmail SMTP Transporter
-const createGmailTransporter = () => {
-  const gmailUser = (process.env.GMAIL_USER || '').trim();
-  const gmailPass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
+const DEFAULT_GMAIL_USER = 'smartsympo@gmail.com';
+const DEFAULT_GMAIL_APP_PASS = 'zjrltozymelgblor';
 
-  if (!gmailUser || !gmailPass) {
-    console.warn('[Nodemailer Warning] GMAIL_USER or GMAIL_APP_PASSWORD not set in environment. Running in simulated fallback mode.');
-  }
+export const getSmtpCredentials = () => {
+  const gmailUser = (process.env.GMAIL_USER || DEFAULT_GMAIL_USER).trim();
+  const gmailPass = (process.env.GMAIL_APP_PASSWORD || DEFAULT_GMAIL_APP_PASS).replace(/\s+/g, '');
+  return { gmailUser, gmailPass };
+};
+
+const createGmailTransporter = () => {
+  const { gmailUser, gmailPass } = getSmtpCredentials();
 
   return nodemailer.createTransport({
     service: 'gmail',
@@ -42,9 +46,8 @@ const transporter = createGmailTransporter();
 
 // Helper to send email or simulate gracefully if credentials are not active
 const dispatchEmail = async ({ to, subject, text, html }) => {
-  const gmailUser = (process.env.GMAIL_USER || '').trim();
-  const gmailPass = (process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
-  const senderEmail = gmailUser || 'noreply@smartsympo.edu';
+  const { gmailUser, gmailPass } = getSmtpCredentials();
+  const senderEmail = gmailUser || 'smartsympo@gmail.com';
 
   const mailOptions = {
     from: `"Smart-Sympo 2026" <${senderEmail}>`,
@@ -888,7 +891,12 @@ app.post('/api/relay-sms', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`[Smart-Sympo Email & Relay Service] Running on http://localhost:${PORT}`);
-  console.log(`[SMTP Status] GMAIL_USER: ${process.env.GMAIL_USER ? process.env.GMAIL_USER : 'Not set (Simulation Mode Active)'}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[Smart-Sympo Email & Relay Service] Running on http://localhost:${PORT}`);
+    const { gmailUser } = getSmtpCredentials();
+    console.log(`[SMTP Status] GMAIL_USER: ${gmailUser}`);
+  });
+}
+
+export default app;

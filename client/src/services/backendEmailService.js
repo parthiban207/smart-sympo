@@ -9,12 +9,15 @@ const getCandidateUrls = () => {
   if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
     candidates.push(envUrl.trim().replace(/\/+$/, ''));
   }
-  // Relative URL (proxied by Vite in dev or same-origin in prod)
-  candidates.push('');
-  // Direct localhost port 5000
+
   if (isLocal) {
+    // In local development, check port 5000 first, then relative (proxied by Vite)
     candidates.push('http://localhost:5000');
     candidates.push('http://127.0.0.1:5000');
+    candidates.push('');
+  } else {
+    // In production / Vercel deployment, relative route points directly to serverless /api/*
+    candidates.push('');
   }
 
   return [...new Set(candidates)];
@@ -33,8 +36,15 @@ async function fetchWithFallback(endpoint, payload) {
         body: JSON.stringify(payload),
       });
 
+      const contentType = response.headers.get('content-type') || '';
+      // If the response is HTML (e.g., single-page app rewrite to index.html), it is not a valid API response
+      if (!contentType.includes('application/json')) {
+        lastError = `Endpoint ${url} returned non-JSON (${contentType || 'HTML fallback'})`;
+        continue;
+      }
+
       const data = await response.json().catch(() => ({}));
-      if (response.ok) {
+      if (response.ok && data?.success !== false) {
         return { success: true, dispatched: true, url, ...data };
       } else {
         console.warn(`[BackendEmailService] Call to ${url} failed with status:`, response.status, data);
