@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Upgraded modern SaaS Auth card with clean typography, password visibility toggle, matching validation, and role selector", deps: ["src/supabaseClient.js", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-08-31" }
+// agent-notes: { ctx: "Upgraded modern SaaS Auth card with student-only signup, password visibility toggle, matching validation, and staff portal switch", deps: ["src/supabaseClient.js", "src/context/AppContext.jsx", "lucide-react"], state: "active", last: "antigravity@2026-09-30" }
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -40,7 +40,6 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
   const [selectedStaffRole, setSelectedStaffRole] = useState<'coordinator' | 'admin'>(
     targetRole === 'admin' ? 'admin' : 'coordinator'
   );
-  const [selectedSignupRole, setSelectedSignupRole] = useState<'student' | 'coordinator'>('student');
 
   // Form Fields
   const [email, setEmail] = useState('');
@@ -127,7 +126,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           return;
         }
 
-        const assignedRole: UserRole = isStaffMode ? selectedStaffRole : selectedSignupRole;
+        const assignedRole: UserRole = isStaffMode ? selectedStaffRole : 'student';
         const generatedId = assignedRole === 'admin'
           ? `ADM-${Math.floor(1000 + Math.random() * 9000)}`
           : assignedRole === 'coordinator'
@@ -444,42 +443,6 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
                   />
                 </div>
               </div>
-
-              {/* Role Selection (Student / Coordinator) when not in strict staff gate */}
-              {!isStaffMode && (
-                <div>
-                  <label className="text-slate-700 font-bold block mb-1">
-                    Select Your Role <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-2 mt-1">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSignupRole('student')}
-                      className={`py-2 px-3 rounded-xl border text-center transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                        selectedSignupRole === 'student'
-                          ? 'bg-indigo-50 border-indigo-500 text-indigo-700 font-bold shadow-2xs'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      <GraduationCap className="w-4 h-4 text-indigo-600" />
-                      <span>Student</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSignupRole('coordinator')}
-                      className={`py-2 px-3 rounded-xl border text-center transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                        selectedSignupRole === 'coordinator'
-                          ? 'bg-amber-50 border-amber-500 text-amber-700 font-bold shadow-2xs'
-                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                      }`}
-                    >
-                      <UserCheck className="w-4 h-4 text-amber-600" />
-                      <span>Coordinator</span>
-                    </button>
-                  </div>
-                </div>
-              )}
             </>
           )}
 
@@ -600,11 +563,7 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
               <>
                 <UserPlus className="w-4 h-4" />
                 <span>
-                  Create{' '}
-                  {isStaffMode
-                    ? selectedStaffRole.toUpperCase()
-                    : selectedSignupRole.toUpperCase()}{' '}
-                  Account
+                  Create {isStaffMode ? selectedStaffRole.toUpperCase() : 'Student'} Account
                 </span>
               </>
             ) : (
