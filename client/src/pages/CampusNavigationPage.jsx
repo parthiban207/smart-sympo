@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'react-router-dom';
 import CampusMap from '../components/CampusMap';
-import { Compass, MapPin, Navigation, Sparkles } from 'lucide-react';
+import { Compass, Sparkles } from 'lucide-react';
 
 export default function CampusNavigationPage() {
   const [searchParams] = useSearchParams();
@@ -22,11 +22,11 @@ export default function CampusNavigationPage() {
                 Campus Navigation & Wayfinding
               </h1>
               <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300">
-                Option B &bull; Live Leaflet & GPS
+                Google Satellite &bull; Live GPS Walk
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Interactive OpenStreetMap, floor-by-floor venue directory, and "You Are Here" QR landmark tracking
+              Photorealistic Google Maps satellite imagery, floor-by-floor venue directory, live voice turn-by-turn guidance, and QR landmark tracking
             </p>
           </div>
         </div>

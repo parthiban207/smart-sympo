@@ -5,7 +5,6 @@ import {
   X,
   MapPin,
   Crosshair,
-  RotateCcw,
   Check,
   Building2,
   Navigation,
@@ -76,7 +75,7 @@ export default function CampusConfigModal({
           (pos) => {
             onCoords(pos.coords.latitude, pos.coords.longitude);
           },
-          (fallbackErr) => {
+          (_fallbackErr) => {
             setIsDetectingGps(false);
             setGpsError('Could not get GPS fix. You can enter latitude and longitude manually.');
           },

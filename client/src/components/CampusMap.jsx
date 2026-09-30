@@ -22,8 +22,6 @@ import {
   AlertCircle,
   ListOrdered,
   CheckCircle2,
-  ArrowRight,
-  RotateCcw,
   SlidersHorizontal,
   Globe,
   Layers,
