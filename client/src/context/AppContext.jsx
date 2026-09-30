@@ -1,9 +1,9 @@
-// agent-notes: { ctx: "Global React AppContext provider with automated Welcome & First Login and Event Confirmation email dispatch", deps: ["src/supabaseClient.ts", "src/services/emailService.js", "src/services/backendEmailService.js"], state: "active", last: "antigravity@2026-08-26" }
+// agent-notes: { ctx: "Global React AppContext provider with automated Welcome, Event Confirmation, and Student App Feedback management", deps: ["src/supabaseClient.ts", "src/services/emailService.js", "src/services/backendEmailService.js"], state: "active", last: "antigravity@2026-09-30" }
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, isMockMode, isValidUUID, isClockSkewOrJwtError } from '../supabaseClient';
 import { sendRegistrationEmail, sendWelcomeEmail } from '../services/emailService';
-import { sendLoginAlertApi, sendEventConfirmationApi, sendWelcomeEmailApi } from '../services/backendEmailService';
+import { sendLoginAlertApi, sendEventConfirmationApi, sendWelcomeEmailApi, sendAppFeedbackToAdminApi } from '../services/backendEmailService';
 
 const AppContext = createContext();
 
@@ -47,6 +47,60 @@ const DEFAULT_SEED_ACCOUNTS = [
     department: 'Computer Science & Engineering',
     first_login: false,
   },
+];
+
+const DEFAULT_SEED_APP_FEEDBACKS = [
+  {
+    id: 'afb_1',
+    student_id: '33333333-0000-4000-8000-000000000003',
+    student_name: 'Parthiban M',
+    student_email: 'student@college.edu',
+    roll_no: 'STU-2026-001',
+    college: 'College of Engineering',
+    department: 'Computer Science & Engineering',
+    category: 'app_experience',
+    rating: 5,
+    title: 'Super smooth navigation & live pass',
+    message: 'The TOTP dynamic QR pass and campus map navigation made check-in effortless. The UI is very fast and responsive!',
+    status: 'reviewed',
+    priority: 'normal',
+    admin_notes: 'Acknowledged. Verified delegate access.',
+    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+  },
+  {
+    id: 'afb_2',
+    student_id: '33333333-0000-4000-8000-000000000004',
+    student_name: 'Priya Sharma',
+    student_email: 'priya.s@techcollege.edu',
+    roll_no: 'STU-2026-042',
+    college: 'Institute of Technology',
+    department: 'Information Technology',
+    category: 'feature_request',
+    rating: 4,
+    title: 'Add dark mode toggle for night symposium sessions',
+    message: 'Can we add a dark mode toggle option for evening paper presentations and keynotes? The design is wonderful otherwise.',
+    status: 'new',
+    priority: 'normal',
+    admin_notes: '',
+    created_at: new Date(Date.now() - 3600000 * 6).toISOString(),
+  },
+  {
+    id: 'afb_3',
+    student_id: '33333333-0000-4000-8000-000000000005',
+    student_name: 'Rahul K',
+    student_email: 'rahul.k@engg.edu',
+    roll_no: 'STU-2026-088',
+    college: 'National Engineering College',
+    department: 'Electronics & Communication',
+    category: 'bug_report',
+    rating: 4,
+    title: 'Camera scanner in low lighting',
+    message: 'Near Hall B corridor, the QR scanner took 2 tries to autofocus under dimmed lighting. Worked fine once angled toward the light.',
+    status: 'new',
+    priority: 'high',
+    admin_notes: '',
+    created_at: new Date(Date.now() - 3600000 * 12).toISOString(),
+  }
 ];
 
 const getStoredAccounts = () => {
@@ -2436,6 +2490,157 @@ export const AppProvider = ({ children }) => {
     return (eventFeedbacks || []).filter((fb) => fb.event_id === eventId);
   };
 
+  // -------------------------------------------------------------------------
+  // Student App Feedback to Administration Management
+  // -------------------------------------------------------------------------
+  const [appFeedbacks, setAppFeedbacks] = useState(() => {
+    try {
+      const saved = localStorage.getItem('smart_sympo_app_feedbacks');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Error reading app feedbacks from localStorage:', e);
+    }
+    return DEFAULT_SEED_APP_FEEDBACKS;
+  });
+
+  // Sync with Supabase on mount
+  useEffect(() => {
+    if (!isMockMode) {
+      supabase
+        .from('app_feedback')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .then(({ data, error }) => {
+          if (!error && Array.isArray(data) && data.length > 0) {
+            setAppFeedbacks((prev) => {
+              const map = new Map();
+              data.forEach((item) => map.set(item.id, item));
+              (prev || []).forEach((item) => {
+                if (!map.has(item.id)) map.set(item.id, item);
+              });
+              const merged = Array.from(map.values());
+              try {
+                localStorage.setItem('smart_sympo_app_feedbacks', JSON.stringify(merged));
+              } catch {}
+              return merged;
+            });
+          }
+        });
+    }
+  }, []);
+
+  const submitAppFeedback = async (feedbackData) => {
+    const feedbackId = feedbackData.id || `afb_${Date.now()}`;
+    const newFeedback = {
+      id: feedbackId,
+      student_id: feedbackData.student_id || currentUser?.id || '33333333-0000-4000-8000-000000000003',
+      student_name: feedbackData.student_name || currentUser?.name || currentUser?.full_name || 'Parthiban M',
+      student_email: feedbackData.student_email || currentUser?.email || 'student@college.edu',
+      roll_no: feedbackData.roll_no || currentUser?.college_id || currentUser?.roll_no || 'STU-2026-001',
+      college: feedbackData.college || currentUser?.college || 'College of Engineering',
+      department: feedbackData.department || currentUser?.department || 'Computer Science & Engineering',
+      category: feedbackData.category || 'app_experience',
+      rating: Number(feedbackData.rating) || 5,
+      title: feedbackData.title || '',
+      message: feedbackData.message || '',
+      status: 'new',
+      priority: feedbackData.priority || 'normal',
+      admin_notes: '',
+      created_at: new Date().toISOString(),
+    };
+
+    setAppFeedbacks((prev) => {
+      const updated = [newFeedback, ...(prev || [])];
+      try {
+        localStorage.setItem('smart_sympo_app_feedbacks', JSON.stringify(updated));
+      } catch (err) {
+        console.debug('Failed to cache app feedback locally:', err);
+      }
+      return updated;
+    });
+
+    // In-app alert notification for Admin
+    addNotification({
+      title: `Feedback from ${newFeedback.student_name} (${newFeedback.roll_no})`,
+      message: `[${newFeedback.category.toUpperCase()}] ${newFeedback.title ? `"${newFeedback.title}": ` : ''}${newFeedback.message.slice(0, 75)}...`,
+      type: 'info',
+      metadata: { type: 'student_feedback', feedbackId: newFeedback.id, roll_no: newFeedback.roll_no },
+    });
+
+    // Sync to Supabase app_feedback table
+    if (!isMockMode) {
+      try {
+        await supabase.from('app_feedback').insert(newFeedback);
+      } catch (err) {
+        console.warn('Supabase app_feedback insert fallback:', err);
+      }
+    }
+
+    // Dispatch backend email to Admin if server is active
+    try {
+      await sendAppFeedbackToAdminApi(newFeedback);
+    } catch (e) {
+      // Non-blocking fallback
+    }
+
+    return { success: true, feedback: newFeedback };
+  };
+
+  const updateAppFeedbackStatus = async (feedbackId, status, adminNotes = null) => {
+    setAppFeedbacks((prev) => {
+      const updated = (prev || []).map((fb) => {
+        if (fb.id === feedbackId) {
+          return {
+            ...fb,
+            status,
+            ...(adminNotes !== null ? { admin_notes: adminNotes } : {}),
+            updated_at: new Date().toISOString(),
+          };
+        }
+        return fb;
+      });
+      try {
+        localStorage.setItem('smart_sympo_app_feedbacks', JSON.stringify(updated));
+      } catch (err) {
+        console.debug('Failed to update app feedback in storage:', err);
+      }
+      return updated;
+    });
+
+    if (!isMockMode) {
+      try {
+        const updatePayload = { status };
+        if (adminNotes !== null) updatePayload.admin_notes = adminNotes;
+        await supabase.from('app_feedback').update(updatePayload).eq('id', feedbackId);
+      } catch (err) {
+        console.warn('Supabase update feedback status error:', err);
+      }
+    }
+  };
+
+  const deleteAppFeedback = async (feedbackId) => {
+    setAppFeedbacks((prev) => {
+      const updated = (prev || []).filter((fb) => fb.id !== feedbackId);
+      try {
+        localStorage.setItem('smart_sympo_app_feedbacks', JSON.stringify(updated));
+      } catch (err) {
+        console.debug('Failed to delete app feedback from storage:', err);
+      }
+      return updated;
+    });
+
+    if (!isMockMode) {
+      try {
+        await supabase.from('app_feedback').delete().eq('id', feedbackId);
+      } catch (err) {
+        console.warn('Supabase delete app feedback error:', err);
+      }
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -2485,6 +2690,10 @@ export const AppProvider = ({ children }) => {
         eventFeedbacks,
         submitEventFeedback,
         getEventFeedback,
+        appFeedbacks,
+        submitAppFeedback,
+        updateAppFeedbackStatus,
+        deleteAppFeedback,
       }}
     >
       {children}

@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Client API helper for Nodemailer automated Welcome, Signup Confirmation, and Event Registration emails with resilient fallback", deps: [], state: "active", last: "antigravity@2026-09-07" }
+// agent-notes: { ctx: "Client API helper for Nodemailer automated Welcome, Signup Confirmation, Event Registration, and Student App Feedback emails", deps: [], state: "active", last: "antigravity@2026-09-30" }
 
 const getCandidateUrls = () => {
   const envUrl = import.meta.env.VITE_API_URL;
@@ -145,3 +145,11 @@ export async function sendLoginAlertApi({ email, name, role, ipAddress, userAgen
   return await fetchWithFallback('/api/send-login-alert', payload);
 }
 
+/**
+ * Dispatch student application feedback notification to Admin via backend Express API
+ */
+export async function sendAppFeedbackToAdminApi(feedbackData) {
+  if (!feedbackData || !feedbackData.message) return { success: false, error: 'Feedback message required' };
+
+  return await fetchWithFallback('/api/send-admin-feedback', feedbackData);
+}

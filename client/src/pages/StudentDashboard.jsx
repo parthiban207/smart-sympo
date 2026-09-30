@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with memoized debounced search, dynamic event timing, seat capacity heatmap, WhatsApp share, event ratings, and TOTP entry pass modal", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/components/SeatCapacityHeatmap.jsx", "src/components/EventFeedbackModal.jsx", "src/utils/calendarExport.js", "src/utils/eventTiming.js", "src/hooks/useDebounce.js", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-09-24" }
+// agent-notes: { ctx: "Academic Symposium Programme & Paper Matrix with debounced search, dynamic event timing, seat capacity heatmap, student-to-admin app feedback modal, and TOTP entry pass", deps: ["src/context/AppContext.jsx", "src/components/StudentQRModal.jsx", "src/components/RegistrationSuccessModal.jsx", "src/components/SessionDetailsModal.jsx", "src/components/SeatCapacityHeatmap.jsx", "src/components/EventFeedbackModal.jsx", "src/components/StudentFeedbackModal.jsx", "src/utils/calendarExport.js", "src/utils/eventTiming.js", "src/hooks/useDebounce.js", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-09-30" }
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -8,6 +8,7 @@ import RegistrationSuccessModal from '../components/RegistrationSuccessModal';
 import SessionDetailsModal from '../components/SessionDetailsModal';
 import SeatCapacityHeatmap from '../components/SeatCapacityHeatmap';
 import EventFeedbackModal from '../components/EventFeedbackModal';
+import StudentFeedbackModal from '../components/StudentFeedbackModal';
 import { getEventTimingStatus, useCurrentTime } from '../utils/eventTiming';
 import { useDebounce } from '../hooks/useDebounce';
 import {
@@ -31,6 +32,8 @@ import {
   Check,
   Star,
   MessageCircle,
+  MessageSquareHeart,
+  MessageSquarePlus,
   Compass,
 } from 'lucide-react';
 
@@ -42,6 +45,7 @@ export default function StudentDashboard() {
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [successModalData, setSuccessModalData] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [isAppFeedbackOpen, setIsAppFeedbackOpen] = useState(false);
 
   // Dynamic 60-second timer hook for auto-ticking countdowns
   const currentTime = useCurrentTime(60000);
@@ -258,7 +262,6 @@ export default function StudentDashboard() {
   const requiredTracksForCert = 2;
   const certProgress = Math.min(100, Math.round((registeredEvents.length / requiredTracksForCert) * 100));
   const isCertEligible = registeredEvents.length >= requiredTracksForCert;
-  const symposiumCredits = registeredEvents.length * 25;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8" ref={menuContainerRef}>
@@ -308,6 +311,14 @@ export default function StudentDashboard() {
             <Compass className="w-4 h-4 text-indigo-500" />
             <span>Campus Navigation & Map</span>
           </Link>
+          <button
+            onClick={() => setIsAppFeedbackOpen(true)}
+            className="flex-1 md:flex-none px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-500/25 flex items-center justify-center gap-2 transition cursor-pointer shrink-0 active:scale-95"
+            title="Send Application Feedback directly to Admin"
+          >
+            <MessageSquareHeart className="w-4 h-4" />
+            <span>App Feedback to Admin</span>
+          </button>
           {registeredEvents.length > 0 && (
             <button
               onClick={() => handleOpenQRPass(registeredEvents[0])}
@@ -352,17 +363,26 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* Metric 3: Symposium Credits */}
-        <div className="neo-glass-card p-4 space-y-1">
+        {/* Metric 3: Application Feedback to Admin */}
+        <div
+          onClick={() => setIsAppFeedbackOpen(true)}
+          className="neo-glass-card p-4 space-y-1 cursor-pointer hover:border-indigo-500/50 hover:shadow-md transition group"
+          title="Click to send feedback or report issue to Administrator"
+        >
           <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-            <span className="text-xs font-mono font-bold uppercase tracking-wider">Sympo Credits</span>
-            <Sparkles className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 font-mono">
-              {symposiumCredits}
+            <span className="text-xs font-mono font-bold uppercase tracking-wider group-hover:text-indigo-600 transition">
+              App Feedback
             </span>
-            <span className="text-[11px] font-mono text-slate-400">Points</span>
+            <MessageSquareHeart className="w-4 h-4 text-purple-500 group-hover:scale-125 transition" />
+          </div>
+          <div className="flex items-baseline justify-between gap-1 pt-0.5">
+            <span className="text-sm font-extrabold text-slate-900 dark:text-white flex items-center gap-1">
+              <span>Admin Desk</span>
+              <span className="text-indigo-500 text-xs">→</span>
+            </span>
+            <span className="text-[10px] font-mono text-purple-600 dark:text-purple-400 font-bold bg-purple-500/10 px-2 py-0.5 rounded-md">
+              Send Review
+            </span>
           </div>
         </div>
 
@@ -952,6 +972,12 @@ export default function StudentDashboard() {
           student={currentUser}
         />
       )}
+
+      {/* Student App Feedback to Admin Modal */}
+      <StudentFeedbackModal
+        isOpen={isAppFeedbackOpen}
+        onClose={() => setIsAppFeedbackOpen(false)}
+      />
     </div>
   );
 }

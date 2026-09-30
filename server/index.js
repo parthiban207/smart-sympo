@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Express server with Nodemailer Gmail SMTP for Welcome & First Login emails and Event Registration confirmations", deps: ["express", "nodemailer", "cors", "dotenv"], state: "active", last: "antigravity@2026-08-26" }
+// agent-notes: { ctx: "Express server with Nodemailer Gmail SMTP for Welcome & First Login emails, Event Registration confirmations, and Student App Feedback alerts", deps: ["express", "nodemailer", "cors", "dotenv"], state: "active", last: "antigravity@2026-09-30" }
 
 import express from 'express';
 import cors from 'cors';
@@ -724,6 +724,115 @@ app.post('/api/send-login-alert', async (req, res) => {
     return res.status(200).json(result);
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Endpoint to notify Administrator when a student submits application feedback
+app.post('/api/send-admin-feedback', async (req, res) => {
+  try {
+    const {
+      student_name,
+      studentName,
+      student_email,
+      studentEmail,
+      roll_no,
+      rollNo,
+      college,
+      department,
+      category = 'general',
+      rating = 5,
+      title = '',
+      message,
+      priority = 'normal',
+      created_at,
+    } = req.body || {};
+
+    if (!message) {
+      return res.status(400).json({ success: false, error: 'Feedback message is required.' });
+    }
+
+    const sName = student_name || studentName || 'Student Delegate';
+    const sEmail = student_email || studentEmail || 'student@college.edu';
+    const sRoll = roll_no || rollNo || 'N/A';
+    const sCollege = college || 'Symposium Campus';
+    const sDept = department || 'General';
+    const adminRecipient = process.env.ADMIN_EMAIL || process.env.GMAIL_USER || 'admin@college.edu';
+    const formattedDate = created_at ? new Date(created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+
+    const stars = '★'.repeat(Math.min(5, Math.max(1, Number(rating) || 5))) + '☆'.repeat(5 - Math.min(5, Math.max(1, Number(rating) || 5)));
+    const subject = `📢 [Student Feedback - ${sRoll}] ${sName}: "${title || category.toUpperCase()}"`;
+
+    const text = `New Application Feedback received from Student:
+Sender Details:
+- Name: ${sName}
+- Roll No / ID: ${sRoll}
+- Email: ${sEmail}
+- College: ${sCollege}
+- Department: ${sDept}
+
+Feedback Details:
+- Category: ${category}
+- Rating: ${rating}/5 (${stars})
+- Priority: ${priority}
+- Title: ${title || 'N/A'}
+- Submitted: ${formattedDate}
+
+Message:
+${message}
+
+You can review and manage this in the Admin Dashboard: http://localhost:5173/admin
+`;
+
+    const html = `
+      <div style="background-color: #0f172a; padding: 32px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #f8fafc;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+          <div style="background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding: 24px; text-align: center;">
+            <span style="background-color: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #ffffff;">
+              Student App Feedback
+            </span>
+            <h1 style="color: #ffffff; margin: 12px 0 4px 0; font-size: 22px;">New Feedback Received!</h1>
+            <p style="color: #e0e7ff; margin: 0; font-size: 13px;">Sender: Student &rarr; Receiver: Administration</p>
+          </div>
+
+          <div style="padding: 24px;">
+            <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+              <h3 style="color: #818cf8; margin: 0 0 10px 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">🎓 Student (Sender) Identification</h3>
+              <table style="width: 100%; font-size: 13px; color: #cbd5e1; border-collapse: collapse;">
+                <tr><td style="padding: 4px 0; color: #94a3b8; width: 35%;">Name:</td><td style="padding: 4px 0; font-weight: 600; color: #f8fafc;">${sName}</td></tr>
+                <tr><td style="padding: 4px 0; color: #94a3b8;">Roll No / ID:</td><td style="padding: 4px 0; font-family: monospace; font-weight: 700; color: #38bdf8;">${sRoll}</td></tr>
+                <tr><td style="padding: 4px 0; color: #94a3b8;">Email:</td><td style="padding: 4px 0;"><a href="mailto:${sEmail}" style="color: #818cf8; text-decoration: none;">${sEmail}</a></td></tr>
+                <tr><td style="padding: 4px 0; color: #94a3b8;">College:</td><td style="padding: 4px 0;">${sCollege}</td></tr>
+                <tr><td style="padding: 4px 0; color: #94a3b8;">Department:</td><td style="padding: 4px 0;">${sDept}</td></tr>
+              </table>
+            </div>
+
+            <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                <span style="color: #fbbf24; font-size: 16px; letter-spacing: 2px;">${stars} (${rating}/5)</span>
+                <span style="background-color: #3b82f6; color: #ffffff; padding: 2px 8px; border-radius: 6px; font-size: 11px; text-transform: uppercase; font-weight: 600;">${category}</span>
+              </div>
+              ${title ? `<h4 style="color: #ffffff; margin: 8px 0 4px 0; font-size: 15px;">${title}</h4>` : ''}
+              <div style="color: #cbd5e1; font-size: 14px; line-height: 1.6; margin-top: 8px; white-space: pre-wrap; background-color: #1e293b; padding: 12px; border-radius: 8px; border-left: 3px solid #6366f1;">
+${message}
+              </div>
+              <div style="color: #64748b; font-size: 11px; margin-top: 10px; text-align: right;">Submitted on: ${formattedDate}</div>
+            </div>
+
+            <div style="text-align: center; margin-top: 24px;">
+              <a href="http://localhost:5173/admin" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 10px; font-size: 13px; font-weight: 700; display: inline-block;">
+                Open Admin Feedback Hub &rarr;
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const result = await dispatchEmail({ to: adminRecipient, subject, text, html });
+    return res.status(200).json({ success: true, dispatched: true, result });
+  } catch (err) {
+    console.error('Error in /api/send-admin-feedback:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to dispatch feedback notification.' });
   }
 });
 
