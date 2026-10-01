@@ -811,6 +811,15 @@ export const AppProvider = ({ children }) => {
     }
 
     const welcomeKey = `smart_sympo_welcome_dispatched_${email}`;
+
+    // Do not dispatch welcome email on routine logins if already completed
+    if (!forceDispatch) {
+      const alreadySent = typeof window !== 'undefined' ? localStorage.getItem(welcomeKey) : null;
+      if (alreadySent || userProfile.first_login === false) {
+        return;
+      }
+    }
+
     const cleanRole = (
       userProfile.role ||
       (email.includes('admin') ? 'admin' : email.includes('coord') ? 'coordinator' : 'student')
