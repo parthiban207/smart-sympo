@@ -1029,96 +1029,61 @@ export const AppProvider = ({ children }) => {
       }
     }
 
-    // If Supabase Auth failed (e.g. invalid credentials, unconfirmed email, or network/CORS error), check profiles & local fallback
+    // If Supabase authentication failed or was rejected
     if (!authUser) {
-      let fallbackProfile = null;
       if (!isMockMode) {
+        // Clear any invalid session state
         try {
-          const { data: prof } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('email', cleanEmail)
-            .maybeSingle();
-          if (prof) {
-            fallbackProfile = prof;
-          }
+          await supabase.auth.signOut();
         } catch {
-          /* ignore fallback profile fetch errors */
+          /* ignore signOut error */
         }
-      }
+        localStorage.removeItem('smart_sympo_user');
+        localStorage.removeItem('smart_sympo_active_role');
+        setSession(null);
+        setIsAuthenticated(false);
+        setCurrentUser(null);
 
-      if (!fallbackProfile) {
-        const localAccounts = getStoredAccounts();
-        fallbackProfile = (profilesList || []).concat(localAccounts).find(
-          (a) => a && a.email && a.email.toLowerCase() === cleanEmail
-        );
-      }
-
-      // If user typed email & password in mock/fallback mode and no profile exists yet, create on-the-fly profile
-      if (!fallbackProfile && cleanEmail && cleanPass) {
-        const resolvedRole = (cleanEmail.includes('admin') || targetRole === 'admin')
-          ? 'admin'
-          : (targetRole === 'coordinator' || cleanEmail.includes('coord'))
-            ? 'coordinator'
-            : 'student';
-
-        fallbackProfile = {
-          id: 'usr-' + Date.now().toString(36),
-          name: cleanEmail.split('@')[0],
-          full_name: cleanEmail.split('@')[0],
-          username: cleanEmail.split('@')[0],
-          email: cleanEmail,
-          role: resolvedRole,
-          pass_code: cleanPass,
-          password: cleanPass,
-          college_id: `${resolvedRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
-          first_login: false,
+        const errMsg = authError?.message || authError?.error_description || '';
+        return {
+          success: false,
+          message: errMsg.includes('Invalid login credentials') || errMsg.includes('invalid')
+            ? 'Invalid email or password. Please check your credentials.'
+            : (errMsg || 'Invalid email or password. Please check your credentials.'),
         };
       }
 
-      if (
-        fallbackProfile &&
-        (fallbackProfile.pass_code === cleanPass ||
-          fallbackProfile.password === cleanPass ||
-          cleanPass === '2005' ||
-          cleanPass === '200508' ||
-          cleanPass === 'student123' ||
-          cleanPass === 'admin123' ||
-          cleanPass === 'staff123' ||
-          cleanPass.length >= 4)
-      ) {
-        if (targetRole) {
-          fallbackProfile.role = targetRole;
-        } else if (cleanEmail.includes('admin')) {
-          fallbackProfile.role = 'admin';
-        } else if (cleanEmail.includes('coord')) {
-          fallbackProfile.role = 'coordinator';
-        }
-        const synced = syncUserStorage(fallbackProfile);
-        setIsAuthenticated(true);
-        triggerWelcomeEmailIfNeeded(synced);
-        return { success: true, user: synced, profile: synced, role: synced.role };
+      // Offline Mock Mode only: Strictly match stored profile password
+      const localAccounts = getStoredAccounts();
+      const mockProfile = (profilesList || []).concat(localAccounts).find(
+        (a) => a && a.email && a.email.toLowerCase() === cleanEmail
+      );
+
+      if (!mockProfile) {
+        return {
+          success: false,
+          message: 'Account not found with this email. Please check your details or sign up first.',
+        };
       }
 
-      // Clear invalid session tokens
-      try {
-        await supabase.auth.signOut();
-      } catch {
-        /* ignore signOut error during fallback */
-      }
-      localStorage.removeItem('smart_sympo_user');
-      localStorage.removeItem('smart_sympo_active_role');
-      setSession(null);
-      setIsAuthenticated(false);
-      setCurrentUser(null);
+      const isPasswordCorrect =
+        (mockProfile.pass_code && mockProfile.pass_code === cleanPass) ||
+        (mockProfile.password && mockProfile.password === cleanPass);
 
-      const errText = authError?.message || authError?.error_description || '';
-      return {
-        success: false,
-        message: errText.includes('Failed to fetch')
-          ? 'Unable to reach authentication server. Logged in via offline fallback.'
-          : errText || 'Invalid email or password. Please check your credentials.',
-      };
+      if (!isPasswordCorrect) {
+        return {
+          success: false,
+          message: 'Incorrect password. Please enter the correct password.',
+        };
+      }
+
+      if (targetRole) {
+        mockProfile.role = targetRole;
+      }
+      const synced = syncUserStorage(mockProfile);
+      setIsAuthenticated(true);
+      triggerWelcomeEmailIfNeeded(synced);
+      return { success: true, user: synced, profile: synced, role: synced.role };
     }
 
     // Fetch user profile from public.profiles table
