@@ -251,3 +251,21 @@ export async function sendAttendanceConfirmationApi({
   return result;
 }
 
+/**
+ * Dispatch test email to any arbitrary student mailbox for verification
+ */
+export async function sendTestEmailApi({ email, type = 'welcome', name = 'Test Student' }) {
+  if (!email || !email.trim()) {
+    return { success: false, error: 'Recipient email required for test' };
+  }
+
+  const payload = {
+    email: email.trim(),
+    type,
+    name,
+  };
+
+  return await fetchWithFallback('/api/send-test-email', payload);
+}
+
+
