@@ -87,7 +87,7 @@ export default function AuthModal({ isOpen, onClose }) {
         if (!res.success) {
           setErrorMsg(res.message);
         } else if (res.requiresConfirmation) {
-          setIsSignUp(false);
+          setMode('login');
           setSuccessMsg(res.message || 'Registration successful! Please check your email for the confirmation link before logging in.');
           setErrorMsg('');
         } else {

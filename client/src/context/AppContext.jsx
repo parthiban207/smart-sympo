@@ -841,21 +841,20 @@ export const AppProvider = ({ children }) => {
       loginUrl: targetLoginUrl,
     };
 
-    // Primary automated dispatch via Nodemailer SMTP with EmailJS fallback
-    sendWelcomeEmail(emailPayload)
-      .then((res) => {
-        if (res?.success) {
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(welcomeKey, new Date().toISOString());
-          }
-          console.log(`[AppContext] Welcome email successfully dispatched to ${email}`);
-        } else {
-          console.warn('[AppContext] Welcome email dispatch did not confirm delivery:', res);
+    let dispatchResult = null;
+    try {
+      dispatchResult = await sendWelcomeEmail(emailPayload);
+      if (dispatchResult?.success) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(welcomeKey, new Date().toISOString());
         }
-      })
-      .catch((err) =>
-        console.warn('[Welcome Email Dispatch Error]:', err)
-      );
+        console.log(`[AppContext] Welcome email successfully dispatched to ${email}`);
+      } else {
+        console.warn('[AppContext] Welcome email dispatch did not confirm delivery:', dispatchResult);
+      }
+    } catch (err) {
+      console.warn('[Welcome Email Dispatch Error]:', err);
+    }
 
     // Mark first_login = false in Supabase & Local state
     if (!isMockMode && isValidUUID(userProfile.id)) {
@@ -865,6 +864,8 @@ export const AppProvider = ({ children }) => {
         console.warn('[First Login Flag Update Warning]:', updateErr);
       }
     }
+
+    return dispatchResult || { success: true };
   };
 
   // Supabase Auth Signup with complete validation & explicit profiles table insertion
@@ -969,7 +970,7 @@ export const AppProvider = ({ children }) => {
               const savedUser = syncUserStorage(profile);
               setIsAuthenticated(true);
               setSession(loginRes.data.session || null);
-              triggerWelcomeEmailIfNeeded(savedUser, false);
+              await triggerWelcomeEmailIfNeeded(savedUser, false);
               return { success: true, user: savedUser, profile: savedUser, role: savedUser.role };
             }
           } catch (loginErr) {
@@ -1021,11 +1022,11 @@ export const AppProvider = ({ children }) => {
         const savedUser = syncUserStorage(profileData);
         setIsAuthenticated(true);
         setSession(data.session);
-        triggerWelcomeEmailIfNeeded(savedUser, true);
+        await triggerWelcomeEmailIfNeeded(savedUser, true);
         return { success: true, requiresConfirmation: false, user: savedUser, profile: savedUser, role: savedUser.role };
       } else {
         // Confirmation required by Supabase Auth
-        triggerWelcomeEmailIfNeeded(profileData, true);
+        await triggerWelcomeEmailIfNeeded(profileData, true);
         return {
           success: true,
           requiresConfirmation: true,
@@ -1139,7 +1140,7 @@ export const AppProvider = ({ children }) => {
       }
       const synced = syncUserStorage(mockProfile);
       setIsAuthenticated(true);
-      triggerWelcomeEmailIfNeeded(synced);
+      await triggerWelcomeEmailIfNeeded(synced);
       return { success: true, user: synced, profile: synced, role: synced.role };
     }
 
@@ -1191,7 +1192,7 @@ export const AppProvider = ({ children }) => {
     setSession(authSession);
 
     // Guaranteed Welcome Email dispatch for first login or newly registered user
-    triggerWelcomeEmailIfNeeded(synced);
+    await triggerWelcomeEmailIfNeeded(synced);
 
     return { success: true, user: synced, profile: synced, role: synced.role };
   };
