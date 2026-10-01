@@ -795,25 +795,6 @@ export const AppProvider = ({ children }) => {
 
     const email = userProfile.email.trim().toLowerCase();
     const welcomeKey = `smart_sympo_welcome_dispatched_${email}`;
-    const wasAlreadyDispatched = typeof window !== 'undefined' ? localStorage.getItem(welcomeKey) : null;
-    const isFirstTime = Boolean(
-      userProfile.first_login === true ||
-      userProfile.first_login === 'true' ||
-      !wasAlreadyDispatched ||
-      forceDispatch
-    );
-
-    if (!isFirstTime && wasAlreadyDispatched) {
-      // Dispatch routine login security alert for subsequent logins
-      sendLoginAlertApi({
-        email,
-        name: userProfile.full_name || userProfile.name || userProfile.username || 'User',
-        role: userProfile.role || 'student',
-        timestamp: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' }),
-      }).catch((err) => console.warn('[Login Alert Email Error]:', err));
-      return;
-    }
-
     const cleanRole = (userProfile.role || (email.includes('admin') ? 'admin' : email.includes('coord') ? 'coordinator' : 'student')).toLowerCase();
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
     const roleLoginPath = cleanRole === 'admin' ? '/login/admin' : (cleanRole === 'coordinator' || cleanRole === 'staff' ? '/login/staff' : '/login/student');
