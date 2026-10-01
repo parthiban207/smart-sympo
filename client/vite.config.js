@@ -270,6 +270,84 @@ function emailApiPlugin() {
               return res.end(JSON.stringify({ success: true, message: 'Login alert processed' }));
             }
 
+            if (req.url === '/api/send-admin-feedback') {
+              const {
+                student_name, studentName, student_email, studentEmail,
+                roll_no, rollNo, category, rating, title, message
+              } = body;
+              const sName = student_name || studentName || 'Student';
+              const sEmail = student_email || studentEmail || '';
+              const sRoll = roll_no || rollNo || 'N/A';
+              const adminEmail = process.env.ADMIN_EMAIL || process.env.GMAIL_USER || 'smartsympo@gmail.com';
+
+              try {
+                const info = await transporter.sendMail({
+                  from: `"SmartSympo 2026" <${senderUser}>`,
+                  to: adminEmail,
+                  replyTo: sEmail || senderUser,
+                  subject: `📢 [Feedback - ${sRoll}] ${sName}: "${title || (category || 'General').toUpperCase()}"`,
+                  text: `New student feedback from ${sName} (${sRoll}, ${sEmail}):\nCategory: ${category}\nRating: ${rating}/5\nTitle: ${title}\nMessage:\n${message}`,
+                  html: `<div style="font-family: sans-serif; padding: 20px; background: #0f172a; color: #fff;">
+                    <h2>New Student Feedback Received</h2>
+                    <p><strong>From:</strong> ${sName} (${sRoll}) &lt;${sEmail}&gt;</p>
+                    <p><strong>Rating:</strong> ${rating}/5 | <strong>Category:</strong> ${category}</p>
+                    <blockquote style="background: #1e293b; padding: 15px; border-left: 4px solid #6366f1;">${message}</blockquote>
+                  </div>`,
+                });
+                res.setHeader('Content-Type', 'application/json');
+                return res.end(JSON.stringify({ success: true, dispatched: true, messageId: info.messageId }));
+              } catch (err) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                return res.end(JSON.stringify({ success: false, error: err.message }));
+              }
+            }
+
+            if (req.url === '/api/send-feedback-reply') {
+              const {
+                student_email, studentEmail, student_name, studentName,
+                original_title, category, original_message, reply_message,
+                admin_name, status = 'resolved'
+              } = body;
+              const targetEmail = (student_email || studentEmail || '').trim();
+              const sName = student_name || studentName || 'Student';
+              const fTitle = original_title || (category || 'FEEDBACK').toUpperCase();
+
+              if (!targetEmail) {
+                res.statusCode = 400;
+                return res.end(JSON.stringify({ success: false, error: 'Recipient email required' }));
+              }
+
+              try {
+                const info = await transporter.sendMail({
+                  from: `"SmartSympo 2026" <${senderUser}>`,
+                  to: targetEmail,
+                  replyTo: senderUser,
+                  subject: `📬 [SmartSympo Response] Update regarding your feedback: "${fTitle}"`,
+                  text: `Hi ${sName},\n\nOur administration team has reviewed your feedback regarding "${fTitle}":\n\nStatus: ${status.toUpperCase()}\nResolution: ${reply_message}\n\nBest regards,\n${admin_name || 'SmartSympo Administration'}`,
+                  html: `<div style="font-family: sans-serif; background: #0f172a; color: #f8fafc; padding: 30px;">
+                    <div style="max-width: 580px; margin: 0 auto; background: #1e293b; border-radius: 16px; padding: 24px; border: 1px solid #334155;">
+                      <h2 style="color: #6366f1; margin-top: 0;">Official Feedback Response</h2>
+                      <p>Hi <strong>${sName}</strong>,</p>
+                      <p>Our team has reviewed your feedback regarding <em>"${fTitle}"</em>.</p>
+                      <div style="background: #0f172a; border-left: 4px solid #10b981; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                        <span style="font-size: 11px; text-transform: uppercase; color: #10b981; font-weight: bold;">Status: ${status}</span>
+                        <p style="margin: 8px 0 0 0; color: #fff;">${reply_message}</p>
+                      </div>
+                      ${original_message ? `<p style="font-size: 12px; color: #94a3b8;">Original message: "${original_message}"</p>` : ''}
+                      <p style="font-size: 12px; color: #64748b; margin-top: 24px;">SmartSympo 2026 Organizing Committee</p>
+                    </div>
+                  </div>`,
+                });
+                res.setHeader('Content-Type', 'application/json');
+                return res.end(JSON.stringify({ success: true, dispatched: true, messageId: info.messageId }));
+              } catch (err) {
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                return res.end(JSON.stringify({ success: false, error: err.message }));
+              }
+            }
+
             // Fallback for unrecognized /api route
             next();
           });

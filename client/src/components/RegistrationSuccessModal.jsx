@@ -1,5 +1,4 @@
-// agent-notes: { ctx: "Interactive registration success popup modal with automated email dispatch confirmation and instant QR pass shortcut", deps: ["lucide-react"], state: "active", last: "antigravity@2026-08-31" }
-
+import { useState } from 'react';
 import {
   Clock,
   MapPin,
@@ -7,7 +6,12 @@ import {
   QrCode,
   Sparkles,
   X,
+  ExternalLink,
+  Check,
+  Send,
+  RefreshCw,
 } from 'lucide-react';
+import { sendEventConfirmationApi } from '../services/backendEmailService';
 
 export default function RegistrationSuccessModal({
   isOpen,
@@ -16,7 +20,12 @@ export default function RegistrationSuccessModal({
   student,
   emailResult,
   onOpenQRPass,
+  passToken: directPassToken = null,
 }) {
+  const [customEmail, setCustomEmail] = useState('');
+  const [isSendingCustom, setIsSendingCustom] = useState(false);
+  const [sendSuccessMessage, setSendSuccessMessage] = useState('');
+  const [sendErrorMessage, setSendErrorMessage] = useState('');
   if (!isOpen || !event) return null;
 
   const studentEmail = student?.email || 'your registered email';
@@ -97,23 +106,102 @@ export default function RegistrationSuccessModal({
         </div>
 
         {/* Automated Email Confirmation Banner */}
-        <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200/90 flex items-start gap-3 relative z-10 text-xs shadow-2xs">
-          <div className="p-2.5 rounded-xl bg-indigo-600 text-white shrink-0 shadow-xs mt-0.5">
-            <Mail className="w-4 h-4" />
-          </div>
-          <div className="space-y-1">
-            <div className="font-bold text-indigo-950 flex items-center gap-1.5">
-              <span>Confirmation Email Dispatched</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+        <div className="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200/90 space-y-3 relative z-10 text-xs shadow-2xs">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-600 text-white shrink-0 shadow-xs mt-0.5">
+              <Mail className="w-4 h-4" />
             </div>
-            <p className="text-slate-600 leading-relaxed text-[11px]">
-              A confirmation receipt with your dynamic pass details has been sent to{' '}
-              <span className="font-bold text-indigo-900 underline">{studentEmail}</span>.
-            </p>
-            {emailResult?.params?.pass_token && (
-              <div className="text-[10px] text-indigo-700 font-mono font-semibold pt-1">
-                Pass Token: {emailResult.params.pass_token}
+            <div className="space-y-1 flex-1">
+              <div className="font-bold text-indigo-950 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>Confirmation Dispatched</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                </span>
+                <a
+                  href="https://mail.google.com/mail/u/0/#search/SmartSympo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-white px-2.5 py-1 rounded-lg border border-indigo-200 hover:bg-indigo-50 shadow-2xs transition"
+                >
+                  <ExternalLink className="w-3 h-3 text-indigo-600" />
+                  <span>Open Gmail</span>
+                </a>
               </div>
+              <p className="text-slate-600 leading-relaxed text-[11px]">
+                A confirmation receipt with your dynamic pass details has been dispatched to{' '}
+                <span className="font-bold text-indigo-900 underline">{studentEmail}</span>.
+              </p>
+              {(directPassToken || emailResult?.params?.pass_token) && (
+                <div className="text-[10px] text-indigo-700 font-mono font-semibold pt-0.5">
+                  Pass Token: {directPassToken || emailResult?.params?.pass_token}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick Resend / Forward to Real Gmail */}
+          <div className="pt-2 border-t border-indigo-200/60">
+            <div className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+              <span>Send copy to your personal Gmail:</span>
+              {sendSuccessMessage && (
+                <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
+                  <Check className="w-3 h-3" /> Sent!
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="email"
+                placeholder="e.g. yourname@gmail.com"
+                value={customEmail}
+                onChange={(e) => setCustomEmail(e.target.value)}
+                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-600 font-medium"
+              />
+              <button
+                type="button"
+                disabled={isSendingCustom || !customEmail.trim()}
+                onClick={async () => {
+                  if (!customEmail.trim() || !customEmail.includes('@')) {
+                    setSendErrorMessage('Please enter a valid email address.');
+                    return;
+                  }
+                  setIsSendingCustom(true);
+                  setSendSuccessMessage('');
+                  setSendErrorMessage('');
+                  try {
+                    const token = directPassToken || emailResult?.params?.pass_token || `PASS-${Date.now().toString(36).toUpperCase()}`;
+                    const res = await sendEventConfirmationApi({
+                      email: customEmail.trim(),
+                      name: student?.full_name || student?.name || 'Student Delegate',
+                      eventName: event.title,
+                      category: event.category || 'General',
+                      venue: event.hall_number || 'Main Venue',
+                      timeSlot: formatEventTime(event.start_time, event.end_time),
+                      eventDate: new Date(event.start_time || Date.now()).toLocaleDateString('en-US', { dateStyle: 'long' }),
+                      passToken: token,
+                      roll_no: student?.roll_no || student?.college_id || 'STU-2026',
+                      collegeName: student?.college || 'Symposium Campus',
+                    });
+                    if (res?.success) {
+                      setSendSuccessMessage(`Pass sent to ${customEmail}!`);
+                      setCustomEmail('');
+                    } else {
+                      setSendErrorMessage(res?.error || 'Failed to dispatch email.');
+                    }
+                  } catch (err) {
+                    setSendErrorMessage(err?.message || 'Error sending pass.');
+                  } finally {
+                    setIsSendingCustom(false);
+                  }
+                }}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center gap-1 transition cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                {isSendingCustom ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                <span>Send</span>
+              </button>
+            </div>
+            {sendErrorMessage && (
+              <p className="text-[10px] text-rose-500 font-semibold mt-1">{sendErrorMessage}</p>
             )}
           </div>
         </div>

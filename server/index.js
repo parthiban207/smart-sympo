@@ -839,6 +839,112 @@ ${message}
   }
 });
 
+// Endpoint for Administrator to send an official email reply to a student regarding their feedback
+app.post('/api/send-feedback-reply', async (req, res) => {
+  try {
+    const {
+      student_email,
+      studentEmail,
+      student_name,
+      studentName,
+      feedback_id,
+      feedbackId,
+      original_title,
+      originalTitle,
+      category = 'general',
+      original_message,
+      originalMessage,
+      reply_message,
+      replyMessage,
+      admin_name,
+      adminName,
+      status = 'resolved',
+    } = req.body || {};
+
+    const targetEmail = (student_email || studentEmail || '').trim();
+    const sName = student_name || studentName || 'Student Delegate';
+    const fId = feedback_id || feedbackId || '';
+    const fTitle = original_title || originalTitle || (category ? category.replace('_', ' ').toUpperCase() : 'APP FEEDBACK');
+    const messageReply = reply_message || replyMessage || '';
+    const aName = admin_name || adminName || 'SmartSympo Administration';
+
+    if (!targetEmail) {
+      return res.status(400).json({ success: false, error: 'Student email is required.' });
+    }
+    if (!messageReply || !messageReply.trim()) {
+      return res.status(400).json({ success: false, error: 'Reply message cannot be empty.' });
+    }
+
+    const subject = `📬 [SmartSympo Response] Update regarding your feedback: "${fTitle}"`;
+
+    const text = `Hi ${sName},\n\nThank you for reaching out to the SmartSympo team. An administrator has reviewed your feedback and sent the following response:\n\n----------------------------------------\nSTATUS: ${status.toUpperCase()}\n\nADMINISTRATOR RESPONSE:\n${messageReply}\n----------------------------------------\n\nORIGINAL FEEDBACK:\n"${original_message || originalMessage || fTitle}"\n\nIf you have any further questions or require on-campus assistance during the symposium, please visit the Helpdesk or reply to this email.\n\nBest regards,\n${aName}\nSmartSympo 2026 Organizing Committee`;
+
+    const html = `
+      <div style="background-color: #0f172a; padding: 32px 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #f8fafc;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; border: 1px solid #334155; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);">
+          <div style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); padding: 26px 24px; text-align: center;">
+            <span style="background-color: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #ffffff; letter-spacing: 0.5px;">
+              SmartSympo Official Response
+            </span>
+            <h1 style="color: #ffffff; margin: 12px 0 4px 0; font-size: 22px; font-weight: 800;">Response to Your Feedback</h1>
+            <p style="color: #e0e7ff; margin: 0; font-size: 13px;">SmartSympo 2026 Organizing Committee</p>
+          </div>
+
+          <div style="padding: 26px;">
+            <p style="font-size: 15px; line-height: 1.6; color: #f1f5f9; margin-top: 0;">
+              Hi <strong>${sName}</strong>,
+            </p>
+            <p style="font-size: 14px; line-height: 1.6; color: #cbd5e1; margin-top: 8px;">
+              Thank you for taking the time to share your feedback about <strong>"${fTitle}"</strong>. Our administration team has reviewed your remarks:
+            </p>
+
+            <div style="background-color: #0f172a; border: 1px solid #6366f1; border-radius: 12px; padding: 18px; margin: 20px 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="color: #818cf8; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;">
+                  💬 Admin Resolution & Message
+                </span>
+                <span style="background-color: ${status === 'resolved' ? '#059669' : '#0284c7'}; color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 6px; text-transform: uppercase;">
+                  ${status}
+                </span>
+              </div>
+              <div style="color: #f8fafc; font-size: 14px; line-height: 1.6; white-space: pre-wrap; font-weight: 500;">
+${messageReply}
+              </div>
+              <div style="margin-top: 12px; font-size: 11px; color: #94a3b8; border-top: 1px solid #334155; padding-top: 8px;">
+                Responded by: <strong>${aName}</strong>
+              </div>
+            </div>
+
+            ${(original_message || originalMessage) ? `
+            <div style="background-color: #1e293b; border-left: 3px solid #64748b; border-radius: 6px; padding: 12px; margin-bottom: 20px;">
+              <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Your Original Feedback:</div>
+              <div style="font-size: 12px; color: #cbd5e1; font-style: italic; line-height: 1.5;">
+                "${original_message || originalMessage}"
+              </div>
+            </div>` : ''}
+
+            <p style="font-size: 13px; line-height: 1.5; color: #94a3b8; margin-top: 16px;">
+              If you have any further questions or encounter any issues on campus, you can reach out directly to the symposium coordinators or visit the central registration desk in the Admin Quad.
+            </p>
+
+            <div style="text-align: center; margin-top: 24px;">
+              <a href="http://localhost:5173/student" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: #ffffff; text-decoration: none; padding: 10px 24px; border-radius: 10px; font-size: 12px; font-weight: 700; display: inline-block;">
+                Open Student Portal &rarr;
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const result = await dispatchEmail({ to: targetEmail, subject, text, html });
+    return res.status(200).json({ success: true, dispatched: true, result });
+  } catch (err) {
+    console.error('Error in /api/send-feedback-reply:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to dispatch feedback reply email.' });
+  }
+});
+
 // =========================================================================
 // 3. WHATSAPP & SMS RELAY ENDPOINTS
 // =========================================================================

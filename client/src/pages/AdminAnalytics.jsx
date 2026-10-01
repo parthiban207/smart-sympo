@@ -31,7 +31,8 @@ import {
   Globe, Crosshair, Ruler, FileText, ScanLine, Clock, Hash, CheckCircle2, AlertCircle,
   Pencil, Trash2, KeyRound, Lock, FileSpreadsheet, Download, FileDown,
   StopCircle, Mail, Search, Building, Eye, MoreHorizontal, Sparkles,
-  MessageSquare, MessageSquareHeart, Star, Reply, Check, ExternalLink, ThumbsUp, Send
+  MessageSquare, MessageSquareHeart, Star, Reply, Check, ExternalLink, ThumbsUp, Send,
+  RefreshCw, X
 } from 'lucide-react';
 import { CAMPUS_VENUES } from '../services/campusNavigationData';
 
@@ -41,7 +42,7 @@ export default function AdminAnalytics() {
     addEvent, updateEvent, deleteEvent, unregisterForEvent, currentUser, profilesList = [], setProfilesList,
     updateUserRole, createCoordinatorAccount, deleteUserAccount, clearAllAccounts, liveAlerts = [],
     clearGlobalEmergencyBroadcast,
-    appFeedbacks = [], updateAppFeedbackStatus, deleteAppFeedback
+    appFeedbacks = [], fetchAppFeedbacks, updateAppFeedbackStatus, replyToAppFeedback, deleteAppFeedback
   } = useApp() || {};
   const { onlineUsers, onlineCount } = usePresence();
   const [showAddModal, setShowAddModal] = useState(false);
@@ -60,6 +61,13 @@ export default function AdminAnalytics() {
   const [feedbackCategoryFilter, setFeedbackCategoryFilter] = useState('all');
   const [adminNoteDrafts, setAdminNoteDrafts] = useState({});
   const [savedNoteSuccessId, setSavedNoteSuccessId] = useState(null);
+  const [isRefreshingFeedback, setIsRefreshingFeedback] = useState(false);
+  const [replyModalFeedback, setReplyModalFeedback] = useState(null);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replyStatus, setReplyStatus] = useState('resolved');
+  const [isSendingReply, setIsSendingReply] = useState(false);
+  const [replySuccessMessage, setReplySuccessMessage] = useState('');
+  const [replyErrorMessage, setReplyErrorMessage] = useState('');
 
   // Derived feedback analytics & metrics
   const feedbackMetrics = useMemo(() => {
@@ -127,6 +135,94 @@ export default function AdminAnalytics() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const handleRefreshFeedbacks = async () => {
+    setIsRefreshingFeedback(true);
+    if (fetchAppFeedbacks) {
+      await fetchAppFeedbacks();
+    }
+    setTimeout(() => setIsRefreshingFeedback(false), 500);
+  };
+
+  const handleOpenReplyModal = (item) => {
+    const existingDraft = adminNoteDrafts[item.id] !== undefined ? adminNoteDrafts[item.id] : (item.admin_notes || '');
+    setReplyModalFeedback(item);
+    setReplyDraft(existingDraft);
+    setReplyStatus(item.status === 'new' ? 'resolved' : item.status);
+    setReplySuccessMessage('');
+    setReplyErrorMessage('');
+  };
+
+  const handleDirectGmailReply = async (item) => {
+    const draft = adminNoteDrafts[item.id] !== undefined ? adminNoteDrafts[item.id] : (item.admin_notes || '');
+    const subject = `Re: SmartSympo Feedback [${item.id}] - ${item.title || item.category || 'General'}`;
+    const bodyText = `Hi ${item.student_name || 'Student'},\n\nThank you for reaching out to the SmartSympo team regarding "${item.title || item.category}".\n\n${draft ? `${draft}\n\n` : ''}Best regards,\nSmartSympo Administration`;
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(item.student_email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
+
+    // 1. Direct browser connection with Gmail Web
+    window.open(gmailUrl, '_blank', 'noopener,noreferrer');
+
+    // 2. Automatically update status and persist the note in Supabase/storage
+    const newStatus = draft ? 'resolved' : (item.status === 'new' ? 'reviewed' : item.status);
+    await updateAppFeedbackStatus(item.id, newStatus, draft);
+    setSavedNoteSuccessId(item.id);
+    setTimeout(() => setSavedNoteSuccessId(null), 3000);
+  };
+
+  const handleOpenGmailFromModal = async () => {
+    if (!replyModalFeedback) return;
+    const subject = `Re: SmartSympo Feedback [${replyModalFeedback.id}] - ${replyModalFeedback.title || replyModalFeedback.category || 'General'}`;
+    const bodyText = `Hi ${replyModalFeedback.student_name || 'Student'},\n\nThank you for reaching out regarding "${replyModalFeedback.title || replyModalFeedback.category}".\n\n${replyDraft ? `${replyDraft}\n\n` : ''}Best regards,\nSmartSympo Administration`;
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(replyModalFeedback.student_email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyText)}`;
+
+    window.open(gmailUrl, '_blank', 'noopener,noreferrer');
+
+    await updateAppFeedbackStatus(replyModalFeedback.id, replyStatus, replyDraft.trim());
+    setSavedNoteSuccessId(replyModalFeedback.id);
+    setAdminNoteDrafts((prev) => ({ ...prev, [replyModalFeedback.id]: replyDraft.trim() }));
+    setReplySuccessMessage(`Connected with Gmail! Status marked as ${replyStatus}.`);
+    setTimeout(() => {
+      setReplyModalFeedback(null);
+      setReplySuccessMessage('');
+    }, 1800);
+  };
+
+  const handleSendFeedbackReply = async (e) => {
+    if (e) e.preventDefault();
+    if (!replyModalFeedback || !replyDraft.trim()) {
+      setReplyErrorMessage('Please enter a reply message for the student.');
+      return;
+    }
+
+    setIsSendingReply(true);
+    setReplySuccessMessage('');
+    setReplyErrorMessage('');
+
+    try {
+      const res = await replyToAppFeedback({
+        feedbackId: replyModalFeedback.id,
+        replyMessage: replyDraft.trim(),
+        status: replyStatus,
+        adminNotes: replyDraft.trim(),
+      });
+
+      if (res?.success) {
+        setReplySuccessMessage(`Reply successfully dispatched to ${replyModalFeedback.student_email}!`);
+        setSavedNoteSuccessId(replyModalFeedback.id);
+        setAdminNoteDrafts((prev) => ({ ...prev, [replyModalFeedback.id]: replyDraft.trim() }));
+        setTimeout(() => {
+          setReplyModalFeedback(null);
+          setReplySuccessMessage('');
+        }, 1800);
+      } else {
+        setReplyErrorMessage(res?.error || 'Failed to dispatch email reply.');
+      }
+    } catch (err) {
+      setReplyErrorMessage(err?.message || 'Error occurred while sending reply email.');
+    } finally {
+      setIsSendingReply(false);
+    }
   };
 
   // Real-Time Attendance Re-fetch Helper (with relational query)
@@ -2233,6 +2329,17 @@ export default function AdminAnalytics() {
                 <option value="general">General</option>
               </select>
 
+              {/* Refresh Button */}
+              <button
+                onClick={handleRefreshFeedbacks}
+                disabled={isRefreshingFeedback}
+                className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
+                title="Sync and refresh feedback from database"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-indigo-500 ${isRefreshingFeedback ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+
               {/* Export Button */}
               <button
                 onClick={handleExportFeedbackCSV}
@@ -2300,12 +2407,15 @@ export default function AdminAnalytics() {
                           </div>
                           <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 flex-wrap font-medium">
                             <a
-                              href={`mailto:${item.student_email}?subject=Re: SmartSympo Feedback [${item.id}]`}
-                              className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
-                              title="Click to send direct email reply to student"
+                              href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(item.student_email)}&su=${encodeURIComponent(`Re: SmartSympo Feedback [${item.id}] - ${item.title || item.category || 'General'}`)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 hover:underline flex items-center gap-1 font-semibold"
+                              title="Click to open Gmail compose window"
                             >
-                              <Mail className="w-3.5 h-3.5" />
+                              <Mail className="w-3.5 h-3.5 text-rose-500" />
                               <span>{item.student_email}</span>
+                              <ExternalLink className="w-3 h-3 text-slate-400" />
                             </a>
                             {item.college && (
                               <>
@@ -2430,45 +2540,89 @@ export default function AdminAnalytics() {
                       </div>
                     </div>
 
-                    {/* Bottom: Admin Notes / Response Input */}
+                    {/* Bottom: Admin Notes / Response Input & Action Buttons */}
                     <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <div className="flex-1 relative">
                         <input
                           type="text"
                           value={draft}
                           onChange={(e) => setAdminNoteDrafts({ ...adminNoteDrafts, [item.id]: e.target.value })}
-                          placeholder="Add internal resolution note or response (e.g. Fixed scanner calibration in Hall B)..."
-                          className="w-full px-3.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition"
+                          placeholder="Type reply message or internal note (e.g. Thanks for the feedback!)..."
+                          className="w-full px-3.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:border-indigo-500 transition"
                         />
                       </div>
+
+                      {/* 1. Save Note Only */}
                       <button
                         onClick={async () => {
                           await updateAppFeedbackStatus(item.id, item.status, draft);
                           setSavedNoteSuccessId(item.id);
                           setTimeout(() => setSavedNoteSuccessId(null), 2500);
                         }}
-                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
+                        className="px-3.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
+                        title="Save note to database"
                       >
                         {savedNoteSuccessId === item.id ? (
                           <>
-                            <Check className="w-3.5 h-3.5 text-emerald-300" />
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
                             <span>Saved!</span>
                           </>
                         ) : (
                           <>
-                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
                             <span>Save Note</span>
                           </>
                         )}
                       </button>
+
+                      {/* 2. Direct Gmail Web Link */}
                       <a
-                        href={`mailto:${item.student_email}?subject=Re: SmartSympo Feedback [${item.id}]&body=Hi ${encodeURIComponent(item.student_name || 'Student')},%0D%0A%0D%0AThank you for submitting feedback regarding "${encodeURIComponent(item.title || item.category)}".%0D%0A%0D%0A`}
-                        className="px-3.5 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0"
-                        title="Draft email reply to student"
+                        href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(item.student_email)}&su=${encodeURIComponent(`Re: SmartSympo Feedback [${item.id}] - "${item.title || item.category || 'General'}"`)}&body=${encodeURIComponent(`Hi ${item.student_name || 'Student'},\n\nThank you for reaching out regarding "${item.title || item.category}".\n\n${draft ? `${draft}\n\n` : ''}Best regards,\nSmartSympo Administration`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={async () => {
+                          const newStatus = draft ? 'resolved' : (item.status === 'new' ? 'reviewed' : item.status);
+                          await updateAppFeedbackStatus(item.id, newStatus, draft);
+                          setSavedNoteSuccessId(item.id);
+                          setTimeout(() => setSavedNoteSuccessId(null), 2500);
+                        }}
+                        className="px-3.5 py-2 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 active:scale-95"
+                        title="Directly connect with Gmail to compose and send email"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Reply in Gmail</span>
+                        <ExternalLink className="w-3 h-3 text-white/80" />
+                      </a>
+
+                      {/* 3. Instant Background Send */}
+                      <button
+                        onClick={async () => {
+                          const replyText = draft.trim() || 'Your feedback has been reviewed and addressed by the symposium administration team.';
+                          await replyToAppFeedback({
+                            feedbackId: item.id,
+                            replyMessage: replyText,
+                            status: 'resolved',
+                            adminNotes: draft.trim(),
+                          });
+                          setSavedNoteSuccessId(item.id);
+                          setTimeout(() => setSavedNoteSuccessId(null), 3000);
+                        }}
+                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 active:scale-95"
+                        title="Send email reply directly to student mailbox"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>Send Email</span>
+                      </button>
+
+                      {/* 4. Options Modal */}
+                      <button
+                        onClick={() => handleOpenReplyModal(item)}
+                        className="px-2.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1 transition cursor-pointer shrink-0"
+                        title="Open reply modal with more options"
                       >
                         <Reply className="w-3.5 h-3.5 text-indigo-500" />
-                        <span>Reply Email</span>
-                      </a>
+                        <span>Options</span>
+                      </button>
                     </div>
                   </div>
                 );
@@ -3069,6 +3223,160 @@ export default function AdminAnalytics() {
                   type="button"
                   onClick={() => setShowAddCoordinatorModal(false)}
                   className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Official Reply Email Modal */}
+      {replyModalFeedback && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-xl rounded-3xl border border-slate-200 dark:border-slate-800 p-6 sm:p-7 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative text-slate-900 dark:text-white animate-slideUp text-left">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Reply className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                    Send Official Email Reply
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Dispatches an official resolution email directly to the student's mailbox
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setReplyModalFeedback(null)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-sm cursor-pointer p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Student Identification & Original Feedback Summary */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 space-y-2 text-xs">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {replyModalFeedback.student_name}
+                  </span>
+                  <span className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-bold px-2 py-0.5 rounded-lg bg-indigo-500/10">
+                    {replyModalFeedback.roll_no || 'STU-2026'}
+                  </span>
+                </div>
+                <span className="font-mono text-slate-500 dark:text-slate-400 text-[11px] flex items-center gap-1">
+                  <Mail className="w-3 h-3 text-indigo-500" />
+                  {replyModalFeedback.student_email}
+                </span>
+              </div>
+
+              <div className="text-slate-600 dark:text-slate-300 text-xs italic bg-white dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 line-clamp-3">
+                "{replyModalFeedback.message}"
+              </div>
+            </div>
+
+            {/* Error or Success notification banner */}
+            {replySuccessMessage && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/40 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="font-semibold">{replySuccessMessage}</span>
+              </div>
+            )}
+            {replyErrorMessage && (
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-500/40 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span className="font-semibold">{replyErrorMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSendFeedbackReply} className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5 flex items-center justify-between">
+                  <span>Update Feedback Ticket Status:</span>
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReplyStatus('resolved')}
+                    className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      replyStatus === 'resolved'
+                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Mark as Resolved</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setReplyStatus('reviewed')}
+                    className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                      replyStatus === 'reviewed'
+                        ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Mark as Reviewed</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1.5 flex items-center justify-between">
+                  <span>Admin Official Reply Message:</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Sent via SMTP email</span>
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  placeholder="e.g. Hi Parthiban, thank you for alerting us! Our technical team has inspected the scanner in Hall 2 and recalibrated the QR reader..."
+                  value={replyDraft}
+                  onChange={(e) => setReplyDraft(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-3.5 py-2.5 focus:outline-none focus:border-indigo-600 transition-all font-medium leading-relaxed"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={handleOpenGmailFromModal}
+                  className="flex-1 py-2.5 px-4 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 transition cursor-pointer active:scale-98"
+                  title="Directly connect with Gmail Web Compose to send email"
+                >
+                  <Mail className="w-4 h-4" />
+                  <span>Connect & Send via Gmail</span>
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSendingReply || !replyDraft.trim()}
+                  className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                  title="Dispatch through automated SMTP background server"
+                >
+                  {isSendingReply ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Dispatching...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Send via SMTP</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setReplyModalFeedback(null)}
+                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer"
                 >
                   Cancel
                 </button>

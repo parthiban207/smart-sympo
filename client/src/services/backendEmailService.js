@@ -6,18 +6,21 @@ const getCandidateUrls = () => {
   const isLocal = isBrowser && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
   const candidates = [];
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
-    candidates.push(envUrl.trim().replace(/\/+$/, ''));
-  }
 
   if (isLocal) {
-    // In local development, check port 5000 first, then relative (proxied by Vite)
+    // Relative route points directly to current Vite dev server middleware
+    candidates.push('');
+    if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+      candidates.push(envUrl.trim().replace(/\/+$/, ''));
+    }
     candidates.push('http://localhost:5000');
     candidates.push('http://127.0.0.1:5000');
-    candidates.push('');
   } else {
     // In production / Vercel deployment, relative route points directly to serverless /api/*
     candidates.push('');
+    if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+      candidates.push(envUrl.trim().replace(/\/+$/, ''));
+    }
   }
 
   return [...new Set(candidates)];
@@ -163,3 +166,40 @@ export async function sendAppFeedbackToAdminApi(feedbackData) {
 
   return await fetchWithFallback('/api/send-admin-feedback', feedbackData);
 }
+
+/**
+ * Dispatch admin response email to student regarding their feedback
+ */
+export async function sendFeedbackReplyApi({
+  student_email,
+  student_name,
+  feedback_id,
+  original_title,
+  category,
+  original_message,
+  reply_message,
+  admin_name,
+  status = 'resolved',
+}) {
+  if (!student_email) {
+    return { success: false, error: 'Student email is required.' };
+  }
+  if (!reply_message || !reply_message.trim()) {
+    return { success: false, error: 'Reply message cannot be empty.' };
+  }
+
+  const payload = {
+    student_email: student_email.trim(),
+    student_name: student_name || 'Student',
+    feedback_id: feedback_id || '',
+    original_title: original_title || '',
+    category: category || 'general',
+    original_message: original_message || '',
+    reply_message: reply_message.trim(),
+    admin_name: admin_name || 'SmartSympo Administration',
+    status: status || 'resolved',
+  };
+
+  return await fetchWithFallback('/api/send-feedback-reply', payload);
+}
+

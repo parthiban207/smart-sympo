@@ -10,10 +10,13 @@ CREATE TABLE IF NOT EXISTS public.app_feedback (
     department TEXT,
     category TEXT DEFAULT 'general',
     rating INTEGER DEFAULT 5,
+    title TEXT,
     message TEXT NOT NULL,
+    priority TEXT DEFAULT 'normal',
     status TEXT DEFAULT 'new',
     admin_notes TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE public.app_feedback ENABLE ROW LEVEL SECURITY;

@@ -3,7 +3,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, isMockMode, isValidUUID, isClockSkewOrJwtError } from '../supabaseClient';
 import { sendRegistrationEmail, sendWelcomeEmail } from '../services/emailService';
-import { sendLoginAlertApi, sendEventConfirmationApi, sendWelcomeEmailApi, sendAppFeedbackToAdminApi } from '../services/backendEmailService';
+import {
+  sendLoginAlertApi,
+  sendEventConfirmationApi,
+  sendWelcomeEmailApi,
+  sendAppFeedbackToAdminApi,
+  sendFeedbackReplyApi,
+} from '../services/backendEmailService';
 
 const AppContext = createContext();
 
@@ -1348,20 +1354,6 @@ export const AppProvider = ({ children }) => {
       ? `${new Date(targetEvent.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
       : 'Scheduled Time Slot';
 
-    // Dispatch Nodemailer Backend Email Service event confirmation (asynchronous, non-blocking)
-    sendEventConfirmationApi({
-      email: currentUser.email || newReg.student_email,
-      name: currentUser.full_name || currentUser.name || newReg.student_name,
-      eventName: targetEvent.title,
-      category: targetEvent.category || 'General Session',
-      venue: targetEvent.hall_number || targetEvent.venue || 'Main Auditorium',
-      timeSlot,
-      eventDate,
-      passToken,
-      roll_no: currentUser.roll_no || currentUser.college_id || '',
-      collegeName: currentUser.college_name || currentUser.college || '',
-    }).catch((err) => console.warn('[Event Confirmation Email Error]:', err));
-
     // Append confirmation to In-App Notification Center
     addNotification({
       title: `🎉 Registration Confirmed: ${targetEvent.title}`,
@@ -2513,31 +2505,85 @@ export const AppProvider = ({ children }) => {
     return DEFAULT_SEED_APP_FEEDBACKS;
   });
 
-  // Sync with Supabase on mount
-  useEffect(() => {
-    if (!isMockMode) {
-      supabase
+  // Fetch app feedbacks from Supabase
+  const fetchAppFeedbacks = useCallback(async () => {
+    if (isMockMode) return;
+    try {
+      const { data, error } = await supabase
         .from('app_feedback')
         .select('*')
-        .order('created_at', { ascending: false })
-        .then(({ data, error }) => {
-          if (!error && Array.isArray(data) && data.length > 0) {
-            setAppFeedbacks((prev) => {
-              const map = new Map();
-              data.forEach((item) => map.set(item.id, item));
-              (prev || []).forEach((item) => {
-                if (!map.has(item.id)) map.set(item.id, item);
-              });
-              const merged = Array.from(map.values());
-              try {
-                localStorage.setItem('smart_sympo_app_feedbacks', JSON.stringify(merged));
-              } catch {}
-              return merged;
-            });
-          }
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        setAppFeedbacks((prev) => {
+          const map = new Map();
+          data.forEach((item) => map.set(item.id, item));
+          (prev || []).forEach((item) => {
+            if (!map.has(item.id)) map.set(item.id, item);
+          });
+          const merged = Array.from(map.values());
+          try {
+            localStorage.setItem('smart_sympo_app_feedbacks', JSON.stringify(merged));
+          } catch {}
+          return merged;
         });
+      } else if (error) {
+        console.warn('Error fetching app feedbacks from Supabase:', error);
+      }
+    } catch (err) {
+      console.warn('Network exception fetching app feedbacks:', err);
     }
   }, []);
+
+  // Sync with Supabase on mount and listen to realtime updates
+  useEffect(() => {
+    fetchAppFeedbacks();
+
+    if (!isMockMode) {
+      const channel = supabase
+        .channel('public:app_feedback_realtime')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'app_feedback' },
+          (payload) => {
+            if (payload.eventType === 'INSERT') {
+              setAppFeedbacks((prev) => {
+                const exists = (prev || []).some((item) => item.id === payload.new.id);
+                if (exists) return prev;
+                const updated = [payload.new, ...(prev || [])];
+                try {
+                  localStorage.setItem('smart_sympo_app_feedbacks', JSON.stringify(updated));
+                } catch {}
+                return updated;
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              setAppFeedbacks((prev) => {
+                const updated = (prev || []).map((item) =>
+                  item.id === payload.new.id ? { ...item, ...payload.new } : item
+                );
+                try {
+                  localStorage.setItem('smart_sympo_app_feedbacks', JSON.stringify(updated));
+                } catch {}
+                return updated;
+              });
+            } else if (payload.eventType === 'DELETE') {
+              setAppFeedbacks((prev) => {
+                const updated = (prev || []).filter((item) => item.id !== payload.old?.id);
+                try {
+                  localStorage.setItem('smart_sympo_app_feedbacks', JSON.stringify(updated));
+                } catch {}
+                return updated;
+              });
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [fetchAppFeedbacks]);
 
   const submitAppFeedback = async (feedbackData) => {
     const feedbackId = feedbackData.id || `afb_${Date.now()}`;
@@ -2557,6 +2603,7 @@ export const AppProvider = ({ children }) => {
       priority: feedbackData.priority || 'normal',
       admin_notes: '',
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
     setAppFeedbacks((prev) => {
@@ -2580,7 +2627,12 @@ export const AppProvider = ({ children }) => {
     // Sync to Supabase app_feedback table
     if (!isMockMode) {
       try {
-        await supabase.from('app_feedback').insert(newFeedback);
+        const { error } = await supabase.from('app_feedback').upsert(newFeedback);
+        if (error) {
+          console.error('Supabase app_feedback upsert error:', error);
+        } else {
+          console.log('[Supabase] Feedback saved successfully:', newFeedback.id);
+        }
       } catch (err) {
         console.warn('Supabase app_feedback insert fallback:', err);
       }
@@ -2597,15 +2649,18 @@ export const AppProvider = ({ children }) => {
   };
 
   const updateAppFeedbackStatus = async (feedbackId, status, adminNotes = null) => {
+    let targetItem = null;
+
     setAppFeedbacks((prev) => {
       const updated = (prev || []).map((fb) => {
         if (fb.id === feedbackId) {
-          return {
+          targetItem = {
             ...fb,
             status,
             ...(adminNotes !== null ? { admin_notes: adminNotes } : {}),
             updated_at: new Date().toISOString(),
           };
+          return targetItem;
         }
         return fb;
       });
@@ -2619,13 +2674,63 @@ export const AppProvider = ({ children }) => {
 
     if (!isMockMode) {
       try {
-        const updatePayload = { status };
+        const updatePayload = {
+          status,
+          updated_at: new Date().toISOString(),
+        };
         if (adminNotes !== null) updatePayload.admin_notes = adminNotes;
-        await supabase.from('app_feedback').update(updatePayload).eq('id', feedbackId);
+
+        const { data, error } = await supabase
+          .from('app_feedback')
+          .update(updatePayload)
+          .eq('id', feedbackId)
+          .select();
+
+        if (error) {
+          console.error('Supabase update feedback status error:', error);
+        } else if (!data || data.length === 0) {
+          // If the record was only stored in localStorage or seeded, persist it via upsert
+          if (targetItem) {
+            await supabase.from('app_feedback').upsert(targetItem);
+          }
+        }
       } catch (err) {
         console.warn('Supabase update feedback status error:', err);
       }
     }
+    return { success: true };
+  };
+
+  const replyToAppFeedback = async ({
+    feedbackId,
+    replyMessage,
+    status = 'resolved',
+    adminNotes = null,
+  }) => {
+    const feedback = (appFeedbacks || []).find((f) => f.id === feedbackId);
+    if (!feedback) {
+      return { success: false, error: 'Feedback record not found.' };
+    }
+
+    const noteToSave = adminNotes || replyMessage;
+
+    // 1. Update status and note in Supabase & local state
+    await updateAppFeedbackStatus(feedbackId, status, noteToSave);
+
+    // 2. Dispatch email to student via backend Nodemailer
+    const emailResult = await sendFeedbackReplyApi({
+      student_email: feedback.student_email,
+      student_name: feedback.student_name,
+      feedback_id: feedback.id,
+      original_title: feedback.title,
+      category: feedback.category,
+      original_message: feedback.message,
+      reply_message: replyMessage,
+      admin_name: currentUser?.name || currentUser?.full_name || 'Symposium Administration',
+      status,
+    });
+
+    return { success: true, emailResult };
   };
 
   const deleteAppFeedback = async (feedbackId) => {
@@ -2698,8 +2803,10 @@ export const AppProvider = ({ children }) => {
         submitEventFeedback,
         getEventFeedback,
         appFeedbacks,
+        fetchAppFeedbacks,
         submitAppFeedback,
         updateAppFeedbackStatus,
+        replyToAppFeedback,
         deleteAppFeedback,
       }}
     >
