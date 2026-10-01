@@ -153,6 +153,10 @@ export default function Auth({ initialMode = 'login', targetRole = 'student', on
           } else {
             setErrorMsg(result.message || 'Signup failed. Please check your details.');
           }
+        } else if (result.requiresConfirmation) {
+          setMode('login');
+          setSuccessMsg(result.message || '🎉 Registration successful! A confirmation email has been sent to your address. Please verify your email before logging in.');
+          setErrorMsg('');
         } else {
           setSuccessMsg(`Account created successfully as ${assignedRole.toUpperCase()}! Redirecting...`);
           setTimeout(() => {

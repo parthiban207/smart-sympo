@@ -895,11 +895,15 @@ export const AppProvider = ({ children }) => {
       (role === 'student' ? 'Main University / College' : 'Symposium Administration');
     const finalPhone = phone?.trim() || '';
 
+    const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://smart-sympo.vercel.app';
+    const redirectUrl = `${appOrigin}/login`;
+
     try {
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password.trim(),
         options: {
+          emailRedirectTo: redirectUrl,
           data: {
             full_name: fullName.trim(),
             name: fullName.trim(),
@@ -994,20 +998,34 @@ export const AppProvider = ({ children }) => {
         first_login: false,
       };
 
-      // Explicitly insert into public.profiles table
-      const { error: profileError } = await supabase.from('profiles').upsert([profileData]);
-      if (profileError) {
+      // Insert/upsert into public.profiles table
+      try {
+        await supabase.from('profiles').upsert([profileData]);
+      } catch (profileError) {
         console.warn('Supabase profiles upsert warning:', profileError);
       }
 
-      const savedUser = syncUserStorage(profileData);
-      setIsAuthenticated(true);
-      setSession(data.session || null);
+      // Check if session was granted immediately or requires email confirmation
+      const hasActiveSession = Boolean(data.session);
 
-      // Async background Welcome Email trigger for new user
-      triggerWelcomeEmailIfNeeded(savedUser, true);
-
-      return { success: true, user: savedUser, profile: savedUser, role: savedUser.role };
+      if (hasActiveSession) {
+        const savedUser = syncUserStorage(profileData);
+        setIsAuthenticated(true);
+        setSession(data.session);
+        triggerWelcomeEmailIfNeeded(savedUser, true);
+        return { success: true, requiresConfirmation: false, user: savedUser, profile: savedUser, role: savedUser.role };
+      } else {
+        // Confirmation required by Supabase Auth
+        triggerWelcomeEmailIfNeeded(profileData, true);
+        return {
+          success: true,
+          requiresConfirmation: true,
+          message: `Registration successful! A verification link has been sent to ${cleanEmail}. Please check your inbox and verify your email before logging in.`,
+          user: profileData,
+          profile: profileData,
+          role: profileData.role,
+        };
+      }
     } catch (err) {
       console.error('Supabase Signup Exception:', err);
       return { success: false, message: err.message || 'An unexpected error occurred during signup.' };
@@ -1065,9 +1083,19 @@ export const AppProvider = ({ children }) => {
         setCurrentUser(null);
 
         const errMsg = authError?.message || authError?.error_description || '';
+        const lowerErr = errMsg.toLowerCase();
+
+        if (lowerErr.includes('email not confirmed')) {
+          return {
+            success: false,
+            notConfirmed: true,
+            message: 'Email not confirmed yet. Please check your inbox (and spam folder) for the verification link.',
+          };
+        }
+
         return {
           success: false,
-          message: errMsg.includes('Invalid login credentials') || errMsg.includes('invalid')
+          message: lowerErr.includes('invalid login credentials') || lowerErr.includes('invalid')
             ? 'Invalid email or password. Please check your credentials.'
             : (errMsg || 'Invalid email or password. Please check your credentials.'),
         };

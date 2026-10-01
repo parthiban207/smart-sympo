@@ -56,9 +56,16 @@ function AuthSyncListener() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         navigate('/reset-password', { replace: true });
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        const publicPaths = ['/login', '/login/student', '/login/staff', '/login/admin', '/admin/login', '/signup'];
+        const currentPath = window.location.pathname;
+        if (publicPaths.includes(currentPath)) {
+          const userRole = (session.user.user_metadata?.role || 'student').toLowerCase();
+          navigate(getRoleDestination(userRole), { replace: true });
+        }
       } else if (event === 'SIGNED_OUT') {
         const publicPaths = ['/login', '/login/student', '/login/staff', '/login/admin', '/admin/login', '/signup', '/reset-password'];
         const currentPath = window.location.pathname;
