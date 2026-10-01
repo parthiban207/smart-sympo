@@ -1,6 +1,13 @@
 // agent-notes: { ctx: "Vercel Serverless Function for Event Registration Confirmations", deps: ["nodemailer", "./_mailer.js"], state: "active", last: "antigravity@2026-10-01" }
 
-import { createTransporter, getSmtpCredentials, setCorsHeaders } from './_mailer.js';
+import {
+  createTransporter,
+  getSmtpCredentials,
+  setCorsHeaders,
+  isValidEmail,
+  maskEmail,
+  logSafeEmailEvent,
+} from './_mailer.js';
 
 export default async function handler(req, res) {
   setCorsHeaders(res);
@@ -13,17 +20,29 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
 
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  const { email, name, eventName, category, venue, timeSlot, eventDate, passToken, roll_no, collegeName } = body;
+
+  const recipientEmail = (email || '').trim().toLowerCase();
+
+  if (!recipientEmail || !isValidEmail(recipientEmail)) {
+    logSafeEmailEvent({
+      action: 'EVENT_CONFIRMATION_DISPATCH',
+      recipient: recipientEmail,
+      success: false,
+      error: 'Invalid or missing recipient email address',
+    });
+    return res.status(400).json({
+      success: false,
+      error: 'Valid recipient email address is required (e.g. user@domain.com).',
+      recipientProvided: Boolean(recipientEmail),
+    });
+  }
+
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    const { email, name, eventName, category, venue, timeSlot, eventDate, passToken, roll_no, collegeName } = body;
-
-    if (!email) {
-      return res.status(400).json({ success: false, error: 'Recipient email address is required.' });
-    }
-
     const { gmailUser } = getSmtpCredentials();
     const senderEmail = gmailUser || 'smartsympo@gmail.com';
-    const studentName = name || (email.includes('@') ? email.split('@')[0] : 'Student Delegate');
+    const studentName = name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Student Delegate');
     const title = eventName || 'Symposium Event';
     const eventCategory = category || 'Technical';
     const eventVenue = venue || 'Main Auditorium';
@@ -61,17 +80,38 @@ export default async function handler(req, res) {
     const transporter = createTransporter();
     const info = await transporter.sendMail({
       from: `"SmartSympo 2026" <${senderEmail}>`,
-      to: email,
+      to: recipientEmail,
       replyTo: senderEmail,
       subject,
       text: `Registration Confirmed for ${title}!\nVenue: ${eventVenue}\nTime Slot: ${eventSlot}\nDate: ${dateStr}\nPass Token: ${qrToken}`,
       html,
     });
 
-    console.log(`[Vercel Serverless] Event confirmation sent to ${email} (MessageID: ${info.messageId})`);
-    return res.status(200).json({ success: true, dispatched: true, messageId: info.messageId, to: email });
+    logSafeEmailEvent({
+      action: 'EVENT_CONFIRMATION_DISPATCH',
+      recipient: recipientEmail,
+      success: true,
+      messageId: info.messageId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      dispatched: true,
+      messageId: info.messageId,
+      recipient: maskEmail(recipientEmail),
+    });
   } catch (err) {
-    console.error('[Vercel Serverless Event Email Error]:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    logSafeEmailEvent({
+      action: 'EVENT_CONFIRMATION_DISPATCH',
+      recipient: recipientEmail,
+      success: false,
+      error: err.message,
+    });
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to dispatch event confirmation email',
+      recipient: maskEmail(recipientEmail),
+    });
   }
 }
+

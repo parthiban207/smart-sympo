@@ -1,6 +1,13 @@
 // agent-notes: { ctx: "Vercel Serverless Function for Welcome & First Login emails to Students, Coordinators, and Admins", deps: ["nodemailer", "./_mailer.js"], state: "active", last: "antigravity@2026-10-01" }
 
-import { createTransporter, getSmtpCredentials, setCorsHeaders } from './_mailer.js';
+import {
+  createTransporter,
+  getSmtpCredentials,
+  setCorsHeaders,
+  isValidEmail,
+  maskEmail,
+  logSafeEmailEvent,
+} from './_mailer.js';
 
 export default async function handler(req, res) {
   setCorsHeaders(res);
@@ -13,14 +20,26 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
 
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  const { email, name, role, roll_no, collegeName, department, loginUrl } = body;
+
+  const recipientEmail = (email || '').trim().toLowerCase();
+
+  if (!recipientEmail || !isValidEmail(recipientEmail)) {
+    logSafeEmailEvent({
+      action: 'WELCOME_EMAIL_DISPATCH',
+      recipient: recipientEmail,
+      success: false,
+      error: 'Invalid or missing recipient email address',
+    });
+    return res.status(400).json({
+      success: false,
+      error: 'Valid recipient email address is required (e.g. user@domain.com).',
+      recipientProvided: Boolean(recipientEmail),
+    });
+  }
+
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    const { email, name, role, roll_no, collegeName, department, loginUrl } = body;
-
-    if (!email) {
-      return res.status(400).json({ success: false, error: 'Recipient email address is required.' });
-    }
-
     const { gmailUser } = getSmtpCredentials();
     const senderEmail = gmailUser || 'smartsympo@gmail.com';
     const normRole = (role || 'student').toLowerCase();
@@ -38,7 +57,7 @@ export default async function handler(req, res) {
     let targetUrl = loginUrl || 'https://smart-sympo.vercel.app/login/student';
     let btnText = '🚀 Log In to Student Portal';
     let btnGradient = 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)';
-    let userName = name || (email.includes('@') ? email.split('@')[0] : 'Student Delegate');
+    let userName = name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Student Delegate');
     let introDesc = 'Welcome to SmartSympo! Your student registration is complete. You can now explore technical tracks, claim your digital TOTP QR pass, and track live attendance.';
     let highlights = `
       <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;">⚡ <strong>1-Click Registration:</strong> Smart clash detection prevents schedule conflicts.</div>
@@ -58,7 +77,7 @@ export default async function handler(req, res) {
       targetUrl = loginUrl || 'https://smart-sympo.vercel.app/login/admin';
       btnText = '🚀 Open Admin Console';
       btnGradient = 'linear-gradient(135deg, #e11d48 0%, #f43f5e 100%)';
-      userName = name || (email.includes('@') ? email.split('@')[0] : 'Administrator');
+      userName = name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Administrator');
       introDesc = 'Welcome to SmartSympo! Your Administrator account has been activated with full governance privileges. You can manage coordinators, approve event tracks, and oversee global attendance.';
       highlights = `
         <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;">🏛️ <strong>Master Governance:</strong> Manage event tracks, schedules, and venue allocations.</div>
@@ -77,7 +96,7 @@ export default async function handler(req, res) {
       targetUrl = loginUrl || 'https://smart-sympo.vercel.app/login/staff';
       btnText = '🚀 Open Coordinator Portal';
       btnGradient = 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)';
-      userName = name || (email.includes('@') ? email.split('@')[0] : 'Event Coordinator');
+      userName = name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Event Coordinator');
       introDesc = 'Welcome to SmartSympo! Your Coordinator account is ready. You have authorized access to manage venue schedules, broadcast live delay alerts, and scan student TOTP QR passes.';
       highlights = `
         <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;">📡 <strong>Track Management:</strong> Adjust stages, schedule timings, and delay broadcasts.</div>
@@ -102,7 +121,7 @@ export default async function handler(req, res) {
             <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 18px; margin: 20px 0;">
               <div style="font-size: 12px; font-weight: bold; color: #818cf8; text-transform: uppercase; margin-bottom: 10px;">📋 Profile Details</div>
               <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>Name:</strong> ${userName}</div>
-              <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>Email:</strong> ${email}</div>
+              <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>Email:</strong> ${recipientEmail}</div>
               <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>Role:</strong> ${roleName}</div>
               <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>${idLabel}</strong> <span style="font-family: monospace; color: #a5b4fc;">${idVal}</span></div>
               <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>College / Campus:</strong> ${userCollege}</div>
@@ -125,17 +144,38 @@ export default async function handler(req, res) {
     const transporter = createTransporter();
     const info = await transporter.sendMail({
       from: `"SmartSympo 2026" <${senderEmail}>`,
-      to: email,
+      to: recipientEmail,
       replyTo: senderEmail,
       subject,
-      text: `Welcome ${userName}! Your SmartSympo ${roleName} account has been activated.\nEmail: ${email}\nID: ${idVal}\nLogin URL: ${targetUrl}`,
+      text: `Welcome ${userName}! Your SmartSympo ${roleName} account has been activated.\nEmail: ${recipientEmail}\nID: ${idVal}\nLogin URL: ${targetUrl}`,
       html,
     });
 
-    console.log(`[Vercel Serverless] Welcome email sent to ${email} (MessageID: ${info.messageId})`);
-    return res.status(200).json({ success: true, dispatched: true, messageId: info.messageId, to: email });
+    logSafeEmailEvent({
+      action: 'WELCOME_EMAIL_DISPATCH',
+      recipient: recipientEmail,
+      success: true,
+      messageId: info.messageId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      dispatched: true,
+      messageId: info.messageId,
+      recipient: maskEmail(recipientEmail),
+    });
   } catch (err) {
-    console.error('[Vercel Serverless Welcome Email Error]:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    logSafeEmailEvent({
+      action: 'WELCOME_EMAIL_DISPATCH',
+      recipient: recipientEmail,
+      success: false,
+      error: err.message,
+    });
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to dispatch welcome email',
+      recipient: maskEmail(recipientEmail),
+    });
   }
 }
+

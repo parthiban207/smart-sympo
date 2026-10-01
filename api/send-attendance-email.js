@@ -1,6 +1,13 @@
 // agent-notes: { ctx: "Vercel Serverless Function for Attendance / QR Scan Confirmation emails", deps: ["nodemailer", "./_mailer.js"], state: "active", last: "antigravity@2026-10-01" }
 
-import { createTransporter, getSmtpCredentials, setCorsHeaders } from './_mailer.js';
+import {
+  createTransporter,
+  getSmtpCredentials,
+  setCorsHeaders,
+  isValidEmail,
+  maskEmail,
+  logSafeEmailEvent,
+} from './_mailer.js';
 
 export default async function handler(req, res) {
   setCorsHeaders(res);
@@ -13,30 +20,41 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
 
+  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+  const {
+    email,
+    name,
+    studentName,
+    eventName,
+    eventTitle,
+    category,
+    venue,
+    hallNumber,
+    checkInTime,
+    attendedAt,
+    roll_no,
+    rollNo,
+    collegeName,
+    department,
+  } = body;
+
+  const recipientEmail = (email || '').trim().toLowerCase();
+
+  if (!recipientEmail || !isValidEmail(recipientEmail)) {
+    logSafeEmailEvent({
+      action: 'ATTENDANCE_CONFIRMATION_DISPATCH',
+      recipient: recipientEmail,
+      success: false,
+      error: 'Invalid or missing recipient email address',
+    });
+    return res.status(400).json({
+      success: false,
+      error: 'Valid recipient email address is required (e.g. user@domain.com).',
+      recipientProvided: Boolean(recipientEmail),
+    });
+  }
+
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-    const {
-      email,
-      name,
-      studentName,
-      eventName,
-      eventTitle,
-      category,
-      venue,
-      hallNumber,
-      checkInTime,
-      attendedAt,
-      roll_no,
-      rollNo,
-      collegeName,
-      department,
-    } = body;
-
-    const recipientEmail = (email || '').trim();
-    if (!recipientEmail) {
-      return res.status(400).json({ success: false, error: 'Recipient email address is required.' });
-    }
-
     const { gmailUser } = getSmtpCredentials();
     const senderEmail = gmailUser || 'smartsympo@gmail.com';
     const sName = studentName || name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Student Delegate');
@@ -91,10 +109,31 @@ export default async function handler(req, res) {
       html,
     });
 
-    console.log(`[Vercel Serverless] Attendance email sent to ${recipientEmail} (MessageID: ${info.messageId})`);
-    return res.status(200).json({ success: true, dispatched: true, messageId: info.messageId, to: recipientEmail });
+    logSafeEmailEvent({
+      action: 'ATTENDANCE_CONFIRMATION_DISPATCH',
+      recipient: recipientEmail,
+      success: true,
+      messageId: info.messageId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      dispatched: true,
+      messageId: info.messageId,
+      recipient: maskEmail(recipientEmail),
+    });
   } catch (err) {
-    console.error('[Vercel Serverless Attendance Email Error]:', err);
-    return res.status(500).json({ success: false, error: err.message });
+    logSafeEmailEvent({
+      action: 'ATTENDANCE_CONFIRMATION_DISPATCH',
+      recipient: recipientEmail,
+      success: false,
+      error: err.message,
+    });
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to dispatch attendance confirmation email',
+      recipient: maskEmail(recipientEmail),
+    });
   }
 }
+

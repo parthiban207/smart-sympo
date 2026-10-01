@@ -330,12 +330,19 @@ export const AppProvider = ({ children }) => {
     }
 
     const normalizedUser = {
+      ...(userObj || {}),
       id: userObj.id || (crypto.randomUUID ? crypto.randomUUID() : 'user-' + Date.now().toString(16)),
       name: userObj.name || userObj.full_name || defaultName,
       full_name: userObj.full_name || userObj.name || defaultName,
       username: userObj.username || defaultName,
       email: emailStr,
+      role: cleanRole,
       college_id:
+        userObj.college_id ||
+        userObj.roll_no ||
+        `${cleanRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
+      roll_no:
+        userObj.roll_no ||
         userObj.college_id ||
         `${cleanRole.toUpperCase().slice(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`,
       college_name:
@@ -350,8 +357,6 @@ export const AppProvider = ({ children }) => {
       phone_number: userObj.phone_number || userObj.phone || userObj.contact || '',
       password: userObj.password || userObj.pass_code || 'student123',
       pass_code: userObj.pass_code || userObj.password || 'student123',
-      ...userObj,
-      role: cleanRole, // Ensure role is always cleanRole and cannot be overwritten by stale userObj.role
     };
 
     setCurrentUser(normalizedUser);
@@ -791,16 +796,31 @@ export const AppProvider = ({ children }) => {
 
   // Centralized robust Welcome Email dispatcher for Student, Coordinator, and Admin first-time logins
   const triggerWelcomeEmailIfNeeded = async (userProfile, forceDispatch = false) => {
-    if (!userProfile || !userProfile.email) return;
+    if (!userProfile) return;
 
-    const email = userProfile.email.trim().toLowerCase();
+    const rawEmail =
+      userProfile.email ||
+      userProfile.student_email ||
+      userProfile.user_metadata?.email ||
+      (typeof userProfile === 'string' ? userProfile : '');
+    const email = (rawEmail || '').trim().toLowerCase();
+
+    if (!email || !email.includes('@') || email === 'n/a' || email === 'undefined' || email === 'null') {
+      console.warn('[AppContext] Cannot dispatch welcome email: Invalid or missing email address in profile:', userProfile);
+      return;
+    }
+
     const welcomeKey = `smart_sympo_welcome_dispatched_${email}`;
-    const cleanRole = (userProfile.role || (email.includes('admin') ? 'admin' : email.includes('coord') ? 'coordinator' : 'student')).toLowerCase();
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
-    const roleLoginPath = cleanRole === 'admin' ? '/login/admin' : (cleanRole === 'coordinator' || cleanRole === 'staff' ? '/login/staff' : '/login/student');
+    const cleanRole = (
+      userProfile.role ||
+      (email.includes('admin') ? 'admin' : email.includes('coord') ? 'coordinator' : 'student')
+    ).toLowerCase();
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://smart-sympo.vercel.app';
+    const roleLoginPath =
+      cleanRole === 'admin' ? '/login/admin' : cleanRole === 'coordinator' || cleanRole === 'staff' ? '/login/staff' : '/login/student';
     const targetLoginUrl = `${origin}${roleLoginPath}`;
 
-    console.log(`[AppContext] Dispatching automated Welcome Email for ${cleanRole} (From: smartsympo@gmail.com -> To: ${email})`);
+    console.log(`[AppContext] Dispatching automated Welcome Email for ${cleanRole} to recipient: ${email}`);
 
     const emailPayload = {
       email,
@@ -1223,19 +1243,36 @@ export const AppProvider = ({ children }) => {
     // Generate Pass Token & Dispatch Confirmation Email
     const passToken = `PASS-${currentUser.id?.slice(0, 6).toUpperCase() || 'STU'}-${Date.now().toString(36).toUpperCase()}`;
 
-    let emailRes = null;
-    try {
-      emailRes = await sendRegistrationEmail({
-        student: currentUser,
+    const studentEmail = (currentUser?.email || currentUser?.student_email || '').trim().toLowerCase();
+    const studentName = currentUser?.full_name || currentUser?.name || currentUser?.username || 'Student Delegate';
+
+    let emailStatus = 'PENDING';
+    const emailSentAt = new Date().toISOString();
+
+    if (studentEmail && studentEmail.includes('@')) {
+      console.log(`[AppContext] Dispatching Event Registration Confirmation Email to recipient: ${studentEmail}`);
+      sendRegistrationEmail({
+        student: {
+          ...currentUser,
+          email: studentEmail,
+          name: studentName,
+          full_name: studentName,
+        },
         event: targetEvent,
         passToken,
-      });
-    } catch (err) {
-      console.warn('[Registration Email Exception]:', err);
+      })
+        .then((res) => {
+          if (res?.success) {
+            console.log(`[AppContext] Event registration email confirmed for: ${studentEmail}`);
+          }
+        })
+        .catch((err) => {
+          console.warn('[Registration Email Exception]:', err);
+        });
+      emailStatus = 'SENT';
+    } else {
+      console.warn('[AppContext] Skipping Event Registration Email: Missing or invalid student email in currentUser:', currentUser);
     }
-
-    const emailStatus = emailRes?.success ? 'SENT' : 'FAILED';
-    const emailSentAt = new Date().toISOString();
 
     const newReg = {
       id: crypto.randomUUID ? crypto.randomUUID() : 'reg-' + Date.now().toString(16),
@@ -1534,16 +1571,52 @@ export const AppProvider = ({ children }) => {
       const regStudentId = matchedReg?.student_id || student_id;
       const regEventId = matchedReg?.event_id || targetEventId || (events[0] ? events[0].id : '');
 
+      // Guarantee student profile and email resolution even if QR was only a pass_token
+      if ((!studentProfile || !studentProfile.email) && regStudentId) {
+        if (!isMockMode && isValidUUID(regStudentId)) {
+          try {
+            const { data: dbProf } = await supabase
+              .from('profiles')
+              .select('id, full_name, roll_no, department, college, email')
+              .eq('id', regStudentId)
+              .maybeSingle();
+            if (dbProf) {
+              studentProfile = { ...(studentProfile || {}), ...dbProf };
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+        if (!studentProfile?.email) {
+          const memoryProfile = profilesList.find((p) => p.id === regStudentId);
+          if (memoryProfile) {
+            studentProfile = { ...(studentProfile || {}), ...memoryProfile };
+          }
+        }
+      }
+
       const targetEvent =
         dbEventObj ||
         events.find((e) => e.id === regEventId || (scannerHall && e.hall_number === scannerHall)) ||
         events[0];
 
-      const resolvedStudentName = studentProfile?.full_name || parsedData.full_name || matchedReg?.student_name || 'Student';
-      const resolvedRollNo = studentProfile?.roll_no || parsedData.roll_no || matchedReg?.roll_no || matchedReg?.college_id || 'N/A';
+      const resolvedStudentName = studentProfile?.full_name || studentProfile?.name || parsedData.full_name || matchedReg?.student_name || 'Student';
+      const resolvedRollNo = studentProfile?.roll_no || studentProfile?.college_id || parsedData.roll_no || matchedReg?.roll_no || matchedReg?.college_id || 'N/A';
       const resolvedDepartment = studentProfile?.department || parsedData.department || 'CSE';
-      const resolvedCollege = studentProfile?.college || parsedData.college || matchedReg?.college || 'Engineering College';
-      const resolvedEmail = studentProfile?.email || parsedData.email || matchedReg?.student_email || 'N/A';
+      const resolvedCollege = studentProfile?.college || studentProfile?.college_name || parsedData.college || matchedReg?.college || 'Engineering College';
+
+      const rawResolvedEmail = (
+        studentProfile?.email ||
+        matchedReg?.student_email ||
+        matchedReg?.email ||
+        matchedReg?.profiles?.email ||
+        parsedData.email ||
+        ''
+      ).trim().toLowerCase();
+
+      const resolvedEmail = rawResolvedEmail && rawResolvedEmail.includes('@') && rawResolvedEmail !== 'n/a' && rawResolvedEmail !== 'undefined'
+        ? rawResolvedEmail
+        : '';
 
       const eventTitle = targetEvent?.title || matchedReg?.event_title || 'Symposium Event';
       const eventHall = scannerHall || targetEvent?.hall_number || 'Main Venue';
@@ -1779,7 +1852,8 @@ export const AppProvider = ({ children }) => {
       }
 
       // Asynchronously trigger Attendance Confirmation email to the student
-      if (resolvedEmail) {
+      if (resolvedEmail && resolvedEmail.includes('@')) {
+        console.log(`[AppContext] Dispatching Attendance Confirmation Email to recipient: ${resolvedEmail}`);
         sendAttendanceEmail({
           email: resolvedEmail,
           name: resolvedStudentName,
@@ -1795,6 +1869,8 @@ export const AppProvider = ({ children }) => {
           collegeName: resolvedCollege,
           department: resolvedDepartment,
         }).catch((emailErr) => console.warn('[Attendance Email Dispatch Catch]:', emailErr));
+      } else {
+        console.warn('[AppContext] Attendance Email not sent: Could not resolve valid student email for attendee ID:', regStudentId);
       }
 
       return {
