@@ -698,8 +698,87 @@ const handleEventConfirmationEmail = async (req, res) => {
   }
 };
 
+// Attendance / QR Scan Confirmation Email Handler
+const handleAttendanceConfirmationEmail = async (req, res) => {
+  try {
+    const {
+      email,
+      name,
+      studentName,
+      eventName,
+      eventTitle,
+      category,
+      venue,
+      hallNumber,
+      checkInTime,
+      attendedAt,
+      roll_no,
+      rollNo,
+      collegeName,
+      department,
+    } = req.body || {};
+
+    const recipientEmail = (email || '').trim();
+    if (!recipientEmail) {
+      return res.status(400).json({ success: false, error: 'Recipient email address is required.' });
+    }
+
+    const { gmailUser } = getSmtpCredentials();
+    const senderEmail = gmailUser || 'smartsympo@gmail.com';
+    const sName = studentName || name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Student Delegate');
+    const title = eventTitle || eventName || 'Symposium Session';
+    const eventCategory = category || 'Technical Session';
+    const hall = hallNumber || venue || 'Main Auditorium';
+    const timestamp = checkInTime || attendedAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const sRoll = roll_no || rollNo || 'STU-DELEGATE';
+    const sCollege = collegeName || 'Symposium Campus';
+    const sDept = department || 'Engineering';
+
+    const subject = `✅ SmartSympo Attendance Confirmation: ${title}`;
+    const textContent = `Attendance Verified for ${title}!\nVenue: ${hall}\nTime: ${timestamp}\nAttendee: ${sName} (${sRoll})\nInstitution: ${sCollege}`;
+    const htmlContent = `
+      <div style="font-family: sans-serif; background-color: #0f172a; padding: 30px; color: #f8fafc;">
+        <div style="max-width: 550px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155;">
+          <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 28px; text-align: center;">
+            <h2 style="margin: 0; color: #ffffff;">✓ Attendance Recorded!</h2>
+            <p style="margin: 6px 0 0 0; color: #d1fae5; font-size: 13px;">Gate Check-In Verified via Dynamic QR Pass</p>
+          </div>
+          <div style="padding: 24px;">
+            <p>Hi <strong>${sName}</strong>,</p>
+            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
+              Your attendance for <strong>${title}</strong> has been successfully recorded and verified at <strong>${hall}</strong>.
+            </p>
+            <div style="background-color: #0f172a; padding: 14px; border-radius: 10px; margin: 16px 0; font-size: 13px; color: #cbd5e1;">
+              <div>• <strong>Session:</strong> ${title} (${eventCategory})</div>
+              <div>• <strong>Venue / Hall:</strong> ${hall}</div>
+              <div>• <strong>Time:</strong> ${timestamp}</div>
+              <div>• <strong>Attendee:</strong> ${sName} (${sRoll})</div>
+              <div>• <strong>Institution:</strong> ${sCollege} (${sDept})</div>
+            </div>
+            <p style="font-size: 12px; color: #94a3b8; margin-top: 18px;">SmartSympo 2026 • ${senderEmail}</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const result = await dispatchEmail({
+      to: recipientEmail,
+      subject,
+      text: textContent,
+      html: htmlContent,
+    });
+
+    return res.status(200).json(result);
+  } catch (err) {
+    console.error('Error in /api/send-attendance-email:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to dispatch attendance confirmation email.' });
+  }
+};
+
 app.post('/api/send-event-confirmation', handleEventConfirmationEmail);
 app.post('/api/send-registration-email', handleEventConfirmationEmail);
+app.post('/api/send-attendance-email', handleAttendanceConfirmationEmail);
+app.post('/api/send-attendance-confirmation', handleAttendanceConfirmationEmail);
 
 // Backward-compatible Login Alert Endpoint
 app.post('/api/send-login-alert', async (req, res) => {

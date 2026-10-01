@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     const dateStr = eventDate || new Date().toLocaleDateString('en-US', { dateStyle: 'long' });
     const qrToken = passToken || `PASS-${Date.now().toString(36).toUpperCase()}`;
 
-    const subject = `🎟️ Registration Confirmed: ${title} - SmartSympo 2026`;
+    const subject = `🎟️ Event Registration Confirmation: ${title} - SmartSympo 2026`;
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a; padding: 40px 10px; color: #f8fafc;">
         <div style="max-width: 580px; margin: 0 auto; background-color: #1e293b; border-radius: 20px; overflow: hidden; border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">

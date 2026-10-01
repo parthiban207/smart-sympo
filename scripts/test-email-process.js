@@ -109,7 +109,7 @@ async function runTests() {
     console.log('   - Message ID:', info2.messageId);
 
     // 4. Test Event Registration Confirmation Email
-    console.log(`\n[4/4] Testing: Event Registration Confirmation Dispatch (From: ${senderUser} -> To: ${targetRecipient})...`);
+    console.log(`\n[4/5] Testing: Event Registration Confirmation Dispatch (From: ${senderUser} -> To: ${targetRecipient})...`);
     const eventSubject = '✅ Registration Confirmed: AI Hackathon 2026 - Smart-Sympo 2026';
     const eventHtml = `
       <div style="font-family: sans-serif; background-color: #0b0f19; padding: 30px; color: #f8fafc;">
@@ -145,8 +145,46 @@ async function runTests() {
     console.log(`✅ Event Registration Email Dispatched Successfully to ${targetRecipient}!`);
     console.log('   - Message ID:', info3.messageId);
 
+    // 5. Test QR Scan Attendance Confirmation Email
+    console.log(`\n[5/5] Testing: QR Scan Attendance Confirmation Dispatch (From: ${senderUser} -> To: ${targetRecipient})...`);
+    const attendanceSubject = '✅ Attendance Verified: Keynote Session - SmartSympo 2026';
+    const attendanceHtml = `
+      <div style="font-family: sans-serif; background-color: #0f172a; padding: 30px; color: #f8fafc;">
+        <div style="max-width: 550px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155;">
+          <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 28px; text-align: center;">
+            <h2 style="margin: 0; color: #ffffff;">✓ Attendance Recorded!</h2>
+            <p style="margin: 6px 0 0 0; color: #d1fae5; font-size: 13px;">Gate Check-In Verified via Dynamic QR Pass</p>
+          </div>
+          <div style="padding: 24px;">
+            <p>Hi <strong>Test Attendee</strong>,</p>
+            <p style="color: #cbd5e1; font-size: 14px; line-height: 1.6;">
+              Your attendance for <strong>Keynote Session</strong> has been recorded and verified at <strong>Main Auditorium Hall A</strong>.
+            </p>
+            <div style="background-color: #0f172a; padding: 14px; border-radius: 10px; margin: 16px 0; font-size: 13px; color: #cbd5e1;">
+              <div>• <strong>Session:</strong> Keynote Session</div>
+              <div>• <strong>Venue:</strong> Main Auditorium Hall A</div>
+              <div>• <strong>Verified At:</strong> ${new Date().toLocaleTimeString()}</div>
+              <div>• <strong>Attendee:</strong> Test Attendee (STU-TEST-2026)</div>
+            </div>
+            <p style="font-size: 12px; color: #94a3b8; margin-top: 18px;">SmartSympo 2026 • ${senderUser}</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const info4 = await transporter.sendMail({
+      from: `"SmartSympo 2026" <${senderUser}>`,
+      to: targetRecipient,
+      replyTo: senderUser,
+      subject: attendanceSubject,
+      text: `Attendance Verified for Keynote Session!`,
+      html: attendanceHtml,
+    });
+    console.log(`✅ Attendance Confirmation Email Dispatched Successfully to ${targetRecipient}!`);
+    console.log('   - Message ID:', info4.messageId);
+
     console.log('\n====================================================');
-    console.log('🎉 ALL EMAIL PROCESSES TESTED & VERIFIED 100% OPERATIONAL!');
+    console.log('🎉 ALL 3 FLOWS (WELCOME, REGISTRATION, ATTENDANCE) VERIFIED 100% OPERATIONAL!');
     console.log(`Sender: ${senderUser} | Recipient: ${targetRecipient}`);
     console.log('====================================================\n');
   } catch (err) {

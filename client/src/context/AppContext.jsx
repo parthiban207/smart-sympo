@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { supabase, isMockMode, isValidUUID, isClockSkewOrJwtError } from '../supabaseClient';
-import { sendRegistrationEmail, sendWelcomeEmail } from '../services/emailService';
+import { sendAttendanceEmail, sendRegistrationEmail, sendWelcomeEmail } from '../services/emailService';
 import {
   sendLoginAlertApi,
   sendEventConfirmationApi,
@@ -1811,6 +1811,25 @@ export const AppProvider = ({ children }) => {
             console.warn('[Supabase Registration Attendance Background Write Catch]:', dbErr);
           }
         })();
+      }
+
+      // Asynchronously trigger Attendance Confirmation email to the student
+      if (resolvedEmail) {
+        sendAttendanceEmail({
+          email: resolvedEmail,
+          name: resolvedStudentName,
+          studentName: resolvedStudentName,
+          eventName: eventTitle,
+          eventTitle: eventTitle,
+          category: eventCategory,
+          venue: eventHall,
+          hallNumber: eventHall,
+          checkInTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          attendedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          roll_no: resolvedRollNo,
+          collegeName: resolvedCollege,
+          department: resolvedDepartment,
+        }).catch((emailErr) => console.warn('[Attendance Email Dispatch Catch]:', emailErr));
       }
 
       return {

@@ -259,6 +259,85 @@ function emailApiPlugin() {
               }
             }
 
+            if (req.url === '/api/send-attendance-email' || req.url === '/api/send-attendance-confirmation') {
+              const {
+                email,
+                name,
+                studentName,
+                eventName,
+                eventTitle,
+                category,
+                venue,
+                hallNumber,
+                checkInTime,
+                attendedAt,
+                roll_no,
+                rollNo,
+                collegeName,
+                department,
+              } = body;
+
+              const recipientEmail = (email || '').trim();
+              if (!recipientEmail) {
+                res.statusCode = 400;
+                return res.end(JSON.stringify({ success: false, error: 'Recipient email required' }));
+              }
+
+              const sName = studentName || name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Student Delegate');
+              const title = eventTitle || eventName || 'Symposium Session';
+              const eventCategory = category || 'Technical Session';
+              const hall = hallNumber || venue || 'Main Auditorium';
+              const timestamp = checkInTime || attendedAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const sRoll = roll_no || rollNo || 'STU-DELEGATE';
+              const sCollege = collegeName || 'Symposium Campus';
+              const sDept = department || 'Engineering';
+
+              const subject = `✅ Attendance Verified: ${title} - SmartSympo 2026`;
+              const html = `
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a; padding: 40px 10px; color: #f8fafc;">
+                  <div style="max-width: 580px; margin: 0 auto; background-color: #1e293b; border-radius: 20px; overflow: hidden; border: 1px solid #334155;">
+                    <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 36px 32px; text-align: center;">
+                      <h1 style="margin: 0; color: #ffffff; font-size: 26px;">✓ Attendance Recorded!</h1>
+                      <p style="margin: 8px 0 0 0; color: #d1fae5; font-size: 14px;">Gate Check-In Verified via Dynamic QR Pass</p>
+                    </div>
+                    <div style="padding: 32px;">
+                      <p style="font-size: 16px; color: #f1f5f9;">Hi <strong>${sName}</strong>,</p>
+                      <p style="font-size: 15px; color: #cbd5e1; line-height: 1.6;">
+                        Your attendance for <strong>${title}</strong> has been recorded and verified at <strong>${hall}</strong>.
+                      </p>
+                      <div style="background-color: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 18px; margin: 20px 0;">
+                        <div style="font-size: 12px; font-weight: bold; color: #34d399; text-transform: uppercase; margin-bottom: 10px;">📋 Check-In Verification</div>
+                        <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>Session:</strong> ${title} (${eventCategory})</div>
+                        <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>Venue / Hall:</strong> ${hall}</div>
+                        <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>Verified At:</strong> ${timestamp}</div>
+                        <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>Attendee:</strong> ${sName} (${sRoll})</div>
+                        <div style="font-size: 13px; color: #cbd5e1;"><strong>Institution:</strong> ${sCollege} (${sDept})</div>
+                      </div>
+                      <p style="font-size: 13px; color: #94a3b8; margin: 0;">SmartSympo Organizing Team • ${senderUser}</p>
+                    </div>
+                  </div>
+                </div>
+              `;
+
+              try {
+                const info = await transporter.sendMail({
+                  from: `"SmartSympo 2026" <${senderUser}>`,
+                  to: recipientEmail,
+                  replyTo: senderUser,
+                  subject,
+                  text: `Attendance Verified for ${title}! Venue: ${hall}, Time: ${timestamp}, Attendee: ${sName} (${sRoll}).`,
+                  html,
+                });
+                res.setHeader('Content-Type', 'application/json');
+                return res.end(JSON.stringify({ success: true, dispatched: true, messageId: info.messageId, to: recipientEmail }));
+              } catch (err) {
+                console.error(`[Vite Email Gateway Error] Failed to send attendance confirmation:`, err.message);
+                res.statusCode = 500;
+                res.setHeader('Content-Type', 'application/json');
+                return res.end(JSON.stringify({ success: false, error: err.message }));
+              }
+            }
+
             if (req.url === '/api/send-login-alert') {
               const { email, name: _name, role: _role, ipAddress: _ipAddress } = body;
               if (!email) {

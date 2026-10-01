@@ -31,3 +31,14 @@ export const setCorsHeaders = (res) => {
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
   );
 };
+
+export const verifyTransporterConnection = async (transporter) => {
+  try {
+    await transporter.verify();
+    console.log('[Nodemailer SMTP] Gmail connection authenticated successfully.');
+    return true;
+  } catch (err) {
+    console.error('[Nodemailer SMTP Authentication Error]:', err.message);
+    return false;
+  }
+};

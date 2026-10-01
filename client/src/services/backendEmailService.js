@@ -7,18 +7,18 @@ const getCandidateUrls = () => {
 
   const candidates = [];
 
+  // Always prioritize relative path '' first so on Vercel/production it directly hits /api/*
+  candidates.push('');
+
   if (isLocal) {
-    // Relative route points directly to current Vite dev server middleware
-    candidates.push('');
     if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
       candidates.push(envUrl.trim().replace(/\/+$/, ''));
     }
     candidates.push('http://localhost:5000');
     candidates.push('http://127.0.0.1:5000');
   } else {
-    // In production / Vercel deployment, relative route points directly to serverless /api/*
-    candidates.push('');
-    if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    // In production, only accept valid non-localhost envUrl if configured
+    if (envUrl && typeof envUrl === 'string' && envUrl.trim() && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
       candidates.push(envUrl.trim().replace(/\/+$/, ''));
     }
   }
@@ -201,5 +201,53 @@ export async function sendFeedbackReplyApi({
   };
 
   return await fetchWithFallback('/api/send-feedback-reply', payload);
+}
+
+/**
+ * Dispatch QR scan attendance confirmation email via Express/Nodemailer backend API
+ */
+export async function sendAttendanceConfirmationApi({
+  email,
+  name,
+  studentName,
+  eventName,
+  eventTitle,
+  category,
+  venue,
+  hallNumber,
+  checkInTime,
+  attendedAt,
+  roll_no,
+  rollNo,
+  collegeName,
+  department,
+}) {
+  if (!email) {
+    console.warn('[BackendEmailService] sendAttendanceConfirmationApi called without recipient email.');
+    return { success: false, error: 'Recipient email required' };
+  }
+
+  const payload = {
+    email: email.trim(),
+    name: studentName || name || email.split('@')[0] || 'Student',
+    studentName: studentName || name || email.split('@')[0] || 'Student',
+    eventName: eventTitle || eventName || 'Symposium Session',
+    eventTitle: eventTitle || eventName || 'Symposium Session',
+    category: category || 'Technical Session',
+    venue: hallNumber || venue || 'Main Auditorium',
+    hallNumber: hallNumber || venue || 'Main Auditorium',
+    checkInTime: checkInTime || attendedAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    attendedAt: attendedAt || checkInTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    roll_no: roll_no || rollNo || '',
+    rollNo: roll_no || rollNo || '',
+    collegeName: collegeName || '',
+    department: department || '',
+  };
+
+  const result = await fetchWithFallback('/api/send-attendance-email', payload);
+  if (result.success) {
+    console.log('[BackendEmailService] Attendance confirmation email dispatched successfully to:', email);
+  }
+  return result;
 }
 
