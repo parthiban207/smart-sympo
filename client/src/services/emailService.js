@@ -69,11 +69,11 @@ export async function sendWelcomeEmail({ name, email, role, roll_no, collegeName
     }
   }
 
+  console.warn('[EmailService] All welcome email dispatch methods failed. No email was sent.');
   return {
-    success: true,
-    dispatched: true,
-    simulated: true,
-    message: `Welcome email dispatched to ${studentEmail}!`,
+    success: false,
+    dispatched: false,
+    error: 'All email dispatch methods failed (backend API unreachable, EmailJS not configured)',
   };
 }
 
@@ -160,11 +160,11 @@ export async function sendRegistrationEmail({ student, event, passToken }) {
     }
   }
 
+  console.warn('[EmailService] All event confirmation email dispatch methods failed. No email was sent.');
   return {
-    success: true,
-    dispatched: true,
-    simulated: true,
-    message: `Confirmation email with event pass token dispatched to ${studentEmail}!`,
+    success: false,
+    dispatched: false,
+    error: 'All email dispatch methods failed (backend API unreachable, EmailJS not configured)',
   };
 }
 
@@ -222,11 +222,11 @@ export async function sendAttendanceEmail({
     console.warn('[EmailService] Attendance email dispatch warning:', err);
   }
 
+  console.warn('[EmailService] All attendance email dispatch methods failed. No email was sent.');
   return {
-    success: true,
-    dispatched: true,
-    simulated: true,
-    message: `Attendance verification logged for ${recipientEmail}.`,
+    success: false,
+    dispatched: false,
+    error: 'All email dispatch methods failed (backend API unreachable)',
   };
 }
 

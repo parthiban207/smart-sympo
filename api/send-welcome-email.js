@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Vercel Serverless Function for Welcome & First Login emails to Students, Coordinators, and Admins", deps: ["nodemailer", "./_mailer.js"], state: "active", last: "antigravity@2026-10-01" }
+// agent-notes: { ctx: "Vercel Serverless Function for Welcome & First Login emails to Students, Coordinators, and Admins", deps: ["nodemailer", "./_mailer.js"], state: "active", last: "antigravity@2026-10-02" }
 
 import {
   createTransporter,
@@ -20,12 +20,18 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
 
+  // Step 1: Parse request body
   const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
   const { email, name, role, roll_no, collegeName, department, loginUrl } = body;
 
   const recipientEmail = (email || '').trim().toLowerCase();
+  const masked = maskEmail(recipientEmail);
 
+  console.log(`[WelcomeEmail] TRIGGER REACHED — recipient: ${masked}, role: ${role || 'student'}, hasName: ${Boolean(name)}`);
+
+  // Step 2: Validate recipient
   if (!recipientEmail || !isValidEmail(recipientEmail)) {
+    console.warn(`[WelcomeEmail] VALIDATION FAILED — recipient: ${masked}, recipientProvided: ${Boolean(recipientEmail)}`);
     logSafeEmailEvent({
       action: 'WELCOME_EMAIL_DISPATCH',
       recipient: recipientEmail,
@@ -40,11 +46,14 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Step 3: Get SMTP credentials
     const { gmailUser } = getSmtpCredentials();
     const senderEmail = gmailUser || 'smartsympo@gmail.com';
     const normRole = (role || 'student').toLowerCase();
     const userCollege = collegeName || 'Symposium Campus';
     const userDept = department || 'Computer Science & Engineering';
+
+    console.log(`[WelcomeEmail] SMTP CONFIG — sender: ${maskEmail(senderEmail)}, recipient: ${masked}, role: ${normRole}`);
 
     let subject = '🎉 Welcome to SmartSympo 2026 - Student Account Activated!';
     let badge = 'SmartSympo 2026';
@@ -54,7 +63,7 @@ export default async function handler(req, res) {
     let roleName = 'Student Delegate';
     let idLabel = 'Roll No / ID:';
     let idVal = roll_no || `STU-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-    let targetUrl = loginUrl || 'https://smart-sympo.vercel.app/login/student';
+    let targetUrl = loginUrl || 'https://smartsympo.vercel.app/login/student';
     let btnText = '🚀 Log In to Student Portal';
     let btnGradient = 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)';
     let userName = name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Student Delegate');
@@ -74,7 +83,7 @@ export default async function handler(req, res) {
       roleName = 'Administrator';
       idLabel = 'Admin ID:';
       idVal = roll_no || `ADM-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-      targetUrl = loginUrl || 'https://smart-sympo.vercel.app/login/admin';
+      targetUrl = loginUrl || 'https://smartsympo.vercel.app/login/admin';
       btnText = '🚀 Open Admin Console';
       btnGradient = 'linear-gradient(135deg, #e11d48 0%, #f43f5e 100%)';
       userName = name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Administrator');
@@ -93,7 +102,7 @@ export default async function handler(req, res) {
       roleName = 'Event Coordinator';
       idLabel = 'Staff ID:';
       idVal = roll_no || `FAC-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-      targetUrl = loginUrl || 'https://smart-sympo.vercel.app/login/staff';
+      targetUrl = loginUrl || 'https://smartsympo.vercel.app/login/staff';
       btnText = '🚀 Open Coordinator Portal';
       btnGradient = 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)';
       userName = name || (recipientEmail.includes('@') ? recipientEmail.split('@')[0] : 'Event Coordinator');
@@ -141,6 +150,8 @@ export default async function handler(req, res) {
       </div>
     `;
 
+    // Step 4: Send email via SMTP
+    console.log(`[WelcomeEmail] SMTP SENDING — from: ${maskEmail(senderEmail)}, to: ${masked}`);
     const transporter = createTransporter();
     const info = await transporter.sendMail({
       from: `"SmartSympo 2026" <${senderEmail}>`,
@@ -151,6 +162,8 @@ export default async function handler(req, res) {
       html,
     });
 
+    // Step 5: Success
+    console.log(`[WelcomeEmail] SMTP SUCCESS — to: ${masked}, messageId: ${info.messageId}, response: ${info.response}`);
     logSafeEmailEvent({
       action: 'WELCOME_EMAIL_DISPATCH',
       recipient: recipientEmail,
@@ -162,9 +175,11 @@ export default async function handler(req, res) {
       success: true,
       dispatched: true,
       messageId: info.messageId,
-      recipient: maskEmail(recipientEmail),
+      recipient: masked,
     });
   } catch (err) {
+    // Step 5: Failure
+    console.error(`[WelcomeEmail] SMTP FAILURE — to: ${masked}, error: ${err.message}, code: ${err.code || 'N/A'}`);
     logSafeEmailEvent({
       action: 'WELCOME_EMAIL_DISPATCH',
       recipient: recipientEmail,
@@ -174,8 +189,7 @@ export default async function handler(req, res) {
     return res.status(500).json({
       success: false,
       error: err.message || 'Failed to dispatch welcome email',
-      recipient: maskEmail(recipientEmail),
+      recipient: masked,
     });
   }
 }
-
