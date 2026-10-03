@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Collapsible Academic Symposium Sidebar with serif headers, role-based navigation, and dark parchment theme", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-09-24" }
+// agent-notes: { ctx: "Collapsible Academic Symposium Sidebar with serif headers, role-based navigation, and dark parchment theme", deps: ["src/context/AppContext.jsx", "src/components/UserSettingsModal.jsx", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-10-03" }
 
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -41,10 +41,10 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, mobileOpen, setMo
     },
     {
       label: 'Campus Navigation',
-      path: '/navigation',
+      path: '/campus-navigation',
       icon: Compass,
-      roles: ['student', 'coordinator', 'admin'],
-      badge: 'Live Map',
+      roles: ['admin'],
+      badge: 'Floor Maps',
     },
     {
       label: 'My Digital Pass',

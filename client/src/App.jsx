@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Main App container with PASSWORD_RECOVERY global listener, collapsible left sidebar shell, dark mode support, and protected routes", deps: ["src/components/Sidebar.jsx", "src/components/Navbar.jsx", "src/components/LiveAlertBanner.jsx", "src/components/Chatbot.jsx", "src/components/ProtectedRoute.tsx", "src/pages/CampusNavigationPage.jsx", "src/context/AppContext.jsx"], state: "active", last: "antigravity@2026-09-24" }
+// agent-notes: { ctx: "Main App container with PASSWORD_RECOVERY global listener, collapsible left sidebar shell, dark mode support, protected routes, and indoor floor QR navigation", deps: ["src/components/Sidebar.jsx", "src/components/Navbar.jsx", "src/components/LiveAlertBanner.jsx", "src/components/Chatbot.jsx", "src/components/ProtectedRoute.tsx", "src/components/AdminCampusNavigation.jsx", "src/pages/FloorNavigationPage.jsx", "src/context/AppContext.jsx"], state: "active", last: "antigravity@2026-10-03" }
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
@@ -13,7 +13,8 @@ import StudentDashboard from './pages/StudentDashboard';
 import CoordinatorConsole from './pages/CoordinatorConsole';
 import CoordinatorScanner from './pages/CoordinatorScanner';
 import AdminAnalytics from './pages/AdminAnalytics';
-import CampusNavigationPage from './pages/CampusNavigationPage';
+import AdminCampusNavigation from './components/AdminCampusNavigation';
+import FloorNavigationPage from './pages/FloorNavigationPage';
 import LoginPage from './pages/LoginPage';
 import StudentLoginPage from './pages/StudentLoginPage';
 import StaffLoginPage from './pages/StaffLoginPage';
@@ -60,8 +61,10 @@ function AuthSyncListener() {
       if (event === 'PASSWORD_RECOVERY') {
         navigate('/reset-password', { replace: true });
       } else if (event === 'SIGNED_IN' && session?.user) {
-        const publicPaths = ['/login', '/login/student', '/login/staff', '/login/admin', '/admin/login', '/signup'];
         const currentPath = window.location.pathname;
+        // Skip redirect for public navigation routes
+        if (currentPath.startsWith('/navigate/')) return;
+        const publicPaths = ['/login', '/login/student', '/login/staff', '/login/admin', '/admin/login', '/signup'];
         if (publicPaths.includes(currentPath)) {
           const userRole = (session.user.user_metadata?.role || 'student').toLowerCase();
           navigate(getRoleDestination(userRole), { replace: true });
@@ -105,7 +108,7 @@ function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const publicPaths = ['/login', '/login/student', '/login/staff', '/login/admin', '/admin/login', '/signup', '/reset-password'];
-  const isPublicPage = publicPaths.includes(location.pathname);
+  const isPublicPage = publicPaths.includes(location.pathname) || location.pathname.startsWith('/navigate/');
   const isLoggedIn = (isAuthenticated || Boolean(currentUser?.id)) && !isPublicPage;
 
   return (
@@ -147,13 +150,15 @@ function AppShell() {
               }
             />
             <Route
-              path="/navigation"
+              path="/campus-navigation"
               element={
-                <ProtectedRoute allowedRoles={['student', 'coordinator', 'admin']}>
-                  <CampusNavigationPage />
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminCampusNavigation />
                 </ProtectedRoute>
               }
             />
+            {/* Public floor navigation — QR code entry point (no auth required) */}
+            <Route path="/navigate/floor/:floorId" element={<FloorNavigationPage />} />
             <Route
               path="/coordinator"
               element={
