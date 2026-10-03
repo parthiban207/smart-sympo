@@ -15,6 +15,7 @@ import {
   ChevronRight,
   LogOut,
   Compass,
+  Layers,
 } from 'lucide-react';
 
 export default function Sidebar({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpen }) {

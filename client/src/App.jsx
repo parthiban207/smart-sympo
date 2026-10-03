@@ -27,6 +27,7 @@ function getRoleDestination(role) {
 }
 
 function RootRouteRedirect() {
+  const { isAuthenticated, currentUser } = useApp();
   const hash = typeof window !== 'undefined' ? window.location.hash || '' : '';
   const search = typeof window !== 'undefined' ? window.location.search || '' : '';
 
@@ -34,7 +35,6 @@ function RootRouteRedirect() {
     return <Navigate to={`/reset-password${hash}${search}`} replace />;
   }
 
-  const { isAuthenticated, currentUser } = useApp();
   const isLoggedIn = isAuthenticated || Boolean(currentUser?.id);
   if (!isLoggedIn) return <Navigate to="/login" replace />;
   return <Navigate to={getRoleDestination(currentUser?.role)} replace />;

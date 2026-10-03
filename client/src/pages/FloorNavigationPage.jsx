@@ -1,7 +1,7 @@
 // agent-notes: { ctx: "Student-facing indoor navigation page with built-in camera QR scanner, building/floor browser, wheelchair accessible routing, search, shortest path, and turn-by-turn directions", deps: ["src/services/indoorNavDataService.js", "src/services/indoorNavigationService.js", "src/components/FloorQRScannerModal.jsx", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-10-03" }
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   fetchFloorMapData, fetchBuildings, fetchFloors, fetchNodes, fetchEdges,
 } from '../services/indoorNavDataService';
@@ -11,9 +11,9 @@ import {
 import FloorQRScannerModal from '../components/FloorQRScannerModal';
 import {
   MapPin, Search, Navigation, ArrowLeft, Loader2, AlertCircle,
-  CheckCircle2, Building2, Layers, CornerDownRight, RotateCcw,
+  Building2, Layers, CornerDownRight, RotateCcw,
   Footprints, ChevronDown, ChevronUp, X, QrCode, Camera, Accessibility,
-  Sparkles, Compass, AlertTriangle, ArrowRight,
+  Compass, ArrowRight, ZoomIn, ZoomOut,
 } from 'lucide-react';
 
 const LOCATION_COLORS = {

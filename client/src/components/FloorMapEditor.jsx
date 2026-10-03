@@ -8,13 +8,12 @@ import {
 } from '../services/indoorNavDataService';
 import {
   euclideanDistance, validateFloorMap, findNearestWaypoint,
-  doRectanglesOverlap,
 } from '../services/indoorNavigationService';
 import {
   ArrowLeft, Save, Loader2, Plus, Trash2, MousePointer2, Square, Circle,
-  Link2, MapPin, Undo2, Redo2, ZoomIn, ZoomOut, Move, Navigation, AlertCircle,
-  CheckCircle2, Eye, Pencil, X, CornerDownRight, Copy, Grid, Image as ImageIcon,
-  Sparkles, Sliders, ChevronDown, ChevronUp, Layers, HelpCircle, AlertTriangle,
+  Link2, Undo2, Redo2, ZoomIn, ZoomOut, Move, Navigation, AlertCircle,
+  CheckCircle2, X, Copy, Grid, Image as ImageIcon,
+  Sparkles, Layers, AlertTriangle,
   DoorOpen, Footprints, ShieldCheck, FileCheck, ArrowUpRight,
 } from 'lucide-react';
 
