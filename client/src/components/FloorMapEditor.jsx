@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Ultra-responsive SVG floor map editor with pointer events, touch-action:none, drag-to-draw, move/resize handles, undo/redo, background tracing, templates, auto-connection, and validation", deps: ["src/services/indoorNavDataService.js", "src/services/indoorNavigationService.js", "lucide-react"], state: "active", last: "antigravity@2026-10-03" }
+// agent-notes: { ctx: "SVG floor map editor with visual connect workflow, safe connection suggestions, and topology validation", deps: ["src/services/indoorNavDataService.js", "src/services/indoorNavigationService.js", "lucide-react"], state: "active", last: "antigravity@2026-10-03" }
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
@@ -7,13 +7,13 @@ import {
   upsertFloor, duplicateFloor,
 } from '../services/indoorNavDataService';
 import {
-  euclideanDistance, validateFloorMap, findNearestWaypoint,
+  euclideanDistance, validateFloorMap, findNearestWaypoint, suggestSafeConnections,
 } from '../services/indoorNavigationService';
 import {
   ArrowLeft, Save, Loader2, Plus, Trash2, MousePointer2, Square, Circle,
   Link2, Undo2, Redo2, ZoomIn, ZoomOut, Move, Navigation, AlertCircle,
   CheckCircle2, X, Copy, Grid, Image as ImageIcon,
-  Sparkles, Layers, AlertTriangle,
+  Sparkles, Layers, AlertTriangle, Zap, Check,
   DoorOpen, Footprints, ShieldCheck, FileCheck, ArrowUpRight,
 } from 'lucide-react';
 
@@ -118,6 +118,8 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateName, setDuplicateName] = useState('');
   const [duplicateNumber, setDuplicateNumber] = useState(1);
+  const [connectModalData, setConnectModalData] = useState(null);
+  const [showFixModal, setShowFixModal] = useState(false);
 
   // ─── History Stack (Undo / Redo) ───
   const historyRef = useRef([]);
@@ -640,6 +642,18 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
     };
   };
 
+  // ─── Node Label Helper ───
+  const getNodeDisplayName = useCallback((node) => {
+    if (!node) return 'Unknown Node';
+    if (node.label) return node.label;
+    if (node.location_id) {
+      const loc = locations.find((l) => l.id === node.location_id);
+      if (loc?.name) return loc.name;
+    }
+    const typeStr = (node.node_type || 'waypoint').replace('_', ' ');
+    return `${typeStr.charAt(0).toUpperCase() + typeStr.slice(1)} (${Math.round(node.x)}, ${Math.round(node.y)})`;
+  }, [locations]);
+
   // ─── Node Interaction ───
   const handleNodePointerDown = (e, node) => {
     e.stopPropagation();
@@ -652,9 +666,28 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
     if (tool === TOOLS.ADD_EDGE) {
       if (!edgeStartNode) {
         setEdgeStartNode(node);
-        showToast('First node selected. Now click the second node to connect.', 'info');
+        showToast(`First node selected: "${getNodeDisplayName(node)}". Now click corridor waypoint or destination node to connect.`, 'info');
       } else if (edgeStartNode.id !== node.id) {
-        handleCreateEdge(edgeStartNode, node);
+        // Prevent duplicate edges
+        const alreadyConnected = edges.some(
+          (ed) => (ed.from_node_id === edgeStartNode.id && ed.to_node_id === node.id) ||
+                  (ed.from_node_id === node.id && ed.to_node_id === edgeStartNode.id)
+        );
+        if (alreadyConnected) {
+          showToast('A path between these two nodes already exists', 'info');
+          return;
+        }
+
+        const dist = Math.round(euclideanDistance(edgeStartNode.x, edgeStartNode.y, node.x, node.y));
+        const isStairs = edgeStartNode.node_type === 'stairs' || node.node_type === 'stairs';
+        setConnectModalData({
+          fromNode: edgeStartNode,
+          toNode: node,
+          distance: dist,
+          edge_type: isStairs ? 'stairs' : 'walkway',
+          is_accessible: !isStairs,
+          is_bidirectional: true,
+        });
       }
       return;
     }
@@ -680,26 +713,42 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
     }
   };
 
-  // ─── Edge Creation ───
-  const handleCreateEdge = async (fromNode, toNode) => {
-    const dist = euclideanDistance(fromNode.x, fromNode.y, toNode.x, toNode.y);
+  // ─── Confirm and Create Edge (Interactive Connect Workflow) ───
+  const handleConfirmCreateEdge = async () => {
+    if (!connectModalData) return;
+    const { fromNode, toNode, distance, edge_type, is_accessible, is_bidirectional } = connectModalData;
+
+    // Duplicate check
+    const alreadyConnected = edges.some(
+      (e) => (e.from_node_id === fromNode.id && e.to_node_id === toNode.id) ||
+             (e.from_node_id === toNode.id && e.to_node_id === fromNode.id)
+    );
+    if (alreadyConnected) {
+      showToast('Path between these nodes already exists', 'info');
+      setConnectModalData(null);
+      setEdgeStartNode(null);
+      return;
+    }
+
     setSaving(true);
     const { data, error } = await upsertEdge({
       floor_id: floorId,
       from_node_id: fromNode.id,
       to_node_id: toNode.id,
-      distance: Math.round(dist),
-      is_bidirectional: true,
-      edge_type: fromNode.node_type === 'stairs' || toNode.node_type === 'stairs' ? 'stairs' : 'walkway',
-      is_accessible: fromNode.node_type !== 'stairs' && toNode.node_type !== 'stairs',
+      distance: Math.max(1, Math.round(distance)),
+      is_bidirectional: is_bidirectional !== false,
+      edge_type: edge_type || 'walkway',
+      is_accessible: is_accessible !== false,
     });
     setSaving(false);
     if (error) return showToast(error.message, 'error');
+
     if (data) {
       const nextEdges = [...edges, data];
       setEdges(nextEdges);
       pushSnapshot(locations, nodes, nextEdges);
-      showToast('Connected nodes with path');
+      showToast(`Connected ${getNodeDisplayName(fromNode)} ➔ ${getNodeDisplayName(toNode)}`);
+      setConnectModalData(null);
       setEdgeStartNode(null);
     }
   };
@@ -824,6 +873,82 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
     return validateFloorMap(locations, nodes, edges, floor?.qr_start_node_id);
   }, [locations, nodes, edges, floor?.qr_start_node_id]);
 
+  // ─── Safe Connection Suggestions (Avoids Walls, Requires Admin Confirmation) ───
+  const safeSuggestions = useMemo(() => {
+    return suggestSafeConnections(locations, nodes, edges);
+  }, [locations, nodes, edges]);
+
+  const handleApplySingleSuggestion = async (suggestion) => {
+    const alreadyConnected = edges.some(
+      (e) => (e.from_node_id === suggestion.fromNode.id && e.to_node_id === suggestion.toNode.id) ||
+             (e.from_node_id === suggestion.toNode.id && e.to_node_id === suggestion.fromNode.id)
+    );
+    if (alreadyConnected) {
+      showToast('Path already connected', 'info');
+      return;
+    }
+
+    setSaving(true);
+    const { data, error } = await upsertEdge({
+      floor_id: floorId,
+      from_node_id: suggestion.fromNode.id,
+      to_node_id: suggestion.toNode.id,
+      distance: suggestion.distance,
+      edge_type: suggestion.edge_type || 'walkway',
+      is_bidirectional: true,
+      is_accessible: suggestion.is_accessible !== false,
+    });
+    setSaving(false);
+    if (error) return showToast(error.message, 'error');
+    if (data) {
+      const nextEdges = [...edges, data];
+      setEdges(nextEdges);
+      pushSnapshot(locations, nodes, nextEdges);
+      showToast(`Connected "${getNodeDisplayName(suggestion.fromNode)}" to "${getNodeDisplayName(suggestion.toNode)}"`);
+    }
+  };
+
+  const handleApplyAllSuggestions = async () => {
+    if (safeSuggestions.length === 0) return;
+    setSaving(true);
+    let added = 0;
+    let currEdges = [...edges];
+
+    for (const sug of safeSuggestions) {
+      const already = currEdges.some(
+        (e) => (e.from_node_id === sug.fromNode.id && e.to_node_id === sug.toNode.id) ||
+               (e.from_node_id === sug.toNode.id && e.to_node_id === sug.fromNode.id)
+      );
+      if (already) continue;
+
+      const { data, error } = await upsertEdge({
+        floor_id: floorId,
+        from_node_id: sug.fromNode.id,
+        to_node_id: sug.toNode.id,
+        distance: sug.distance,
+        edge_type: sug.edge_type || 'walkway',
+        is_bidirectional: true,
+        is_accessible: sug.is_accessible !== false,
+      });
+      if (!error && data) {
+        currEdges.push(data);
+        added++;
+      }
+    }
+    setEdges(currEdges);
+    pushSnapshot(locations, nodes, currEdges);
+    setSaving(false);
+    setShowFixModal(false);
+    showToast(`Successfully connected ${added} verified path(s)!`);
+  };
+
+  // ─── Auto-Fix QR Start Node to Valid Persisted Entrance ───
+  const handleAutoFixQRStart = async () => {
+    const entranceNode = nodes.find((n) => n.node_type === 'entrance' && !n.is_disabled) || nodes[0];
+    if (!entranceNode) return showToast('No entrance or navigation node available to set as QR start', 'error');
+    await handleSetQRStartNode(entranceNode.id);
+  };
+
   // ─── Zoom Controls ───
   const handleZoom = (factor) => {
     setViewBox((vb) => {
@@ -894,6 +1019,18 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
 
         {/* Right Header Actions */}
         <div className="flex items-center gap-2">
+          {/* Fix Connections quick trigger */}
+          {safeSuggestions.length > 0 && (
+            <button
+              onClick={() => setShowFixModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 transition shadow-sm animate-pulse"
+              title="Suggested safe connections ready for review"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Fix Connections ({safeSuggestions.length})</span>
+            </button>
+          )}
+
           {/* Validation report trigger */}
           <button
             onClick={() => setShowValidationDrawer(!showValidationDrawer)}
@@ -1071,6 +1208,24 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
           className="flex-1 relative overflow-hidden bg-slate-950"
           style={{ touchAction: 'none' }}
         >
+          {/* Floating Connect Workflow Status Banner */}
+          {edgeStartNode && !connectModalData && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-indigo-500/60 shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-4 text-xs backdrop-blur-md text-white animate-in slide-in-from-top-4">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-ping shrink-0" />
+                <span>
+                  Connect Step 1: <strong className="text-indigo-300">{getNodeDisplayName(edgeStartNode)}</strong>. Click target corridor waypoint or room door to connect.
+                </span>
+              </div>
+              <button
+                onClick={() => setEdgeStartNode(null)}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
           <svg
             ref={svgRef}
             viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
@@ -1264,18 +1419,47 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
               );
             })}
 
-            {/* Edge Drawing Preview Line */}
+            {/* Edge Drawing Preview Line & Pulsing Ring */}
             {edgeStartNode && (
-              <circle
-                cx={edgeStartNode.x}
-                cy={edgeStartNode.y}
-                r={12}
-                fill="none"
-                stroke="#6366f1"
-                strokeWidth={2.5}
-                strokeDasharray="4 2"
-                className="animate-spin-slow"
-              />
+              <g>
+                <circle
+                  cx={edgeStartNode.x}
+                  cy={edgeStartNode.y}
+                  r={14}
+                  fill="none"
+                  stroke="#6366f1"
+                  strokeWidth={2.5}
+                  strokeDasharray="4 2"
+                />
+                <circle
+                  cx={edgeStartNode.x}
+                  cy={edgeStartNode.y}
+                  r={20}
+                  fill="none"
+                  stroke="#818cf8"
+                  strokeWidth={1.5}
+                  opacity={0.7}
+                >
+                  <animate attributeName="r" values="10;22" dur="1.5s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.8;0" dur="1.5s" repeatCount="indefinite" />
+                </circle>
+              </g>
+            )}
+
+            {/* Edge Confirmation Highlight Line */}
+            {connectModalData && (
+              <g>
+                <line
+                  x1={connectModalData.fromNode.x}
+                  y1={connectModalData.fromNode.y}
+                  x2={connectModalData.toNode.x}
+                  y2={connectModalData.toNode.y}
+                  stroke="#10b981"
+                  strokeWidth={3.5}
+                  strokeDasharray="6 3"
+                />
+                <circle cx={connectModalData.toNode.x} cy={connectModalData.toNode.y} r={14} fill="none" stroke="#10b981" strokeWidth={2.5} />
+              </g>
             )}
 
             {/* Render Nodes (Graph vertices) */}
@@ -1897,11 +2081,47 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
               <div className="space-y-2">
                 <p className="text-xs font-bold text-red-400">Critical Issues (Blocks Publish):</p>
                 {validationReport.issues.map((iss, i) => (
-                  <div key={i} className="p-2.5 bg-red-950/40 border border-red-800/40 rounded-xl text-xs text-red-300 flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    <span>{iss}</span>
+                  <div key={i} className="p-2.5 bg-red-950/40 border border-red-800/40 rounded-xl text-xs text-red-300 flex flex-col gap-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      <span>{iss}</span>
+                    </div>
+                    {iss.includes('QR start node') && (
+                      <button
+                        onClick={handleAutoFixQRStart}
+                        className="w-full py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow"
+                      >
+                        <Navigation className="w-3.5 h-3.5" />
+                        Auto-Fix QR Start Point
+                      </button>
+                    )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Safe Connection Auto-Suggester */}
+            {safeSuggestions.length > 0 && (
+              <div className="p-3 bg-indigo-950/40 border border-indigo-500/30 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-indigo-300">
+                  <span className="flex items-center gap-1.5">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    Fix Connections
+                  </span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-extrabold">
+                    {safeSuggestions.length} suggested
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Propose valid walking routes to reconnect isolated rooms without passing through walls. Requires admin confirmation.
+                </p>
+                <button
+                  onClick={() => setShowFixModal(true)}
+                  className="w-full py-2 bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-300" />
+                  Review &amp; Fix Connections
+                </button>
               </div>
             )}
 
@@ -1970,6 +2190,191 @@ export default function FloorMapEditor({ floorId, buildingName, floorName, onBac
                 className="px-4 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-bold"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── CONFIRM NAVIGATION CONNECTION MODAL (Visual Connect Workflow) ─── */}
+      {connectModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-sm font-extrabold text-white">Confirm Navigation Connection</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setConnectModalData(null);
+                  setEdgeStartNode(null);
+                }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800/80 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">From Node:</span>
+                <span className="font-bold text-indigo-300 text-right">{getNodeDisplayName(connectModalData.fromNode)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">To Node:</span>
+                <span className="font-bold text-emerald-300 text-right">{getNodeDisplayName(connectModalData.toNode)}</span>
+              </div>
+              <div className="flex items-center justify-between border-t border-slate-800/60 pt-2">
+                <span className="text-slate-400">Calculated Walking Distance:</span>
+                <span className="font-extrabold text-white">{connectModalData.distance} meters</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">Path Type</label>
+                <select
+                  value={connectModalData.edge_type}
+                  onChange={(e) => setConnectModalData((prev) => ({
+                    ...prev,
+                    edge_type: e.target.value,
+                    is_accessible: e.target.value === 'stairs' ? false : prev.is_accessible,
+                  }))}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white"
+                >
+                  <option value="walkway">Standard Walkway / Corridor</option>
+                  <option value="stairs">Staircase Transition</option>
+                  <option value="lift">Elevator / Lift</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={connectModalData.is_bidirectional}
+                    onChange={(e) => setConnectModalData((prev) => ({ ...prev, is_bidirectional: e.target.checked }))}
+                    className="rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0"
+                  />
+                  <span>Bidirectional (Two-way walkable route)</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={connectModalData.is_accessible}
+                    disabled={connectModalData.edge_type === 'stairs'}
+                    onChange={(e) => setConnectModalData((prev) => ({ ...prev, is_accessible: e.target.checked }))}
+                    className="rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0"
+                  />
+                  <span>Wheelchair accessible (step-free path)</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleConfirmCreateEdge}
+                disabled={saving}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                Confirm &amp; Connect
+              </button>
+              <button
+                onClick={() => {
+                  setConnectModalData(null);
+                  setEdgeStartNode(null);
+                }}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── FIX CONNECTIONS MODAL (Propose Safe Connections with Admin Confirmation) ─── */}
+      {showFixModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-400" />
+                <h3 className="text-sm font-extrabold text-white">Suggested Safe Connections</h3>
+              </div>
+              <button onClick={() => setShowFixModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-400">
+              Proposed corridor routes for disconnected rooms. Each connection is geometrically checked to ensure it does not cross walls of other rooms. Confirm individually or batch-connect.
+            </p>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {safeSuggestions.length === 0 ? (
+                <div className="p-8 text-center space-y-2 bg-slate-950/50 rounded-2xl border border-slate-800">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+                  <p className="text-sm font-bold text-white">All Rooms &amp; Nodes Connected</p>
+                  <p className="text-xs text-slate-400">
+                    No disconnected rooms or dangling waypoints were found.
+                  </p>
+                </div>
+              ) : (
+                safeSuggestions.map((sug) => (
+                  <div
+                    key={sug.id}
+                    className="p-3 bg-slate-950 rounded-2xl border border-slate-800 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-white">
+                        <span className="text-indigo-400">{getNodeDisplayName(sug.fromNode)}</span>
+                        <span className="text-slate-500">➔</span>
+                        <span className="text-emerald-400">{getNodeDisplayName(sug.toNode)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                        <span>~{sug.distance}m</span>
+                        <span>&bull;</span>
+                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                          ✓ No wall collision
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        onClick={() => handleApplySingleSuggestion(sug)}
+                        disabled={saving}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1 shadow"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Connect
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
+              {safeSuggestions.length > 0 && (
+                <button
+                  onClick={handleApplyAllSuggestions}
+                  disabled={saving}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-lg"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 text-amber-300" />}
+                  Confirm All ({safeSuggestions.length}) Reviewed Connections
+                </button>
+              )}
+              <button
+                onClick={() => setShowFixModal(false)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
+              >
+                Close
               </button>
             </div>
           </div>

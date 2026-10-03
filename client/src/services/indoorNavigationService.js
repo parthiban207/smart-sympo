@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Dijkstra shortest-path algorithm, wheelchair-accessible routing, floor map validation, and navigation utilities", deps: [], state: "active", last: "antigravity@2026-10-03" }
+// agent-notes: { ctx: "Dijkstra routing, floor map validation, wall-collision safe connection suggestions, and geometry helpers", deps: [], state: "active", last: "antigravity@2026-10-03" }
 
 /**
  * Dijkstra's shortest-path algorithm for campus indoor navigation.
@@ -351,6 +351,111 @@ export function findNearestWaypoint(fromNode, allNodes, existingEdges = [], maxD
 }
 
 // ──────────────────────────────────────────────
+// Check if two line segments intersect (p1-p2 and p3-p4)
+// ──────────────────────────────────────────────
+export function lineSegmentsIntersect(p1, p2, p3, p4) {
+  const d = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x);
+  if (Math.abs(d) < 1e-6) return false;
+  const t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / d;
+  const u = -((p1.x - p2.x) * (p1.y - p3.y) - (p1.y - p2.y) * (p1.x - p3.x)) / d;
+  return t > 0.01 && t < 0.99 && u >= 0 && u <= 1;
+}
+
+// ──────────────────────────────────────────────
+// Check if line segment between p1 and p2 cuts through a room rectangle
+// ──────────────────────────────────────────────
+export function doLineSegmentIntersectsRect(p1, p2, rect) {
+  if (!rect || rect.type !== 'rect') return false;
+  const rx1 = rect.x;
+  const ry1 = rect.y;
+  const rx2 = rect.x + rect.width;
+  const ry2 = rect.y + rect.height;
+
+  const lines = [
+    [{ x: rx1, y: ry1 }, { x: rx2, y: ry1 }], // top
+    [{ x: rx2, y: ry1 }, { x: rx2, y: ry2 }], // right
+    [{ x: rx2, y: ry2 }, { x: rx1, y: ry2 }], // bottom
+    [{ x: rx1, y: ry2 }, { x: rx1, y: ry1 }], // left
+  ];
+
+  return lines.some(([p3, p4]) => lineSegmentsIntersect(p1, p2, p3, p4));
+}
+
+// ──────────────────────────────────────────────
+// Suggest safe, non-wall-penetrating connections for disconnected nodes
+// ──────────────────────────────────────────────
+export function suggestSafeConnections(locations = [], nodes = [], edges = [], maxDistance = 650) {
+  const existingPairSet = new Set();
+  for (const e of edges) {
+    if (e.is_disabled) continue;
+    existingPairSet.add(`${e.from_node_id}:${e.to_node_id}`);
+    existingPairSet.add(`${e.to_node_id}:${e.from_node_id}`);
+  }
+
+  const degrees = new Map();
+  for (const n of nodes) {
+    if (!n.is_disabled) degrees.set(n.id, 0);
+  }
+  for (const e of edges) {
+    if (!e.is_disabled) {
+      if (degrees.has(e.from_node_id)) degrees.set(e.from_node_id, degrees.get(e.from_node_id) + 1);
+      if (degrees.has(e.to_node_id)) degrees.set(e.to_node_id, degrees.get(e.to_node_id) + 1);
+    }
+  }
+
+  const roomRects = locations
+    .filter((loc) => loc.shape_data && loc.shape_data.type === 'rect' && loc.location_type !== 'corridor')
+    .map((loc) => ({ locationId: loc.id, name: loc.name, shape: loc.shape_data }));
+
+  const disconnectedNodes = nodes.filter((n) => !n.is_disabled && (degrees.get(n.id) === 0));
+  const suggestions = [];
+
+  for (const targetNode of disconnectedNodes) {
+    let bestCandidate = null;
+    let minDistance = maxDistance;
+
+    for (const candidate of nodes) {
+      if (candidate.id === targetNode.id || candidate.is_disabled) continue;
+      if (existingPairSet.has(`${targetNode.id}:${candidate.id}`)) continue;
+
+      const dist = euclideanDistance(targetNode.x, targetNode.y, candidate.x, candidate.y);
+      if (dist >= minDistance) continue;
+
+      // Check if straight line between targetNode and candidate intersects any unrelated room's walls
+      let penetratesWall = false;
+      for (const room of roomRects) {
+        if (room.locationId === targetNode.location_id || room.locationId === candidate.location_id) {
+          continue;
+        }
+        if (doLineSegmentIntersectsRect(targetNode, candidate, room.shape)) {
+          penetratesWall = true;
+          break;
+        }
+      }
+
+      if (!penetratesWall) {
+        minDistance = dist;
+        bestCandidate = candidate;
+      }
+    }
+
+    if (bestCandidate) {
+      suggestions.push({
+        id: `${targetNode.id}-${bestCandidate.id}`,
+        fromNode: targetNode,
+        toNode: bestCandidate,
+        distance: Math.round(minDistance),
+        edge_type: (targetNode.node_type === 'stairs' || bestCandidate.node_type === 'stairs') ? 'stairs' : 'walkway',
+        is_accessible: targetNode.node_type !== 'stairs' && bestCandidate.node_type !== 'stairs',
+        is_bidirectional: true,
+      });
+    }
+  }
+
+  return suggestions;
+}
+
+// ──────────────────────────────────────────────
 // Check if two rectangular shapes overlap
 // ──────────────────────────────────────────────
 export function doRectanglesOverlap(r1, r2) {
@@ -428,7 +533,9 @@ export function validateFloorMap(locations = [], nodes = [], edges = [], qrStart
 
   // 4. Disconnected nodes (degree 0)
   const nodeDegrees = new Map();
-  for (const n of nodes) nodeDegrees.set(n.id, 0);
+  for (const n of nodes) {
+    if (!n.is_disabled) nodeDegrees.set(n.id, 0);
+  }
   for (const e of edges) {
     if (!e.is_disabled) {
       if (nodeDegrees.has(e.from_node_id)) nodeDegrees.set(e.from_node_id, nodeDegrees.get(e.from_node_id) + 1);
@@ -439,6 +546,7 @@ export function validateFloorMap(locations = [], nodes = [], edges = [], qrStart
   for (const [nodeId, deg] of nodeDegrees.entries()) {
     if (deg === 0) {
       const n = nodeMap.get(nodeId);
+      if (n?.is_disabled) continue;
       const label = n?.label || (n?.location_id && locations.find((l) => l.id === n.location_id)?.name) || nodeId.slice(0, 8);
       warnings.push(`Node "${label}" is disconnected (0 connected paths)`);
     }

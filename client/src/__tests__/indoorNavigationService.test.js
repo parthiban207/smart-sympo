@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Test suite for Dijkstra shortest-path algorithm and navigation utilities", deps: ["src/services/indoorNavigationService.js"], state: "active", last: "antigravity@2026-10-03" }
+// agent-notes: { ctx: "Test suite for Dijkstra algorithm, geometry collisions, and safe connections", deps: ["src/services/indoorNavigationService.js"], state: "active", last: "antigravity@2026-10-03" }
 
 /**
  * Indoor Navigation Service — Tests
@@ -19,6 +19,9 @@ import {
   validateFloorMap,
   findNearestWaypoint,
   formatDistance,
+  lineSegmentsIntersect,
+  doLineSegmentIntersectsRect,
+  suggestSafeConnections,
 } from '../services/indoorNavigationService.js';
 
 let passed = 0;
@@ -340,6 +343,35 @@ test('detects overlapping rooms and unreachable destinations', () => {
   const report = validateFloorMap(locs, testNodes, [], 'n1');
   assert(report.warnings.some((w) => w.includes('overlaps')), 'Should detect room overlap');
   assert(report.warnings.some((w) => w.includes('has no door')), 'Should detect Room 2 missing door');
+});
+
+// ─── Wall Collision & Safe Connections ───
+console.log('\n📋 Wall Collision & Safe Connection Suggestions');
+test('correctly identifies line segment intersection with room rectangles', () => {
+  const roomRect = { type: 'rect', x: 100, y: 100, width: 100, height: 100 };
+  const pThrough = doLineSegmentIntersectsRect({ x: 50, y: 150 }, { x: 250, y: 150 }, roomRect);
+  assert(pThrough === true, 'Path cutting through room rectangle must return true');
+
+  const pClear = doLineSegmentIntersectsRect({ x: 50, y: 50 }, { x: 250, y: 50 }, roomRect);
+  assert(pClear === false, 'Path outside room rectangle must return false');
+});
+
+test('suggests connections that do not penetrate walls', () => {
+  const locs = [
+    { id: 'r1', name: 'Room 1', location_type: 'classroom', shape_data: { type: 'rect', x: 100, y: 0, width: 80, height: 80 } },
+    { id: 'r2', name: 'Obstacle Room', location_type: 'classroom', shape_data: { type: 'rect', x: 200, y: 0, width: 100, height: 80 } },
+  ];
+  const testNodes = [
+    { id: 'door1', floor_id: 'f1', x: 50, y: 40, location_id: 'r1', is_disabled: false, node_type: 'room_door' },
+    // Node through wall
+    { id: 'wp_blocked', floor_id: 'f1', x: 350, y: 40, is_disabled: false, node_type: 'waypoint' },
+    // Node around wall
+    { id: 'wp_clear', floor_id: 'f1', x: 50, y: 150, is_disabled: false, node_type: 'waypoint' },
+  ];
+
+  const suggestions = suggestSafeConnections(locs, testNodes, []);
+  assert(suggestions.length > 0, 'Should suggest safe connection');
+  assert(suggestions[0].toNode.id === 'wp_clear', 'Should choose clear waypoint over one blocked by obstacle room');
 });
 
 // ─── Summary ───
