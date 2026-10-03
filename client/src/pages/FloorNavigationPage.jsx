@@ -1,9 +1,9 @@
-// agent-notes: { ctx: "Student-facing indoor navigation page with built-in camera QR scanner, building/floor browser, wheelchair accessible routing, search, shortest path, and turn-by-turn directions", deps: ["src/services/indoorNavDataService.js", "src/services/indoorNavigationService.js", "src/components/FloorQRScannerModal.jsx", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-10-03" }
+// agent-notes: { ctx: "Student-facing indoor navigation page with manual starting point & destination search, swap button, Dijkstra route finding, multi-floor support, and QR scanner", deps: ["src/services/indoorNavDataService.js", "src/services/indoorNavigationService.js", "src/components/FloorQRScannerModal.jsx", "lucide-react", "react-router-dom"], state: "active", last: "antigravity@2026-10-03" }
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  fetchFloorMapData, fetchBuildings, fetchFloors, fetchNodes, fetchEdges,
+  fetchFloorMapData, fetchBuildings, fetchFloors, fetchNodes, fetchEdges, fetchLocations,
 } from '../services/indoorNavDataService';
 import {
   dijkstraMultiFloor, generateDirections, findNodeForLocation, formatDistance,
@@ -13,7 +13,7 @@ import {
   MapPin, Search, Navigation, ArrowLeft, Loader2, AlertCircle,
   Building2, Layers, CornerDownRight, RotateCcw,
   Footprints, ChevronDown, ChevronUp, X, QrCode, Camera, Accessibility,
-  Compass, ArrowRight, ZoomIn, ZoomOut,
+  Compass, ArrowRight, ZoomIn, ZoomOut, ArrowUpDown, Check, LocateFixed, Clock,
 } from 'lucide-react';
 
 const LOCATION_COLORS = {
@@ -49,6 +49,8 @@ export default function FloorNavigationPage() {
   const [edges, setEdges] = useState([]);
   const [allNodes, setAllNodes] = useState([]);
   const [allEdges, setAllEdges] = useState([]);
+  const [allFloors, setAllFloors] = useState([]);
+  const [allLocations, setAllLocations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -57,13 +59,17 @@ export default function FloorNavigationPage() {
   const [publishedFloors, setPublishedFloors] = useState([]);
   const [loadingDirectory, setLoadingDirectory] = useState(false);
 
-  // Navigation & Route states
-  const [startNodeId, setStartNodeId] = useState(null);
-  const [selectedDestination, setSelectedDestination] = useState(null);
+  // ─── Manual Route Selection States (No Auto-Start) ───
+  const [startLocation, setStartLocation] = useState(null);
+  const [destinationLocation, setDestinationLocation] = useState(null);
+  const [startSearchQuery, setStartSearchQuery] = useState('');
+  const [destSearchQuery, setDestSearchQuery] = useState('');
+  const [activePicker, setActivePicker] = useState(null); // 'start' | 'dest' | null
+
+  // Route calculation results
   const [requireAccessible, setRequireAccessible] = useState(false);
   const [routeResult, setRouteResult] = useState(null);
   const [directions, setDirections] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [showDirections, setShowDirections] = useState(true);
 
   // Pan / Zoom ViewBox
@@ -104,8 +110,8 @@ export default function FloorNavigationPage() {
       setLocations([]);
       setNodes([]);
       setEdges([]);
-      setStartNodeId(null);
-      setSelectedDestination(null);
+      setStartLocation(null);
+      setDestinationLocation(null);
       setRouteResult(null);
       setDirections([]);
       return;
@@ -139,26 +145,34 @@ export default function FloorNavigationPage() {
           if (parts.length === 4) setViewBox({ x: parts[0], y: parts[1], w: parts[2], h: parts[3] });
         }
 
-        // Set primary QR start node
-        if (data.floor.qr_start_node_id) {
-          setStartNodeId(data.floor.qr_start_node_id);
-        } else if (data.nodes && data.nodes.length > 0) {
-          // Fallback to entrance or first node
-          const entranceNode = data.nodes.find((n) => n.node_type === 'entrance') || data.nodes[0];
-          setStartNodeId(entranceNode.id);
-        }
+        // NOTE: Starting point and Destination must remain null on QR scan.
+        // The QR code only opens the floor map. Both are chosen manually by the student.
+        setStartLocation(null);
+        setDestinationLocation(null);
+        setRouteResult(null);
+        setDirections([]);
+        setStartSearchQuery('');
+        setDestSearchQuery('');
+        setActivePicker(null);
 
-        // Load multi-floor nodes/edges for cross-floor routing
+        // Load multi-floor nodes, edges, and locations for cross-floor routing
         if (data.floor.building_id) {
           const floorsRes = await fetchFloors(data.floor.building_id);
-          const allFloors = floorsRes.data || [];
-          const allNodeArrays = await Promise.all(allFloors.map((f) => fetchNodes(f.id)));
-          const allEdgeArrays = await Promise.all(allFloors.map((f) => fetchEdges(f.id)));
+          const allBldgFloors = (floorsRes.data || []).filter((f) => f.is_published);
+          setAllFloors(allBldgFloors);
+
+          const allNodeArrays = await Promise.all(allBldgFloors.map((f) => fetchNodes(f.id)));
+          const allEdgeArrays = await Promise.all(allBldgFloors.map((f) => fetchEdges(f.id)));
+          const allLocArrays = await Promise.all(allBldgFloors.map((f) => fetchLocations(f.id)));
+
           setAllNodes(allNodeArrays.flatMap((r) => r.data || []));
           setAllEdges(allEdgeArrays.flatMap((r) => r.data || []));
+          setAllLocations(allLocArrays.flatMap((r) => r.data || []));
         } else {
+          setAllFloors([data.floor]);
           setAllNodes(data.nodes || []);
           setAllEdges(data.edges || []);
+          setAllLocations(data.locations || []);
         }
       } catch (err) {
         console.error('Failed to load floor data:', err);
@@ -168,90 +182,267 @@ export default function FloorNavigationPage() {
     })();
   }, [activeFloorId]);
 
-  // Handle scanned floor
-  const handleFloorScanned = useCallback((scannedFloorId, scannedStartNodeId) => {
+  // Handle scanned floor (Only opens corresponding floor map, does NOT select start/dest)
+  const handleFloorScanned = useCallback((scannedFloorId) => {
     setActiveFloorId(scannedFloorId);
-    if (scannedStartNodeId) {
-      setStartNodeId(scannedStartNodeId);
-    }
-    // Update browser URL without reloading
+    setStartLocation(null);
+    setDestinationLocation(null);
+    setRouteResult(null);
+    setDirections([]);
     navigate(`/navigate/floor/${scannedFloorId}`, { replace: true });
   }, [navigate]);
 
-  // Search filter
-  const searchableLocations = useMemo(() => {
-    return locations
-      .filter((l) => l.is_searchable !== false && l.location_type !== 'corridor')
-      .filter((l) => {
-        if (!searchQuery.trim()) return true;
-        const q = searchQuery.toLowerCase();
-        return (
-          l.name.toLowerCase().includes(q) ||
-          (l.room_number && l.room_number.toLowerCase().includes(q)) ||
-          (l.department && l.department.toLowerCase().includes(q)) ||
-          l.location_type.toLowerCase().includes(q)
-        );
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [locations, searchQuery]);
+  // ─── Compile All Navigable Locations & Points of Interest ───
+  const navigableLocations = useMemo(() => {
+    const list = [];
+    const graphNodes = allNodes.length > 0 ? allNodes : nodes;
+    const targetLocations = allLocations.length > 0 ? allLocations : locations;
 
-  // Calculate shortest path route
-  const calculateRoute = useCallback((destLocation, accessibleMode = requireAccessible) => {
-    if (!startNodeId) {
-      setRouteResult({ error: 'No starting location set for this floor. Please scan a floor QR poster.' });
+    // 1. Rooms from campus_locations
+    for (const loc of targetLocations) {
+      if (loc.is_searchable === false || loc.location_type === 'corridor') continue;
+      const n = graphNodes.find((node) => node.location_id === loc.id && !node.is_disabled);
+      if (n) {
+        const floorObj = allFloors.find((f) => f.id === loc.floor_id) || floor;
+        list.push({
+          id: loc.id,
+          nodeId: n.id,
+          name: loc.name,
+          room_number: loc.room_number,
+          department: loc.department,
+          location_type: loc.location_type,
+          floor_id: loc.floor_id,
+          floor_name: floorObj?.name || 'Current Floor',
+          isCurrentFloor: loc.floor_id === floor?.id,
+          x: n.x,
+          y: n.y,
+          isRoom: true,
+        });
+      }
+    }
+
+    // 2. Navigation landmark nodes (Entrances, Stairs, Lifts)
+    for (const n of graphNodes) {
+      if (n.is_disabled) continue;
+      if (n.node_type === 'entrance' || n.node_type === 'stairs' || n.node_type === 'lift') {
+        const already = list.some((item) => item.nodeId === n.id);
+        if (!already) {
+          const floorObj = allFloors.find((f) => f.id === n.floor_id) || floor;
+          const label = n.label || (n.node_type === 'entrance' ? 'Main Entrance' : n.node_type === 'stairs' ? 'Staircase' : 'Elevator / Lift');
+          list.push({
+            id: `node-${n.id}`,
+            nodeId: n.id,
+            name: label,
+            room_number: null,
+            department: null,
+            location_type: n.node_type,
+            floor_id: n.floor_id || floor?.id,
+            floor_name: floorObj?.name || 'Current Floor',
+            isCurrentFloor: (n.floor_id || floor?.id) === floor?.id,
+            x: n.x,
+            y: n.y,
+            isRoom: false,
+          });
+        }
+      }
+    }
+
+    // Sort: Current floor items first, then alphabetically
+    return list.sort((a, b) => {
+      if (a.isCurrentFloor !== b.isCurrentFloor) {
+        return a.isCurrentFloor ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [locations, nodes, allNodes, allLocations, allFloors, floor]);
+
+  // Filtered lists for dropdown search
+  const filteredStartOptions = useMemo(() => {
+    const q = startSearchQuery.trim().toLowerCase();
+    return navigableLocations.filter((item) => {
+      if (destinationLocation && item.nodeId === destinationLocation.nodeId) return false;
+      if (!q) return true;
+      return (
+        item.name.toLowerCase().includes(q) ||
+        (item.room_number && item.room_number.toLowerCase().includes(q)) ||
+        (item.department && item.department.toLowerCase().includes(q)) ||
+        item.location_type.toLowerCase().includes(q) ||
+        item.floor_name.toLowerCase().includes(q)
+      );
+    });
+  }, [navigableLocations, startSearchQuery, destinationLocation]);
+
+  const filteredDestOptions = useMemo(() => {
+    const q = destSearchQuery.trim().toLowerCase();
+    return navigableLocations.filter((item) => {
+      if (startLocation && item.nodeId === startLocation.nodeId) return false;
+      if (!q) return true;
+      return (
+        item.name.toLowerCase().includes(q) ||
+        (item.room_number && item.room_number.toLowerCase().includes(q)) ||
+        (item.department && item.department.toLowerCase().includes(q)) ||
+        item.location_type.toLowerCase().includes(q) ||
+        item.floor_name.toLowerCase().includes(q)
+      );
+    });
+  }, [navigableLocations, destSearchQuery, startLocation]);
+
+  // ─── Swap Starting Point and Destination ───
+  const handleSwap = () => {
+    const prevStart = startLocation;
+    const prevDest = destinationLocation;
+
+    setStartLocation(prevDest);
+    setDestinationLocation(prevStart);
+    setStartSearchQuery('');
+    setDestSearchQuery('');
+    setActivePicker(null);
+
+    // If both exist, recalculate route in reverse immediately
+    if (prevDest && prevStart) {
+      calculateShortestRoute(prevDest, prevStart, requireAccessible);
+    } else {
+      setRouteResult(null);
+      setDirections([]);
+    }
+  };
+
+  // ─── Calculate Shortest Route with Dijkstra ───
+  const calculateShortestRoute = useCallback((startItem, destItem, accessibleMode = requireAccessible) => {
+    if (!startItem) {
+      setRouteResult({ error: 'Please select a Starting Point ("Where are you now?").' });
+      setDirections([]);
+      return;
+    }
+    if (!destItem) {
+      setRouteResult({ error: 'Please select a Destination ("Where do you want to go?").' });
+      setDirections([]);
+      return;
+    }
+    if (startItem.nodeId === destItem.nodeId) {
+      setRouteResult({ error: 'Starting point and destination cannot be the same place.' });
+      setDirections([]);
       return;
     }
 
     const graphNodes = allNodes.length > 0 ? allNodes : nodes;
     const graphEdges = allEdges.length > 0 ? allEdges : edges;
 
-    const destNode = findNodeForLocation(graphNodes, destLocation.id);
-    if (!destNode) {
-      setRouteResult({
-        error: `"${destLocation.name}" has no doorway access point connected. Please contact administration.`,
-      });
+    const startNode = graphNodes.find((n) => n.id === startItem.nodeId && !n.is_disabled);
+    const destNode = graphNodes.find((n) => n.id === destItem.nodeId && !n.is_disabled);
+
+    if (!startNode) {
+      setRouteResult({ error: `Starting point "${startItem.name}" has no valid doorway access node.` });
       setDirections([]);
-      setSelectedDestination(destLocation);
+      return;
+    }
+    if (!destNode) {
+      setRouteResult({ error: `Destination "${destItem.name}" has no valid doorway access node.` });
+      setDirections([]);
       return;
     }
 
-    const result = dijkstraMultiFloor(graphNodes, graphEdges, startNodeId, destNode.id, {
+    const result = dijkstraMultiFloor(graphNodes, graphEdges, startNode.id, destNode.id, {
       requireAccessible: accessibleMode,
     });
 
     if (result.error || result.path.length === 0) {
       setRouteResult({
         error: accessibleMode
-          ? 'No wheelchair-accessible route found. Elevator access may not be configured between these points.'
-          : (result.error || 'No connected walking route found between these locations.'),
+          ? 'No wheelchair-accessible path found. Elevators may not be connected between these locations.'
+          : (result.error || `No connected walking path found between ${startItem.name} and ${destItem.name}.`),
       });
       setDirections([]);
     } else {
       setRouteResult(result);
-      const dirs = generateDirections(result.pathDetails, result.nodeMap, locations);
+      const dirs = generateDirections(result.pathDetails, result.nodeMap, allLocations.length > 0 ? allLocations : locations);
       setDirections(dirs);
-    }
+      setShowDirections(true);
+      setActivePicker(null);
 
-    setSelectedDestination(destLocation);
-    setShowDirections(true);
-  }, [startNodeId, nodes, edges, allNodes, allEdges, locations, requireAccessible]);
+      // Smooth auto-focus map viewBox to encompass the route on the current floor
+      const currentFloorNodes = result.path
+        .map((id) => result.nodeMap[id])
+        .filter((n) => n && n.floor_id === floor?.id);
+
+      if (currentFloorNodes.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const n of currentFloorNodes) {
+          if (n.x < minX) minX = n.x;
+          if (n.y < minY) minY = n.y;
+          if (n.x > maxX) maxX = n.x;
+          if (n.y > maxY) maxY = n.y;
+        }
+        const pad = 120;
+        const rw = Math.max(450, maxX - minX + pad * 2);
+        const rh = Math.max(300, maxY - minY + pad * 2);
+        setViewBox({
+          x: Math.round(minX - pad),
+          y: Math.round(minY - pad),
+          w: Math.round(rw),
+          h: Math.round(rh),
+        });
+      }
+    }
+  }, [nodes, edges, allNodes, allEdges, locations, allLocations, floor, requireAccessible]);
+
+  // Execute Find Route button
+  const handleFindRouteClick = () => {
+    calculateShortestRoute(startLocation, destinationLocation, requireAccessible);
+  };
 
   // Toggle wheelchair accessible routing
   const handleToggleAccessible = () => {
     const nextAccessible = !requireAccessible;
     setRequireAccessible(nextAccessible);
-    if (selectedDestination) {
-      calculateRoute(selectedDestination, nextAccessible);
+    if (startLocation && destinationLocation) {
+      calculateShortestRoute(startLocation, destinationLocation, nextAccessible);
     }
   };
 
   // Reset route
   const resetRoute = useCallback(() => {
-    setSelectedDestination(null);
+    setStartLocation(null);
+    setDestinationLocation(null);
     setRouteResult(null);
     setDirections([]);
-    setSearchQuery('');
-  }, []);
+    setStartSearchQuery('');
+    setDestSearchQuery('');
+    setActivePicker(null);
+    if (floor?.svg_view_box) {
+      const parts = floor.svg_view_box.split(' ').map(Number);
+      if (parts.length === 4) setViewBox({ x: parts[0], y: parts[1], w: parts[2], h: parts[3] });
+    }
+  }, [floor]);
+
+  // Direct room click on canvas
+  const handleRoomClick = (loc) => {
+    const item = navigableLocations.find((nl) => nl.id === loc.id);
+    if (!item) return;
+
+    if (activePicker === 'start' || (!startLocation && !destinationLocation)) {
+      setStartLocation(item);
+      setActivePicker(null);
+      setStartSearchQuery('');
+      if (destinationLocation && destinationLocation.nodeId !== item.nodeId) {
+        calculateShortestRoute(item, destinationLocation, requireAccessible);
+      }
+    } else if (activePicker === 'dest' || (startLocation && !destinationLocation)) {
+      setDestinationLocation(item);
+      setActivePicker(null);
+      setDestSearchQuery('');
+      if (startLocation && startLocation.nodeId !== item.nodeId) {
+        calculateShortestRoute(startLocation, item, requireAccessible);
+      }
+    } else {
+      // Both chosen: replace destination by default
+      setDestinationLocation(item);
+      setActivePicker(null);
+      if (startLocation && startLocation.nodeId !== item.nodeId) {
+        calculateShortestRoute(startLocation, item, requireAccessible);
+      }
+    }
+  };
 
   // Zoom & Pan
   const handleZoom = (factor) => {
@@ -301,103 +492,129 @@ export default function FloorNavigationPage() {
     }
   };
 
-  // Extract path nodes for drawing
-  const routePathNodes = useMemo(() => {
+  // Extract path nodes for drawing on current floor
+  const currentFloorRouteNodes = useMemo(() => {
     if (!routeResult || !routeResult.path || routeResult.path.length === 0) return [];
-    const nodeMap = {};
-    for (const n of (allNodes.length > 0 ? allNodes : nodes)) {
-      nodeMap[n.id] = n;
-    }
-    return routeResult.path.map((id) => nodeMap[id]).filter(Boolean);
-  }, [routeResult, nodes, allNodes]);
+    const nodeMap = routeResult.nodeMap || {};
+    return routeResult.path
+      .map((id) => nodeMap[id])
+      .filter((n) => n && n.floor_id === floor?.id);
+  }, [routeResult, floor]);
 
-  // Render Directory Landing when no floor selected
+  // Check if route involves a floor transition
+  const hasFloorTransition = useMemo(() => {
+    if (!routeResult || !routeResult.pathDetails) return false;
+    return routeResult.pathDetails.some((pd) => pd.isFloorTransition);
+  }, [routeResult]);
+
+  // Target transition floor if multi-floor
+  const targetFloor = useMemo(() => {
+    if (!hasFloorTransition || !destinationLocation) return null;
+    return allFloors.find((f) => f.id === destinationLocation.floor_id) || null;
+  }, [hasFloorTransition, destinationLocation, allFloors]);
+
+  // Estimated walking time (average walking speed = 1.2 meters/sec)
+  const walkingTimeMinutes = useMemo(() => {
+    if (!routeResult || !routeResult.distance || routeResult.distance < 0) return 0;
+    return Math.max(1, Math.round(routeResult.distance / 72));
+  }, [routeResult]);
+
+  // ─── RENDER: Campus Directory (When No Floor Selected) ───
   if (!activeFloorId && !loading) {
     return (
       <div className="min-h-screen bg-slate-900 text-white flex flex-col">
         {/* Header */}
         <div className="bg-slate-950 border-b border-slate-800 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-600/30">
-              <Compass className="w-5 h-5 text-white animate-spin-slow" />
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg">
+              <Navigation className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-base font-extrabold tracking-tight">SmartSympo Campus Navigation</h1>
-              <p className="text-xs text-slate-400">Scan floor poster or choose your destination</p>
+              <h1 className="text-lg font-black tracking-tight text-white">SmartSympo Indoor Wayfinding</h1>
+              <p className="text-xs text-slate-400">Campus Maps &amp; Navigation</p>
             </div>
           </div>
+          <button
+            onClick={() => setIsScannerOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-md"
+          >
+            <Camera className="w-4 h-4" />
+            <span>Scan Floor QR</span>
+          </button>
         </div>
 
-        {/* Hero Section with Prominent Scan Floor QR Button */}
-        <div className="max-w-3xl mx-auto w-full p-6 space-y-6 my-auto">
-          <div className="bg-gradient-to-br from-indigo-900/60 to-purple-900/40 border border-indigo-500/30 rounded-3xl p-8 text-center space-y-4 shadow-2xl relative overflow-hidden">
-            <div className="w-20 h-20 rounded-3xl bg-indigo-600 text-white flex items-center justify-center mx-auto shadow-xl shadow-indigo-600/40">
-              <QrCode className="w-10 h-10" />
-            </div>
-            <div className="space-y-1.5">
-              <h2 className="text-xl font-extrabold tracking-tight">At the Campus Right Now?</h2>
-              <p className="text-sm text-indigo-200 max-w-md mx-auto">
-                Scan the primary QR code displayed at your building or floor entrance to immediately set your starting position and navigate.
-              </p>
-            </div>
-            <button
-              onClick={() => setIsScannerOpen(true)}
-              className="px-8 py-3.5 bg-gradient-to-r from-indigo-500 via-indigo-600 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white rounded-2xl font-extrabold text-sm shadow-xl shadow-indigo-600/40 transition hover:scale-105 active:scale-95 inline-flex items-center gap-2.5"
-            >
-              <Camera className="w-5 h-5" />
-              <span>Scan Floor QR</span>
-            </button>
+        {/* Directory Body */}
+        <div className="flex-1 max-w-4xl mx-auto w-full p-6 space-y-6">
+          <div className="text-center py-6 space-y-2">
+            <h2 className="text-2xl font-black text-white">Choose a Campus Building &amp; Floor</h2>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Scan a wall QR code on any floor or pick your current building from the published directory below.
+            </p>
           </div>
 
-          {/* Directory of Published Floors */}
-          <div className="space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-indigo-400" /> Or Browse Campus Buildings & Floors
-            </h3>
-
-            {loadingDirectory ? (
-              <div className="p-8 text-center text-slate-500 text-xs">Loading campus buildings…</div>
-            ) : publishedFloors.length === 0 ? (
-              <div className="p-8 bg-slate-800/40 rounded-2xl border border-slate-800 text-center space-y-2">
-                <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
-                <p className="text-sm font-bold text-slate-300">No Published Floor Maps Yet</p>
-                <p className="text-xs text-slate-400">
-                  Campus administration has not published floor maps yet. Scan a floor QR when posted.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {publishedFloors.map((fl) => {
-                  const bldg = buildings.find((b) => b.id === fl.building_id);
-                  return (
-                    <button
-                      key={fl.id}
-                      onClick={() => handleFloorScanned(fl.id, fl.qr_start_node_id)}
-                      className="p-4 bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 hover:border-indigo-500/50 rounded-2xl text-left transition flex items-center justify-between group"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-400/20 text-indigo-400 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition">
-                          <Layers className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-extrabold text-white group-hover:text-indigo-300 transition">
-                            {fl.name}
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            {bldg?.name || 'Campus Building'} (Floor {fl.floor_number})
-                          </p>
-                        </div>
+          {loadingDirectory ? (
+            <div className="py-16 text-center space-y-3">
+              <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto" />
+              <p className="text-xs text-slate-400">Loading campus directory…</p>
+            </div>
+          ) : buildings.length === 0 ? (
+            <div className="p-12 text-center bg-slate-950 rounded-3xl border border-slate-800 space-y-3">
+              <Building2 className="w-12 h-12 text-slate-600 mx-auto" />
+              <p className="text-sm font-bold text-slate-300">No Campus Buildings Available</p>
+              <p className="text-xs text-slate-500">Contact event administrators to publish floor maps.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {buildings.map((bldg) => {
+                const bldgFloors = publishedFloors.filter((f) => f.building_id === bldg.id);
+                return (
+                  <div key={bldg.id} className="bg-slate-950 border border-slate-800 rounded-3xl p-5 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                        <Building2 className="w-5 h-5" />
                       </div>
-                      <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-1 transition" />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                      <div>
+                        <h3 className="text-sm font-extrabold text-white">{bldg.name}</h3>
+                        <p className="text-xs text-slate-400">{bldg.short_name || 'Campus Building'}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        Available Floors ({bldgFloors.length})
+                      </p>
+                      {bldgFloors.length === 0 ? (
+                        <p className="text-xs text-slate-500 italic py-1">No published floors yet</p>
+                      ) : (
+                        bldgFloors.map((fl) => (
+                          <button
+                            key={fl.id}
+                            onClick={() => {
+                              setActiveFloorId(fl.id);
+                              navigate(`/navigate/floor/${fl.id}`);
+                            }}
+                            className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-900 hover:bg-indigo-950/60 border border-slate-800/60 hover:border-indigo-600/40 text-left transition group"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Layers className="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition" />
+                              <span className="text-xs font-bold text-white group-hover:text-indigo-300">
+                                {fl.name}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-500 group-hover:text-indigo-400 font-semibold">
+                              Floor {fl.floor_number} &rarr;
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {/* QR Scanner Modal */}
         <FloorQRScannerModal
           isOpen={isScannerOpen}
           onClose={() => setIsScannerOpen(false)}
@@ -407,7 +624,7 @@ export default function FloorNavigationPage() {
     );
   }
 
-  // Error State
+  // ─── RENDER: Error State ───
   if (error) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
@@ -420,9 +637,9 @@ export default function FloorNavigationPage() {
           <div className="pt-2 flex flex-col gap-2">
             <button
               onClick={() => setIsScannerOpen(true)}
-              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
+              className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg"
             >
-              <Camera className="w-4 h-4" /> Scan Another QR
+              <Camera className="w-4 h-4" /> Scan Another Floor QR
             </button>
             <button
               onClick={() => setActiveFloorId(null)}
@@ -442,7 +659,7 @@ export default function FloorNavigationPage() {
     );
   }
 
-  // Loading State
+  // ─── RENDER: Loading State ───
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
@@ -458,8 +675,8 @@ export default function FloorNavigationPage() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden select-none">
-      {/* ─── HEADER ─── */}
-      <div className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shrink-0 z-30">
+      {/* ─── TOP HEADER ─── */}
+      <div className="bg-slate-900 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between shrink-0 z-30 shadow-md">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setActiveFloorId(null)}
@@ -474,8 +691,7 @@ export default function FloorNavigationPage() {
           <div>
             <h1 className="text-sm font-extrabold text-white tracking-tight">{buildingName}</h1>
             <p className="text-[11px] text-slate-400">
-              {floor?.name} (Floor {floor?.floor_number})
-              {startNodeId && <span className="text-emerald-400 ml-1.5 font-bold">• You Are Here</span>}
+              {floor?.name} &bull; Floor {floor?.floor_number}
             </p>
           </div>
         </div>
@@ -490,13 +706,13 @@ export default function FloorNavigationPage() {
                 ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
                 : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
             }`}
-            title="Only use elevators and step-free paths"
+            title="Only use step-free walkways and elevators"
           >
             <Accessibility className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Accessible</span>
           </button>
 
-          {/* Scan Another QR Code Button */}
+          {/* QR Scan Button */}
           <button
             onClick={() => setIsScannerOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-extrabold shadow-md transition"
@@ -505,10 +721,10 @@ export default function FloorNavigationPage() {
             <span>Scan QR</span>
           </button>
 
-          {selectedDestination && (
+          {(startLocation || destinationLocation || routeResult) && (
             <button
               onClick={resetRoute}
-              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition"
+              className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl transition"
               title="Reset Route"
             >
               <RotateCcw className="w-4 h-4" />
@@ -517,11 +733,11 @@ export default function FloorNavigationPage() {
         </div>
       </div>
 
-      {/* ─── MAIN CONTENT: MAP + SIDEBAR ─── */}
+      {/* ─── MAIN CONTENT: MAP CANVAS + ROUTE SIDEBAR ─── */}
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
         {/* SVG Navigation Map Canvas with touch-action:none */}
         <div
-          className="flex-1 relative overflow-hidden bg-slate-950"
+          className="flex-1 relative overflow-hidden bg-slate-950 order-2 md:order-1"
           style={{ touchAction: 'none' }}
         >
           <svg
@@ -565,17 +781,18 @@ export default function FloorNavigationPage() {
               />
             )}
 
-            {/* Render Floor Locations */}
+            {/* Render Floor Locations (Rooms, Halls) */}
             {locations.map((loc) => {
               const sd = loc.shape_data || {};
-              const isDestination = selectedDestination?.id === loc.id;
+              const isStart = startLocation?.id === loc.id;
+              const isDest = destinationLocation?.id === loc.id;
               const fill = loc.fill_color || LOCATION_COLORS[loc.location_type] || '#3b82f6';
 
               if (sd.type === 'rect') {
                 return (
                   <g
                     key={loc.id}
-                    onClick={() => calculateRoute(loc)}
+                    onClick={() => handleRoomClick(loc)}
                     className="cursor-pointer"
                   >
                     <rect
@@ -584,9 +801,9 @@ export default function FloorNavigationPage() {
                       width={sd.width}
                       height={sd.height}
                       fill={fill}
-                      fillOpacity={isDestination ? 0.65 : 0.25}
-                      stroke={isDestination ? '#818cf8' : fill}
-                      strokeWidth={isDestination ? 3 : 1}
+                      fillOpacity={isStart ? 0.6 : isDest ? 0.7 : 0.25}
+                      stroke={isStart ? '#10b981' : isDest ? '#f43f5e' : fill}
+                      strokeWidth={isStart || isDest ? 3.5 : 1}
                       rx={loc.location_type === 'corridor' ? 2 : 6}
                     />
                     <text
@@ -621,12 +838,12 @@ export default function FloorNavigationPage() {
               return null;
             })}
 
-            {/* Render Calculated Route Line (Pulsing Animated) */}
-            {routePathNodes.length > 1 && (
+            {/* Render Calculated Route Polyline on Current Floor */}
+            {currentFloorRouteNodes.length > 1 && (
               <g>
-                {/* Thick glow track */}
+                {/* Thick glow background */}
                 <polyline
-                  points={routePathNodes.map((n) => `${n.x},${n.y}`).join(' ')}
+                  points={currentFloorRouteNodes.map((n) => `${n.x},${n.y}`).join(' ')}
                   fill="none"
                   stroke="#6366f1"
                   strokeWidth="8"
@@ -634,9 +851,9 @@ export default function FloorNavigationPage() {
                   strokeLinejoin="round"
                   opacity="0.3"
                 />
-                {/* Animated dash line */}
+                {/* Animated dash walking path */}
                 <polyline
-                  points={routePathNodes.map((n) => `${n.x},${n.y}`).join(' ')}
+                  points={currentFloorRouteNodes.map((n) => `${n.x},${n.y}`).join(' ')}
                   fill="none"
                   stroke="#a5b4fc"
                   strokeWidth="3.5"
@@ -650,54 +867,45 @@ export default function FloorNavigationPage() {
               </g>
             )}
 
-            {/* Start Node Marker (Scanned QR Location) */}
-            {startNodeId && (() => {
-              const startNode = nodes.find((n) => n.id === startNodeId) || allNodes.find((n) => n.id === startNodeId);
-              if (!startNode) return null;
-              return (
-                <g>
-                  <circle cx={startNode.x} cy={startNode.y} r={10} fill="#10b981" stroke="#fff" strokeWidth={3} />
-                  <circle cx={startNode.x} cy={startNode.y} r={16} fill="none" stroke="#10b981" strokeWidth={2} opacity={0.6}>
-                    <animate attributeName="r" values="10;22" dur="1.8s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0.8;0" dur="1.8s" repeatCount="indefinite" />
-                  </circle>
-                  <text x={startNode.x} y={startNode.y - 16} textAnchor="middle" fontSize={11} fontWeight="900" fill="#34d399">
-                    📍 You are here
-                  </text>
-                </g>
-              );
-            })()}
+            {/* Starting Point Pin Marker (Green) */}
+            {startLocation && startLocation.floor_id === floor?.id && (
+              <g>
+                <circle cx={startLocation.x} cy={startLocation.y} r={11} fill="#10b981" stroke="#ffffff" strokeWidth={3} />
+                <circle cx={startLocation.x} cy={startLocation.y} r={18} fill="none" stroke="#10b981" strokeWidth={2} opacity={0.7}>
+                  <animate attributeName="r" values="10;24" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.8;0" dur="1.8s" repeatCount="indefinite" />
+                </circle>
+                <text x={startLocation.x} y={startLocation.y - 18} textAnchor="middle" fontSize={11} fontWeight="900" fill="#34d399">
+                  📍 Start: {startLocation.name}
+                </text>
+              </g>
+            )}
 
-            {/* Destination Marker */}
-            {selectedDestination && (() => {
-              const destNode = findNodeForLocation(nodes.length > 0 ? nodes : allNodes, selectedDestination.id);
-              if (!destNode) return null;
-              return (
-                <g>
-                  <circle cx={destNode.x} cy={destNode.y} r={10} fill="#ef4444" stroke="#fff" strokeWidth={3} />
-                  <circle cx={destNode.x} cy={destNode.y} r={16} fill="none" stroke="#ef4444" strokeWidth={2} opacity={0.6}>
-                    <animate attributeName="r" values="10;22" dur="1.8s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0.8;0" dur="1.8s" repeatCount="indefinite" />
-                  </circle>
-                  <text x={destNode.x} y={destNode.y - 16} textAnchor="middle" fontSize={11} fontWeight="900" fill="#f87171">
-                    🎯 {selectedDestination.name}
-                  </text>
-                </g>
-              );
-            })()}
+            {/* Destination Pin Marker (Red/Indigo) */}
+            {destinationLocation && destinationLocation.floor_id === floor?.id && (
+              <g>
+                <circle cx={destinationLocation.x} cy={destinationLocation.y} r={11} fill="#f43f5e" stroke="#ffffff" strokeWidth={3} />
+                <circle cx={destinationLocation.x} cy={destinationLocation.y} r={18} fill="none" stroke="#f43f5e" strokeWidth={2} opacity={0.7}>
+                  <animate attributeName="r" values="10;24" dur="1.8s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.8;0" dur="1.8s" repeatCount="indefinite" />
+                </circle>
+                <text x={destinationLocation.x} y={destinationLocation.y - 18} textAnchor="middle" fontSize={11} fontWeight="900" fill="#fb7185">
+                  🎯 Goal: {destinationLocation.name}
+                </text>
+              </g>
+            )}
 
-            {/* Intermediate waypoints on active path */}
-            {routePathNodes.map((n) => {
-              if (n.id === startNodeId) return null;
-              const destNode = selectedDestination && findNodeForLocation(nodes, selectedDestination.id);
-              if (destNode && n.id === destNode.id) return null;
+            {/* Waypoint beads along route */}
+            {currentFloorRouteNodes.map((n) => {
+              if (startLocation && n.x === startLocation.x && n.y === startLocation.y) return null;
+              if (destinationLocation && n.x === destinationLocation.x && n.y === destinationLocation.y) return null;
               return (
-                <circle key={n.id} cx={n.x} cy={n.y} r={4} fill="#818cf8" stroke="#1e1b4b" strokeWidth={1.5} />
+                <circle key={n.id} cx={n.x} cy={n.y} r={4.5} fill="#818cf8" stroke="#1e1b4b" strokeWidth={1.5} />
               );
             })}
           </svg>
 
-          {/* Floating Zoom Buttons (Bottom Right) */}
+          {/* Floating Zoom Controls (Bottom Right) */}
           <div className="absolute bottom-4 right-4 z-20 flex flex-col gap-1.5 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800 shadow-2xl">
             <button onClick={() => handleZoom(0.85)} className="p-2 text-slate-300 hover:text-white rounded-xl hover:bg-slate-800" title="Zoom In">
               <ZoomIn className="w-4 h-4" />
@@ -708,57 +916,266 @@ export default function FloorNavigationPage() {
           </div>
         </div>
 
-        {/* ─── SIDEBAR: SEARCH & DIRECTIONS ─── */}
-        <div className="w-full md:w-80 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 flex flex-col shrink-0 max-h-[46vh] md:max-h-full overflow-hidden">
-          {/* Search Bar */}
-          <div className="p-3 border-b border-slate-800 shrink-0">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search room, lab, hall, office…"
-                className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 transition"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
-                  <X className="w-3.5 h-3.5" />
-                </button>
+        {/* ─── SIDEBAR: START/DESTINATION SEARCH + FIND ROUTE + DIRECTIONS ─── */}
+        <div className="w-full md:w-96 bg-slate-900 border-t md:border-t-0 md:border-l border-slate-800 flex flex-col shrink-0 max-h-[50vh] md:max-h-full overflow-hidden order-1 md:order-2 shadow-2xl z-20">
+          {/* Route Planning Header Card */}
+          <div className="p-4 border-b border-slate-800 space-y-3 bg-slate-950/60 shrink-0">
+            {/* Field 1: Starting Point */}
+            <div className="space-y-1 relative">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                <span className="flex items-center gap-1.5 text-emerald-400">
+                  <LocateFixed className="w-3.5 h-3.5" />
+                  Starting Point
+                </span>
+                <span className="text-[10px] text-slate-500 font-normal">Where are you now?</span>
+              </div>
+
+              {startLocation ? (
+                <div className="flex items-center justify-between p-2.5 bg-slate-900 border border-emerald-500/40 rounded-xl text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
+                    <span className="font-extrabold text-white truncate">{startLocation.name}</span>
+                    {startLocation.floor_name && startLocation.floor_id !== floor?.id && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                        {startLocation.floor_name}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setStartLocation(null);
+                      setRouteResult(null);
+                      setDirections([]);
+                      setActivePicker('start');
+                    }}
+                    className="p-1 text-slate-400 hover:text-white"
+                    title="Change starting point"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    value={startSearchQuery}
+                    onFocus={() => setActivePicker('start')}
+                    onChange={(e) => {
+                      setStartSearchQuery(e.target.value);
+                      setActivePicker('start');
+                    }}
+                    placeholder="Where are you now? (e.g. ML1, Entrance...)"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-1 focus:ring-emerald-500 transition"
+                  />
+                </div>
               )}
             </div>
+
+            {/* Swap Button */}
+            <div className="flex items-center justify-center -my-1">
+              <button
+                onClick={handleSwap}
+                className="p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition shadow-sm"
+                title="Swap Starting Point & Destination"
+              >
+                <ArrowUpDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Field 2: Destination */}
+            <div className="space-y-1 relative">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                <span className="flex items-center gap-1.5 text-indigo-400">
+                  <MapPin className="w-3.5 h-3.5" />
+                  Destination
+                </span>
+                <span className="text-[10px] text-slate-500 font-normal">Where do you want to go?</span>
+              </div>
+
+              {destinationLocation ? (
+                <div className="flex items-center justify-between p-2.5 bg-slate-900 border border-indigo-500/40 rounded-xl text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-400 shrink-0" />
+                    <span className="font-extrabold text-white truncate">{destinationLocation.name}</span>
+                    {destinationLocation.floor_name && destinationLocation.floor_id !== floor?.id && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                        {destinationLocation.floor_name}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setDestinationLocation(null);
+                      setRouteResult(null);
+                      setDirections([]);
+                      setActivePicker('dest');
+                    }}
+                    className="p-1 text-slate-400 hover:text-white"
+                    title="Change destination"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    value={destSearchQuery}
+                    onFocus={() => setActivePicker('dest')}
+                    onChange={(e) => {
+                      setDestSearchQuery(e.target.value);
+                      setActivePicker('dest');
+                    }}
+                    placeholder="Where do you want to go? (e.g. Seminar Hall...)"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-1 focus:ring-indigo-500 transition"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* "Find Route" Button */}
+            <button
+              onClick={handleFindRouteClick}
+              disabled={!startLocation || !destinationLocation}
+              className={`w-full py-2.5 rounded-xl text-xs font-black tracking-wide uppercase transition flex items-center justify-center gap-2 shadow-lg ${
+                startLocation && destinationLocation
+                  ? 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white cursor-pointer'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-800'
+              }`}
+            >
+              <Navigation className="w-4 h-4" />
+              <span>Find Route</span>
+            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {/* Route Status Card */}
-            {routeResult && (
-              <div className={`p-3 rounded-2xl border text-xs ${
-                routeResult.error
-                  ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                  : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-              }`}>
-                {routeResult.error ? (
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    <p className="font-semibold leading-relaxed">{routeResult.error}</p>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Footprints className="w-4 h-4 text-emerald-400" />
-                      <span className="font-extrabold">Shortest Walking Path</span>
+          {/* Body: Location Picker OR Route Directions */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* Active Dropdown Search List (When student is actively picking start or dest) */}
+            {activePicker && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+                    Select {activePicker === 'start' ? 'Starting Point' : 'Destination'}
+                  </span>
+                  <button
+                    onClick={() => setActivePicker(null)}
+                    className="text-[11px] text-slate-400 hover:text-white"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  {(activePicker === 'start' ? filteredStartOptions : filteredDestOptions).length === 0 ? (
+                    <div className="p-6 text-center text-xs text-slate-500">
+                      No matching rooms or locations found.
                     </div>
-                    <span className="font-extrabold text-sm">{formatDistance(routeResult.distance)}</span>
-                  </div>
+                  ) : (
+                    (activePicker === 'start' ? filteredStartOptions : filteredDestOptions).map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          if (activePicker === 'start') {
+                            setStartLocation(item);
+                            setStartSearchQuery('');
+                            setActivePicker(null);
+                            if (destinationLocation && destinationLocation.nodeId !== item.nodeId) {
+                              calculateShortestRoute(item, destinationLocation, requireAccessible);
+                            }
+                          } else {
+                            setDestinationLocation(item);
+                            setDestSearchQuery('');
+                            setActivePicker(null);
+                            if (startLocation && startLocation.nodeId !== item.nodeId) {
+                              calculateShortestRoute(startLocation, item, requireAccessible);
+                            }
+                          }
+                        }}
+                        className="w-full p-2.5 rounded-xl flex items-center gap-3 text-left bg-slate-950/60 hover:bg-slate-800 border border-slate-800/80 hover:border-indigo-600/40 transition group"
+                      >
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ backgroundColor: (LOCATION_COLORS[item.location_type] || '#3b82f6') + '25' }}
+                        >
+                          <MapPin className="w-4 h-4" style={{ color: LOCATION_COLORS[item.location_type] || '#3b82f6' }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-white group-hover:text-indigo-300 truncate">
+                            {item.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 capitalize">
+                            {item.room_number ? `#${item.room_number} • ` : ''}
+                            {item.location_type.replace('_', ' ')}
+                            {item.floor_name && !item.isCurrentFloor ? ` • ${item.floor_name}` : ''}
+                          </p>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 transition" />
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Error Message Card */}
+            {routeResult?.error && !activePicker && (
+              <div className="p-3.5 rounded-2xl border bg-red-500/10 border-red-500/30 text-red-300 text-xs space-y-1 animate-in fade-in">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <p className="font-bold leading-relaxed">{routeResult.error}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Route Summary Card (When route is valid) */}
+            {routeResult && !routeResult.error && !activePicker && (
+              <div className="p-3.5 bg-indigo-950/40 border border-indigo-500/30 rounded-2xl text-xs space-y-2 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-white text-sm">Shortest Walking Route</span>
+                  <span className="font-black text-emerald-400 text-sm">
+                    {formatDistance(routeResult.distance)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-[11px] text-slate-300 border-t border-indigo-900/40 pt-2">
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                    ~{walkingTimeMinutes} min walk
+                  </span>
+                  <span>&bull;</span>
+                  <span className="flex items-center gap-1 text-slate-400">
+                    <Footprints className="w-3.5 h-3.5 text-slate-400" />
+                    {routeResult.path.length} waypoints
+                  </span>
+                  {hasFloorTransition && (
+                    <>
+                      <span>&bull;</span>
+                      <span className="text-amber-400 font-semibold">Multi-floor transition</span>
+                    </>
+                  )}
+                </div>
+
+                {/* Multi-floor transition switch button */}
+                {hasFloorTransition && targetFloor && (
+                  <button
+                    onClick={() => {
+                      setActiveFloorId(targetFloor.id);
+                      navigate(`/navigate/floor/${targetFloor.id}`, { replace: true });
+                    }}
+                    className="w-full mt-1 py-1.5 px-3 bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    Switch Map to {targetFloor.name}
+                  </button>
                 )}
               </div>
             )}
 
             {/* Turn-by-Turn Directions List */}
-            {directions.length > 0 && (
-              <div className="space-y-2">
+            {directions.length > 0 && !activePicker && (
+              <div className="space-y-2 animate-in fade-in">
                 <button
                   onClick={() => setShowDirections(!showDirections)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-indigo-950/70 border border-indigo-800/40 rounded-xl text-xs font-bold text-indigo-300"
+                  className="w-full flex items-center justify-between px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-bold text-slate-300 hover:text-white"
                 >
                   <span className="flex items-center gap-1.5">
                     <CornerDownRight className="w-3.5 h-3.5 text-indigo-400" />
@@ -790,41 +1207,17 @@ export default function FloorNavigationPage() {
               </div>
             )}
 
-            {/* Destination Search Results List */}
-            {!selectedDestination && (
-              <div className="space-y-1">
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 px-1 mb-2">
-                  Destinations on This Floor ({searchableLocations.length})
+            {/* Default State Helper (When nothing is being calculated) */}
+            {!routeResult && !activePicker && (
+              <div className="p-4 bg-slate-950/50 rounded-2xl border border-slate-800/80 text-xs text-slate-400 space-y-2 text-center">
+                <Compass className="w-8 h-8 text-indigo-400 mx-auto" />
+                <p className="font-bold text-white">Interactive Walking Guide</p>
+                <p className="text-[11px] leading-relaxed">
+                  Select your current room in <strong className="text-emerald-400">Starting Point</strong> and your destination in <strong className="text-indigo-400">Destination</strong>, then tap <strong className="text-white">Find Route</strong>.
                 </p>
-                {searchableLocations.length === 0 ? (
-                  <div className="p-6 text-center text-xs text-slate-500">
-                    No matching classrooms or rooms found.
-                  </div>
-                ) : (
-                  searchableLocations.map((loc) => (
-                    <button
-                      key={loc.id}
-                      onClick={() => calculateRoute(loc)}
-                      className="w-full p-2.5 rounded-xl flex items-center gap-3 text-left hover:bg-slate-800 transition group"
-                    >
-                      <div
-                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: (LOCATION_COLORS[loc.location_type] || '#3b82f6') + '25' }}
-                      >
-                        <MapPin className="w-4 h-4" style={{ color: LOCATION_COLORS[loc.location_type] || '#3b82f6' }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-white group-hover:text-indigo-300 truncate">
-                          {loc.name}
-                        </p>
-                        <p className="text-[10px] text-slate-400 capitalize">
-                          {loc.room_number ? `#${loc.room_number} • ` : ''}{loc.location_type.replace('_', ' ')}
-                        </p>
-                      </div>
-                      <ArrowRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-indigo-400 transition" />
-                    </button>
-                  ))
-                )}
+                <p className="text-[10px] text-slate-500 pt-1">
+                  💡 Tip: You can also tap rooms directly on the blueprint map!
+                </p>
               </div>
             )}
           </div>
