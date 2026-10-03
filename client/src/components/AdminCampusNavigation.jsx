@@ -5,13 +5,13 @@ import { useApp } from '../context/AppContext';
 import {
   fetchBuildings, upsertBuilding, deleteBuilding,
   fetchFloors, upsertFloor, deleteFloor,
-  fetchFloorMapData, upsertFloorQR,
+  fetchFloorMapData, upsertFloorQR, duplicateFloor,
 } from '../services/indoorNavDataService';
 import FloorMapEditor from './FloorMapEditor';
 import {
   Building2, Plus, Pencil, Trash2, ChevronRight, Layers,
   MapPin, QrCode, Eye, EyeOff, Download, ArrowLeft, Loader2,
-  Save, X, AlertCircle, CheckCircle2, Globe,
+  Save, X, AlertCircle, CheckCircle2, Globe, Copy,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -150,6 +150,17 @@ export default function AdminCampusNavigation() {
     setSaving(false);
     if (error) return showToast(error.message, 'error');
     showToast(floor.is_published ? 'Floor unpublished' : 'Floor published');
+    await loadFloors(selectedBuilding.id);
+  };
+
+  const handleDuplicateFloor = async (floor) => {
+    const newName = window.prompt('Enter name for the duplicated floor:', `${floor.name} (Copy)`);
+    if (!newName) return;
+    setSaving(true);
+    const { error } = await duplicateFloor(floor.id, floor.building_id, newName, floor.floor_number + 1);
+    setSaving(false);
+    if (error) return showToast(error.message, 'error');
+    showToast(`Floor duplicated as "${newName}"`);
     await loadFloors(selectedBuilding.id);
   };
 
@@ -401,6 +412,10 @@ export default function AdminCampusNavigation() {
                         <QrCode className="w-4 h-4" />
                       </button>
                     )}
+                    <button onClick={() => handleDuplicateFloor(floor)} title="Duplicate Floor Template"
+                      className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 transition">
+                      <Copy className="w-4 h-4" />
+                    </button>
                     <button onClick={() => { setEditingFloorId(floor.id); setFloorForm({ name: floor.name, floor_number: floor.floor_number }); setShowFloorForm(true); }}
                       className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 transition">
                       <Pencil className="w-3.5 h-3.5" />

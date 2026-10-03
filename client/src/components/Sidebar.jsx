@@ -41,10 +41,17 @@ export default function Sidebar({ isCollapsed, setIsCollapsed, mobileOpen, setMo
     },
     {
       label: 'Campus Navigation',
-      path: '/campus-navigation',
+      path: '/navigation',
       icon: Compass,
+      roles: ['student', 'coordinator', 'admin'],
+      badge: 'Floor QR',
+    },
+    {
+      label: 'Floor Map Editor',
+      path: '/campus-navigation',
+      icon: Layers,
       roles: ['admin'],
-      badge: 'Floor Maps',
+      badge: 'Admin',
     },
     {
       label: 'My Digital Pass',

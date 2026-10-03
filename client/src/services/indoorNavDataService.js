@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Supabase data access layer for campus indoor navigation tables", deps: ["src/supabaseClient.js"], state: "active", last: "antigravity@2026-10-03" }
+// agent-notes: { ctx: "Supabase data access layer for campus indoor navigation tables, floor duplication, and draft saving", deps: ["src/supabaseClient.js"], state: "active", last: "antigravity@2026-10-03" }
 
 import { supabase, isMockMode } from '../supabaseClient';
 
@@ -66,7 +66,7 @@ export async function fetchFloorById(floorId) {
     .from('campus_floors')
     .select('*, campus_buildings(name, short_name)')
     .eq('id', floorId)
-    .single();
+    .maybeSingle();
   return { data, error };
 }
 
@@ -79,6 +79,7 @@ export async function upsertFloor(floor) {
     is_published: floor.is_published || false,
     svg_view_box: floor.svg_view_box || '0 0 1200 800',
     qr_start_node_id: floor.qr_start_node_id || null,
+    background_image: floor.background_image || null,
     updated_at: new Date().toISOString(),
   };
   if (floor.id) {
@@ -124,6 +125,9 @@ export async function upsertLocation(loc) {
   const payload = {
     floor_id: loc.floor_id,
     name: loc.name,
+    room_number: loc.room_number || null,
+    department: loc.department || null,
+    description: loc.description || null,
     location_type: loc.location_type || 'classroom',
     shape_data: loc.shape_data || {},
     label_offset: loc.label_offset || { x: 0, y: 0 },
@@ -132,7 +136,7 @@ export async function upsertLocation(loc) {
     metadata: loc.metadata || {},
     updated_at: new Date().toISOString(),
   };
-  if (loc.id) {
+  if (loc.id && !loc.id.startsWith('temp_')) {
     const { data, error } = await supabase
       .from('campus_locations')
       .update(payload)
@@ -181,7 +185,7 @@ export async function upsertNode(node) {
     metadata: node.metadata || {},
     updated_at: new Date().toISOString(),
   };
-  if (node.id) {
+  if (node.id && !node.id.startsWith('temp_')) {
     const { data, error } = await supabase
       .from('campus_nodes')
       .update(payload)
@@ -237,7 +241,7 @@ export async function upsertEdge(edge) {
     metadata: edge.metadata || {},
     updated_at: new Date().toISOString(),
   };
-  if (edge.id) {
+  if (edge.id && !edge.id.startsWith('temp_')) {
     const { data, error } = await supabase
       .from('campus_edges')
       .update(payload)
@@ -277,7 +281,6 @@ export async function fetchFloorQR(floorId) {
 
 export async function upsertFloorQR(floorId, qrUrl) {
   if (isMockMode) return { data: null, error: { message: 'Mock mode' } };
-  // Check if exists
   const { data: existing } = await supabase
     .from('campus_floor_qr_codes')
     .select('id')
@@ -327,4 +330,98 @@ export async function fetchFloorMapData(floorId) {
     qr: qrRes.data,
     error: floorRes.error || locRes.error || nodeRes.error || edgeRes.error || null,
   };
+}
+
+// ═══════════════════════════════════════════
+// DUPLICATE FLOOR (Template / Cloning)
+// ═══════════════════════════════════════════
+
+export async function duplicateFloor(sourceFloorId, targetBuildingId, newFloorName, newFloorNumber) {
+  if (isMockMode) return { data: null, error: { message: 'Mock mode' } };
+
+  // 1. Fetch full source floor data
+  const src = await fetchFloorMapData(sourceFloorId);
+  if (src.error || !src.floor) {
+    return { data: null, error: src.error || { message: 'Source floor not found' } };
+  }
+
+  // 2. Create the new floor
+  const { data: newFloor, error: floorErr } = await upsertFloor({
+    building_id: targetBuildingId || src.floor.building_id,
+    name: newFloorName,
+    floor_number: newFloorNumber,
+    is_published: false,
+    svg_view_box: src.floor.svg_view_box,
+    background_image: src.floor.background_image,
+  });
+
+  if (floorErr || !newFloor) {
+    return { data: null, error: floorErr };
+  }
+
+  const locationIdMap = new Map();
+  const nodeIdMap = new Map();
+
+  // 3. Clone locations
+  for (const loc of src.locations) {
+    const { data: newLoc } = await upsertLocation({
+      floor_id: newFloor.id,
+      name: loc.name,
+      room_number: loc.room_number,
+      department: loc.department,
+      description: loc.description,
+      location_type: loc.location_type,
+      shape_data: loc.shape_data,
+      label_offset: loc.label_offset,
+      fill_color: loc.fill_color,
+      is_searchable: loc.is_searchable,
+      metadata: loc.metadata,
+    });
+    if (newLoc) locationIdMap.set(loc.id, newLoc.id);
+  }
+
+  // 4. Clone nodes
+  for (const n of src.nodes) {
+    const mappedLocId = n.location_id ? locationIdMap.get(n.location_id) || null : null;
+    const { data: newNode } = await upsertNode({
+      floor_id: newFloor.id,
+      location_id: mappedLocId,
+      x: n.x,
+      y: n.y,
+      node_type: n.node_type,
+      label: n.label,
+      is_disabled: n.is_disabled,
+      metadata: n.metadata,
+    });
+    if (newNode) nodeIdMap.set(n.id, newNode.id);
+  }
+
+  // 5. Clone edges
+  for (const e of src.edges) {
+    const fromId = nodeIdMap.get(e.from_node_id);
+    const toId = nodeIdMap.get(e.to_node_id);
+    if (fromId && toId) {
+      await upsertEdge({
+        floor_id: newFloor.id,
+        from_node_id: fromId,
+        to_node_id: toId,
+        distance: e.distance,
+        is_bidirectional: e.is_bidirectional,
+        is_disabled: e.is_disabled,
+        is_accessible: e.is_accessible,
+        edge_type: e.edge_type,
+        metadata: e.metadata,
+      });
+    }
+  }
+
+  // 6. Map QR start node if applicable
+  if (src.floor.qr_start_node_id && nodeIdMap.has(src.floor.qr_start_node_id)) {
+    await upsertFloor({
+      ...newFloor,
+      qr_start_node_id: nodeIdMap.get(src.floor.qr_start_node_id),
+    });
+  }
+
+  return { data: newFloor, error: null };
 }

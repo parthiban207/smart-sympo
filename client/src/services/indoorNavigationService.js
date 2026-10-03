@@ -1,4 +1,4 @@
-// agent-notes: { ctx: "Dijkstra shortest-path algorithm and navigation utilities for indoor floor maps", deps: [], state: "active", last: "antigravity@2026-10-03" }
+// agent-notes: { ctx: "Dijkstra shortest-path algorithm, wheelchair-accessible routing, floor map validation, and navigation utilities", deps: [], state: "active", last: "antigravity@2026-10-03" }
 
 /**
  * Dijkstra's shortest-path algorithm for campus indoor navigation.
@@ -8,8 +8,11 @@
  *   - Bidirectional and one-way edges
  *   - Disabled nodes/edges exclusion
  *   - Multi-floor stair/lift transitions
+ *   - Wheelchair-accessible routing (avoids stairs and non-accessible paths)
  *   - Clear no-route results
  *   - Direction instruction generation
+ *   - Automatic corridor/waypoint connection suggestions
+ *   - Comprehensive floor map validation (overlapping rooms, missing doors, unreachable destinations)
  */
 
 // ──────────────────────────────────────────────
@@ -67,7 +70,8 @@ class MinHeap {
 // ──────────────────────────────────────────────
 // Build adjacency list from edges
 // ──────────────────────────────────────────────
-export function buildAdjacencyList(nodes, edges) {
+export function buildAdjacencyList(nodes, edges, options = {}) {
+  const { requireAccessible = false } = options;
   const adj = {};
   const nodeMap = {};
 
@@ -80,6 +84,13 @@ export function buildAdjacencyList(nodes, edges) {
   for (const edge of edges) {
     if (edge.is_disabled) continue;
     if (!adj[edge.from_node_id] || !adj[edge.to_node_id]) continue;
+
+    // Wheelchair accessible filter: exclude stairs or explicitly non-accessible edges
+    if (requireAccessible) {
+      if (edge.is_accessible === false || edge.edge_type === 'stairs') {
+        continue;
+      }
+    }
 
     adj[edge.from_node_id].push({
       to: edge.to_node_id,
@@ -163,10 +174,11 @@ export function dijkstra(adj, startId, endId) {
 // ──────────────────────────────────────────────
 // Multi-floor Dijkstra
 // ──────────────────────────────────────────────
-export function dijkstraMultiFloor(allNodes, allEdges, startId, endId) {
+export function dijkstraMultiFloor(allNodes, allEdges, startId, endId, options = {}) {
+  const { requireAccessible = false } = options;
   const enabledNodes = allNodes.filter((n) => !n.is_disabled);
   const enabledEdges = allEdges.filter((e) => !e.is_disabled);
-  const { adj, nodeMap } = buildAdjacencyList(enabledNodes, enabledEdges);
+  const { adj, nodeMap } = buildAdjacencyList(enabledNodes, enabledEdges, { requireAccessible });
   const result = dijkstra(adj, startId, endId);
 
   if (result.path.length === 0) return result;
@@ -184,11 +196,11 @@ export function dijkstraMultiFloor(allNodes, allEdges, startId, endId) {
     };
   });
 
-  return { ...result, pathDetails, nodeMap };
+  return { ...result, pathDetails, nodeMap, isAccessible: requireAccessible };
 }
 
 // ──────────────────────────────────────────────
-// Calculate Euclidean distance between two nodes
+// Calculate Euclidean distance between two points/nodes
 // ──────────────────────────────────────────────
 export function euclideanDistance(x1, y1, x2, y2) {
   return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
@@ -250,7 +262,7 @@ export function generateDirections(pathDetails, nodeMap, locations = []) {
       const transType = curr.node_type === 'lift' ? 'lift' : 'stairs';
       instructions.push({
         step: stepNum++,
-        text: `Take the ${transType} to reach the next floor`,
+        text: `Take the ${transType} to reach the destination floor`,
         type: 'floor_transition',
         nodeId: curr.id,
       });
@@ -281,7 +293,6 @@ export function generateDirections(pathDetails, nodeMap, locations = []) {
         nodeId: curr.id,
       });
     }
-    // Skip unmarked waypoints to keep instructions concise
   }
 
   // Ensure we have a destination instruction
@@ -304,6 +315,166 @@ export function generateDirections(pathDetails, nodeMap, locations = []) {
 // ──────────────────────────────────────────────
 export function findNodeForLocation(nodes, locationId) {
   return nodes.find((n) => n.location_id === locationId && !n.is_disabled) || null;
+}
+
+// ──────────────────────────────────────────────
+// Find nearest corridor/waypoint for auto-connection
+// ──────────────────────────────────────────────
+export function findNearestWaypoint(fromNode, allNodes, existingEdges = [], maxDist = 250) {
+  if (!fromNode) return null;
+
+  // Set of node IDs already directly connected to fromNode
+  const connectedIds = new Set();
+  for (const e of existingEdges) {
+    if (e.from_node_id === fromNode.id) connectedIds.add(e.to_node_id);
+    if (e.to_node_id === fromNode.id) connectedIds.add(e.from_node_id);
+  }
+
+  let bestNode = null;
+  let bestDist = maxDist;
+
+  for (const n of allNodes) {
+    if (n.id === fromNode.id) continue;
+    if (n.floor_id !== fromNode.floor_id) continue;
+    if (n.is_disabled) continue;
+    if (connectedIds.has(n.id)) continue;
+
+    // Prefer corridor_junction, waypoint, or entrance
+    const d = euclideanDistance(fromNode.x, fromNode.y, n.x, n.y);
+    if (d < bestDist) {
+      bestDist = d;
+      bestNode = { node: n, distance: Math.round(d) };
+    }
+  }
+
+  return bestNode;
+}
+
+// ──────────────────────────────────────────────
+// Check if two rectangular shapes overlap
+// ──────────────────────────────────────────────
+export function doRectanglesOverlap(r1, r2) {
+  // AABB collision detection
+  // r1: { x, y, width, height }
+  const r1Right = r1.x + r1.width;
+  const r1Bottom = r1.y + r1.height;
+  const r2Right = r2.x + r2.width;
+  const r2Bottom = r2.y + r2.height;
+
+  return !(
+    r1Right <= r2.x ||
+    r1.x >= r2Right ||
+    r1Bottom <= r2.y ||
+    r1.y >= r2Bottom
+  );
+}
+
+// ──────────────────────────────────────────────
+// Comprehensive Floor Map Validation
+// ──────────────────────────────────────────────
+export function validateFloorMap(locations = [], nodes = [], edges = [], qrStartNodeId = null) {
+  const issues = [];
+  const warnings = [];
+
+  const nodeMap = new Map();
+  for (const n of nodes) nodeMap.set(n.id, n);
+
+  // 1. Basic graph edge integrity
+  for (const edge of edges) {
+    if (!nodeMap.has(edge.from_node_id)) {
+      issues.push(`Edge references missing start node (${edge.from_node_id})`);
+    }
+    if (!nodeMap.has(edge.to_node_id)) {
+      issues.push(`Edge references missing end node (${edge.to_node_id})`);
+    }
+    if (edge.from_node_id === edge.to_node_id) {
+      issues.push(`Self-loop detected on node ${edge.from_node_id}`);
+    }
+    if (edge.distance < 0) {
+      issues.push(`Edge has invalid negative distance (${edge.distance})`);
+    }
+  }
+
+  // 2. Overlapping rooms check
+  const rectLocations = locations.filter((l) => l.shape_data && l.shape_data.type === 'rect');
+  for (let i = 0; i < rectLocations.length; i++) {
+    for (let j = i + 1; j < rectLocations.length; j++) {
+      const locA = rectLocations[i];
+      const locB = rectLocations[j];
+      // Skip corridors overlapping rooms as corridors might be designed through
+      if (locA.location_type === 'corridor' || locB.location_type === 'corridor') continue;
+
+      if (doRectanglesOverlap(locA.shape_data, locB.shape_data)) {
+        warnings.push(`Room "${locA.name}" overlaps with "${locB.name}"`);
+      }
+    }
+  }
+
+  // 3. Rooms missing doors / nodes
+  const locationNodeCount = new Map();
+  for (const n of nodes) {
+    if (n.location_id) {
+      locationNodeCount.set(n.location_id, (locationNodeCount.get(n.location_id) || 0) + 1);
+    }
+  }
+
+  for (const loc of locations) {
+    if (loc.location_type === 'corridor') continue;
+    const count = locationNodeCount.get(loc.id) || 0;
+    if (count === 0) {
+      warnings.push(`Room "${loc.name}" has no door/navigation node linked`);
+    }
+  }
+
+  // 4. Disconnected nodes (degree 0)
+  const nodeDegrees = new Map();
+  for (const n of nodes) nodeDegrees.set(n.id, 0);
+  for (const e of edges) {
+    if (!e.is_disabled) {
+      if (nodeDegrees.has(e.from_node_id)) nodeDegrees.set(e.from_node_id, nodeDegrees.get(e.from_node_id) + 1);
+      if (nodeDegrees.has(e.to_node_id)) nodeDegrees.set(e.to_node_id, nodeDegrees.get(e.to_node_id) + 1);
+    }
+  }
+
+  for (const [nodeId, deg] of nodeDegrees.entries()) {
+    if (deg === 0) {
+      const n = nodeMap.get(nodeId);
+      const label = n?.label || (n?.location_id && locations.find((l) => l.id === n.location_id)?.name) || nodeId.slice(0, 8);
+      warnings.push(`Node "${label}" is disconnected (0 connected paths)`);
+    }
+  }
+
+  // 5. QR Start Node check & reachability
+  let unreachableDestinations = [];
+  if (!qrStartNodeId) {
+    warnings.push('No primary QR starting node has been set for this floor');
+  } else if (!nodeMap.has(qrStartNodeId)) {
+    issues.push('Configured QR start node does not exist in nodes list');
+  } else {
+    // Run reachability test from QR start node
+    const { adj } = buildAdjacencyList(nodes, edges);
+    for (const loc of locations) {
+      if (loc.is_searchable === false) continue;
+      const targetNode = nodes.find((n) => n.location_id === loc.id && !n.is_disabled);
+      if (targetNode && targetNode.id !== qrStartNodeId) {
+        const route = dijkstra(adj, qrStartNodeId, targetNode.id);
+        if (route.path.length === 0) {
+          unreachableDestinations.push(loc.name);
+        }
+      }
+    }
+    if (unreachableDestinations.length > 0) {
+      warnings.push(`${unreachableDestinations.length} destination(s) unreachable from QR start: ${unreachableDestinations.slice(0, 3).join(', ')}${unreachableDestinations.length > 3 ? '...' : ''}`);
+    }
+  }
+
+  return {
+    valid: issues.length === 0,
+    issues,
+    warnings,
+    isFullyConnected: issues.length === 0 && warnings.length === 0,
+    unreachableCount: unreachableDestinations.length,
+  };
 }
 
 // ──────────────────────────────────────────────
@@ -336,7 +507,6 @@ export function validateGraph(nodes, edges) {
 // ──────────────────────────────────────────────
 export function formatDistance(d) {
   if (d === Infinity || d === null || d === undefined) return '—';
-  // distances are in arbitrary map units; display as meters (1 unit ≈ 1 meter)
   if (d < 1) return '< 1 m';
   return `~${Math.round(d)} m`;
 }

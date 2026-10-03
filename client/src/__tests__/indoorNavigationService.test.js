@@ -16,6 +16,8 @@ import {
   generateDirections,
   findNodeForLocation,
   validateGraph,
+  validateFloorMap,
+  findNearestWaypoint,
   formatDistance,
 } from '../services/indoorNavigationService.js';
 
@@ -280,6 +282,64 @@ test('formats distances correctly', () => {
   assertEqual(formatDistance(0.5), '< 1 m');
   assertEqual(formatDistance(Infinity), '—');
   assertEqual(formatDistance(null), '—');
+});
+
+// ─── Wheelchair-Accessible Routing ───
+console.log('\n📋 Wheelchair Accessibility');
+test('finds step-free route avoiding stairs when requireAccessible is true', () => {
+  const testNodes = [
+    { id: 'start', floor_id: 'f1', is_disabled: false },
+    { id: 'stairs_node', floor_id: 'f1', is_disabled: false },
+    { id: 'lift_node', floor_id: 'f1', is_disabled: false },
+    { id: 'dest', floor_id: 'f1', is_disabled: false },
+  ];
+  const testEdges = [
+    { id: 'e_stairs', floor_id: 'f1', from_node_id: 'start', to_node_id: 'stairs_node', distance: 10, is_bidirectional: true, edge_type: 'stairs', is_accessible: false },
+    { id: 'e_stairs_dest', floor_id: 'f1', from_node_id: 'stairs_node', to_node_id: 'dest', distance: 10, is_bidirectional: true, edge_type: 'walkway', is_accessible: true },
+    { id: 'e_lift', floor_id: 'f1', from_node_id: 'start', to_node_id: 'lift_node', distance: 30, is_bidirectional: true, edge_type: 'lift', is_accessible: true },
+    { id: 'e_lift_dest', floor_id: 'f1', from_node_id: 'lift_node', to_node_id: 'dest', distance: 30, is_bidirectional: true, edge_type: 'walkway', is_accessible: true },
+  ];
+
+  // Standard search takes shorter stairs route
+  const stdRoute = dijkstraMultiFloor(testNodes, testEdges, 'start', 'dest', { requireAccessible: false });
+  assert(stdRoute.path.includes('stairs_node'), 'Normal route should take shorter stairs');
+  assertEqual(stdRoute.distance, 20);
+
+  // Wheelchair search must bypass stairs and use lift/ramp
+  const accessRoute = dijkstraMultiFloor(testNodes, testEdges, 'start', 'dest', { requireAccessible: true });
+  assert(!accessRoute.path.includes('stairs_node'), 'Accessible route must NOT include stairs');
+  assert(accessRoute.path.includes('lift_node'), 'Accessible route should use lift path');
+  assertEqual(accessRoute.distance, 60);
+});
+
+// ─── Nearest Waypoint Suggestion ───
+console.log('\n📋 Nearest Waypoint Suggestion');
+test('finds nearest unconnected corridor waypoint', () => {
+  const doorNode = { id: 'door1', floor_id: 'f1', x: 50, y: 50, node_type: 'room_door' };
+  const candidateNodes = [
+    doorNode,
+    { id: 'wp_far', floor_id: 'f1', x: 400, y: 400, node_type: 'waypoint', is_disabled: false },
+    { id: 'wp_near', floor_id: 'f1', x: 80, y: 50, node_type: 'corridor_junction', is_disabled: false },
+  ];
+  const suggestion = findNearestWaypoint(doorNode, candidateNodes, [], 300);
+  assert(suggestion !== null, 'Suggestion should be found');
+  assertEqual(suggestion.node.id, 'wp_near');
+  assertEqual(suggestion.distance, 30);
+});
+
+// ─── validateFloorMap ───
+console.log('\n📋 validateFloorMap');
+test('detects overlapping rooms and unreachable destinations', () => {
+  const locs = [
+    { id: 'r1', name: 'Room 1', location_type: 'classroom', shape_data: { type: 'rect', x: 0, y: 0, width: 100, height: 100 } },
+    { id: 'r2', name: 'Room 2', location_type: 'classroom', shape_data: { type: 'rect', x: 50, y: 50, width: 100, height: 100 } },
+  ];
+  const testNodes = [
+    { id: 'n1', floor_id: 'f1', x: 10, y: 10, location_id: 'r1', is_disabled: false },
+  ];
+  const report = validateFloorMap(locs, testNodes, [], 'n1');
+  assert(report.warnings.some((w) => w.includes('overlaps')), 'Should detect room overlap');
+  assert(report.warnings.some((w) => w.includes('has no door')), 'Should detect Room 2 missing door');
 });
 
 // ─── Summary ───

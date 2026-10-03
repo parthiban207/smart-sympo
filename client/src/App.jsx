@@ -62,8 +62,8 @@ function AuthSyncListener() {
         navigate('/reset-password', { replace: true });
       } else if (event === 'SIGNED_IN' && session?.user) {
         const currentPath = window.location.pathname;
-        // Skip redirect for public navigation routes
-        if (currentPath.startsWith('/navigate/')) return;
+        // Skip redirect for public and indoor navigation routes
+        if (currentPath.startsWith('/navigate') || currentPath.startsWith('/navigation')) return;
         const publicPaths = ['/login', '/login/student', '/login/staff', '/login/admin', '/admin/login', '/signup'];
         if (publicPaths.includes(currentPath)) {
           const userRole = (session.user.user_metadata?.role || 'student').toLowerCase();
@@ -157,7 +157,16 @@ function AppShell() {
                 </ProtectedRoute>
               }
             />
-            {/* Public floor navigation — QR code entry point (no auth required) */}
+            {/* Campus Navigation for student/coordinator/admin and public QR entry */}
+            <Route
+              path="/navigation"
+              element={
+                <ProtectedRoute allowedRoles={['student', 'coordinator', 'admin']}>
+                  <FloorNavigationPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/navigate" element={<FloorNavigationPage />} />
             <Route path="/navigate/floor/:floorId" element={<FloorNavigationPage />} />
             <Route
               path="/coordinator"
